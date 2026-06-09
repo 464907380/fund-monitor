@@ -42,8 +42,9 @@ New-TaskIfMissing -Name "基金晚报" -Script "fund_watch.py" -TriggerTime "15:
 New-TaskIfMissing -Name "基金盘中监控" -Script "fund_monitor.py" -TriggerTime "09:25" -Desc "盘中实时监控"
 
 Write-Host ""
-Write-Host "设置环境变量（推荐）:"
-Write-Host '  [System.Environment]::SetEnvironmentVariable("WECHAT_WEBHOOK", "你的企业微信机器人URL", "User")'
+Write-Host "设置环境变量（推荐，二选一）:"
+Write-Host '  方式一：复制 .env.example 为 .env 并编辑'`
+Write-Host '  方式二：[System.Environment]::SetEnvironmentVariable("WECHAT_WEBHOOK", "你的企业微信机器人URL", "User")'
 Write-Host ""
 Write-Host "手动测试:"
 Write-Host "  python `"$ScriptDir\global_briefing.py`""

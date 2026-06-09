@@ -79,6 +79,25 @@ def test_parse_real_time():
     assert "code" in sig.parameters
 
 
+def test_holdings_csv_quoting():
+    """验证 csv.reader 可正确解析名称含逗号的持仓数据"""
+    import csv
+    # 模拟 API 返回的 CSV 行：序号,代码,名称,占比%,市值,占净值比例
+    # 名称含逗号时会被引号包裹
+    lines = [
+        "1,600519,贵州茅台,16.50,1234567.89,16.50",
+        "2,000333,\"美的,集团\",8.20,987654.32,8.20",
+        "3,300750,宁德时代,6.10,654321.00,6.10",
+    ]
+    for line in lines:
+        reader = csv.reader([line])
+        for parts in reader:
+            assert len(parts) >= 6, f"解析错误: {line}"
+            int(parts[0])  # 序号
+            assert parts[2]  # 名称
+            float(parts[5])  # 比例
+
+
 # ═══════════════════════════════════════════════
 # 异常检测测试（纯数学逻辑，无需网络）
 # ═══════════════════════════════════════════════

@@ -1,9 +1,9 @@
 """
-全球股市简报 — 每天早上推送
+全球股市简报 — 每天早上 09:30 推送
 
 数据来源：
   - A股：新浪财经（主）→ 东方财富（备）
-  - 全球：Yahoo Finance → 若失败跳过，不阻塞推送
+  - 全球：新浪财经（支持美股/日韩/欧洲等主要指数）
 """
 import time
 import urllib.error
@@ -114,7 +114,7 @@ def get_a_share() -> list[dict]:
     return results
 
 
-def fetch_eastmoney_global() -> list[dict]:
+def fetch_sina_global() -> list[dict]:
     """从新浪财经获取全球主要指数（批量请求，国内可访问）
 
     新浪全球指数返回格式（不同于A股）：
@@ -160,7 +160,7 @@ def fetch_eastmoney_global() -> list[dict]:
 
 def get_global() -> list[dict]:
     """获取全球主要指数"""
-    return fetch_eastmoney_global()
+    return fetch_sina_global()
 
 
 def build_briefing() -> str:

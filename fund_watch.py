@@ -9,6 +9,7 @@ import datetime
 import time
 import urllib.error
 import urllib.request
+import csv
 from email.header import Header
 from email.mime.text import MIMEText
 import smtplib
@@ -167,6 +168,19 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     if not QQ_EMAIL or not QQ_AUTH_CODE:
         log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
+    def _color_cls(val: str) -> str:
+        """数值颜色 class"""
+        if not val:
+            return ""
+        if val.startswith("+"):
+            return ' class="red"'
+        if val.startswith("-"):
+            return ' class="green"'
+        return ""
+
+    def _strip_html(text: str) -> str:
+        return re.sub(r"<[^>]+>", "", text)
+
     tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
     if not os.path.exists(tpl_path):
         log.warning("email_template.html 不存在，跳过邮件")
@@ -178,23 +192,23 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     for r in rows:
         row_htmls.append(
             f'<tr>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;font-family:Consolas,monospace;">{r["code"]}</td>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;">{r["name_short"]}</td>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;{_color(r["day"])}">{r["day"]}</td>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;text-align:right;{_color(r["f5"])}">{r["f5"]}</td>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;text-align:right;{_color(r["m1"])}">{r["m1"]}</td>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;text-align:right;{_color(r["m3"])}">{r["m3"]}</td>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;text-align:right;{_color(r["y1"])}">{r["y1"]}</td>'
-            f'<td style="padding:6px;border-bottom:1px solid #eee;">{r["mgr"]}</td>'
+            f'<td>{r["code"]}</td>'
+            f'<td>{r["name_short"]}</td>'
+            f'<td class="num"{_color_cls(r["day"])}>{r["day"]}</td>'
+            f'<td class="num"{_color_cls(r["f5"])}>{r["f5"]}</td>'
+            f'<td class="num"{_color_cls(r["m1"])}>{r["m1"]}</td>'
+            f'<td class="num"{_color_cls(r["m3"])}>{r["m3"]}</td>'
+            f'<td class="num"{_color_cls(r["y1"])}>{r["y1"]}</td>'
+            f'<td>{r["mgr"]}</td>'
             f'</tr>'
         )
     html = html.replace("{{ROWS}}", "\n".join(row_htmls))
     # 警报
     if alerts:
-        al = '<div style="background:#fff5f5;border:1px solid #fcc;border-radius:6px;padding:12px;">'
-        al += '<div style="font-weight:bold;font-size:14px;margin-bottom:8px;">🚨 警报</div>'
+        al = '<div class="alerts">'
+        al += '<div class="alerts-title">🚨 警报</div>'
         for a in alerts:
-            al += f'<div style="font-size:13px;margin:4px 0;padding:4px 0;border-bottom:1px solid #fee;">{re.sub(r"<[^>]+>","",a)}</div>'
+            al += f'<div class="alerts-item">{_strip_html(a)}</div>'
         al += '</div>'
         html = html.replace("{{ALERTS}}", al)
     else:
@@ -210,17 +224,6 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         log.info("邮件发送成功")
     except Exception as e:
         log.error("邮件发送失败: %s", e)
-
-
-def _color(val: str) -> str:
-    """数值颜色：涨红跌绿"""
-    if not val:
-        return ""
-    if val.startswith("+"):
-        return "color:#d32f2f;"
-    if val.startswith("-"):
-        return "color:#2e7d32;"
-    return ""
 
 
 def push(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
@@ -333,7 +336,7 @@ def _parse_real_time(code: str) -> float | None:
 
 
 def _parse_holdings(code: str) -> list[dict] | None:
-    """获取前5大持仓明细"""
+    """获取前5大持仓明细（使用 csv.reader 处理名称含逗号的情况）"""
     try:
         jj = fetch(
             f"https://fund.eastmoney.com/f10/FundArchivesDatas.aspx"
@@ -344,12 +347,16 @@ def _parse_holdings(code: str) -> list[dict] | None:
             return None
         holds = []
         for line in cm.group(1).split("\\n"):
-            parts = line.split(",")
-            if len(parts) >= 6:
+            # 使用 csv.reader 解析，正确处理带引号内逗号的情况
+            # 格式: 序号,股票代码,股票名称,占净值比例%,持仓市值,占净值比例
+            reader = csv.reader([line])
+            for parts in reader:
+                if len(parts) < 6:
+                    continue
                 try:
                     int(parts[0])
                     holds.append({"n": parts[2], "p": float(parts[5]) if parts[5] else 0})
-                except Exception:
+                except (ValueError, IndexError):
                     pass
         return holds if holds else None
     except Exception as e:
