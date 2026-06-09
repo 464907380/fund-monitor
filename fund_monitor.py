@@ -242,10 +242,15 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
 
         state_key = f"{fund_code}:{stock_code}"
         if state_key not in stock_states:
-            stock_states[state_key] = {"first_chg": chg, "last_chg": chg, "name": stock_name}
+            stock_states[state_key] = {
+                "first_chg": chg, "last_chg": chg,
+                "name": stock_name,
+                "chg": chg, "max_chg": chg, "min_chg": chg,
+            }
             continue
 
         prev = stock_states[state_key]["last_chg"]
+        state = stock_states[state_key]
 
         # ── 单次急涨急跌检测（与上次检查的差值） ──
         diff = chg - prev
@@ -271,10 +276,8 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
             )
 
         # ── 累计涨跌幅检测（从当天首次检查到现在的总变动） ──
-        first_chg = stock_states[state_key]["first_chg"]
+        first_chg = state["first_chg"]
         accum = chg - first_chg
-        abs_accum = abs(accum)
-        # 个股累计阈值取绝对值，只看变动幅度
         if accum <= STOCK_ACCUM_DROP_RED:
             alerts.append(
                 f"🚩 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
@@ -297,7 +300,10 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
             )
 
         # 更新个股状态
-        stock_states[state_key]["last_chg"] = chg
+        state["last_chg"] = chg
+        state["chg"] = chg
+        state["max_chg"] = max(state.get("max_chg", chg), chg)
+        state["min_chg"] = min(state.get("min_chg", chg), chg)
 
     return alerts
 
@@ -448,7 +454,7 @@ def push_summary(states: dict[str, dict], stock_info: dict[str, dict] | None = N
         for key, s in sorted(stock_info.items()):
             lines.append(f"**{s['name']}({key.split(':')[1]})** "
                          f"涨跌 {s['chg']:+.2f}% "
-                         f"| 最大涨 {s['max']:+.2f}% 最大跌 {s['min']:+.2f}%")
+                         f"| 最大涨 {s['max_chg']:+.2f}% 最大跌 {s['min_chg']:+.2f}%")
 
     content = "\n".join(lines)
     if WECHAT_WEBHOOK:

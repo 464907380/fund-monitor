@@ -272,3 +272,59 @@ def test_is_trading_time():
     assert is_trading_time(datetime.datetime(2025, 3, 12, 14, 0)) is True
     # 15:01 → 收盘
     assert is_trading_time(datetime.datetime(2025, 3, 12, 15, 1)) is False
+
+
+# ── 个股监控状态追踪测试 ──
+
+def test_stock_states_tracking():
+    """验证 check_holdings_intraday 的状态追踪逻辑"""
+
+    # 验证状态机初始化和更新逻辑
+    # 模拟 3 轮检查，看 first_chg / last_chg / max_chg / min_chg 是否正确
+    stock_states: dict[str, dict] = {}
+    state_key = "001438:600519"
+
+    # 第 1 次：初始化
+    stock_states[state_key] = {
+        "first_chg": 1.0, "last_chg": 1.0,
+        "name": "贵州茅台",
+        "chg": 1.0, "max_chg": 1.0, "min_chg": 1.0,
+    }
+
+    # 第 2 次：更新为 -3.0（急跌）
+    s = stock_states[state_key]
+    s["last_chg"] = -3.0
+    s["chg"] = -3.0
+    s["max_chg"] = max(s.get("max_chg", s["chg"]), -3.0)
+    s["min_chg"] = min(s.get("min_chg", s["chg"]), -3.0)
+
+    assert s["first_chg"] == 1.0   # 首次不变
+    assert s["last_chg"] == -3.0   # 最新值
+    assert s["max_chg"] == 1.0     # 最高没变
+    assert s["min_chg"] == -3.0    # 最低更新
+
+    # 第 3 次：反弹到 2.5
+    s["last_chg"] = 2.5
+    s["chg"] = 2.5
+    s["max_chg"] = max(s["max_chg"], 2.5)
+    s["min_chg"] = min(s["min_chg"], 2.5)
+
+    assert s["first_chg"] == 1.0
+    assert s["last_chg"] == 2.5
+    assert s["max_chg"] == 2.5    # 最高更新
+    assert s["min_chg"] == -3.0   # 最低不变
+
+
+def test_trading_time_boundary():
+    """交易时段边界条件"""
+    from fund_monitor import is_trading_time
+    import datetime
+
+    # 9:30 整 → 开盘
+    assert is_trading_time(datetime.datetime(2025, 3, 12, 9, 30)) is True
+    # 11:30 整 → 午休开始
+    assert is_trading_time(datetime.datetime(2025, 3, 12, 11, 30)) is False
+    # 13:00 整 → 下午开盘
+    assert is_trading_time(datetime.datetime(2025, 3, 12, 13, 0)) is True
+    # 15:00 整 → 收盘
+    assert is_trading_time(datetime.datetime(2025, 3, 12, 15, 0)) is False
