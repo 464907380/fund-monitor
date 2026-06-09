@@ -1,8 +1,8 @@
 [Unit]
-Description=基金监控 — 全球股市简报（工作日 08:30）
+Description=基金监控 — 全球股市简报（工作日 09:30）
 
 [Timer]
-OnCalendar=Mon..Fri 08:30:00
+OnCalendar=Mon..Fri 09:30:00
 Persistent=false
 RandomizedDelaySec=30
 

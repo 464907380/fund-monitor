@@ -10,7 +10,7 @@ sudo ./deploy/install.sh
 
 | Service | Timer | 触发时间 | 说明 |
 |---------|-------|----------|------|
-| `global-briefing.service` | `global-briefing.timer` | 工作日 08:30 | 全球股市早报 |
+| `global-briefing.service` | `global-briefing.timer` | 工作日 09:30 | 全球股市早报 |
 | `fund-watch.service` | `fund-watch.timer` | 工作日 15:30 | 收盘晚报 |
 | `fund-monitor.service` | `fund-monitor.timer` | 工作日 09:25 | 盘中实时监控（运行到 15:00 自动退出） |
 
