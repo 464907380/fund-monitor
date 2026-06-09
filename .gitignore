@@ -28,3 +28,7 @@ Thumbs.db
 
 # 环境变量（含密钥，切勿提交）
 .env
+
+# 静态分析 / 测试缓存
+.mypy_cache/
+.pytest_cache/

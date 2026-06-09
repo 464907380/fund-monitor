@@ -52,7 +52,7 @@ enabled = true   # language server tools; servers launch lazily when used
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
 mode  = "allow"
 # deny = ["Bash(rm -rf*)", "Bash(git push*)"]   # hard-blocked in every mode
-allow = ["Bash(git add reasonix.toml && git commit -m \"去掉权限提示：项目级 mode = allow\")"]
+# allow = []   # mode = allow 时 allow 列表无意义，留空
 # ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
 
 [sandbox]
