@@ -55,6 +55,9 @@ MAX_EMPTY_ROUNDS = CFG["fund_monitor"]["max_empty_rounds"]
 # ── 个股监控缓存（持仓一日内不变） ────────────
 _holdings_cache: dict[str, list[dict]] = {}
 
+# ── 状态快照文件（进程重启恢复用） ────────────
+_STATE_SNAPSHOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".monitor_state.json")
+
 # ── 辅助函数 ──────────────────────────────────
 
 def _load_holiday_cache() -> dict:
@@ -171,12 +174,69 @@ def wait_until_next_trading() -> None:
             time.sleep(min(wait, 3600))  # 最多等 1 小时再重新判断
 
 
+# ── 状态快照持久化（进程崩溃恢复用） ──────────
+
+def _save_snapshot(states: dict, stock_states: dict, today: str,
+                   empty_rounds: int, hold_loaded: bool) -> None:
+    """保存盘中监控状态快照"""
+    try:
+        snapshot = {
+            "today": today,
+            "ts": time.time(),
+            "states": states,
+            "stock_states": stock_states,
+            "empty_rounds": empty_rounds,
+            "hold_loaded": hold_loaded,
+        }
+        with open(_STATE_SNAPSHOT, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f, ensure_ascii=False)
+    except Exception as e:
+        log.debug("保存状态快照失败: %s", e)
+
+
+def _load_snapshot(today: str) -> tuple[dict, dict, int, bool] | None:
+    """加载当日快照，返回 (states, stock_states, empty_rounds, hold_loaded) 或 None"""
+    if not os.path.exists(_STATE_SNAPSHOT):
+        return None
+    try:
+        with open(_STATE_SNAPSHOT, encoding="utf-8") as f:
+            snap = json.load(f)
+        if snap.get("today") != today:
+            return None
+        log.info("已从快照恢复监控状态（%d 只基金 + %d 只个股）",
+                 len(snap.get("states", {})), len(snap.get("stock_states", {})))
+        return (
+            snap.get("states", {}),
+            snap.get("stock_states", {}),
+            snap.get("empty_rounds", 0),
+            snap.get("hold_loaded", False),
+        )
+    except Exception as e:
+        log.debug("读取状态快照失败: %s", e)
+        return None
+
+
+def _clear_snapshot() -> None:
+    """删除状态快照"""
+    try:
+        if os.path.exists(_STATE_SNAPSHOT):
+            os.remove(_STATE_SNAPSHOT)
+    except Exception as e:
+        log.debug("删除状态快照失败: %s", e)
+
+
 # ── 持仓个股监控 ──────────────────────────────
 
 def _sina_stock_code(code: str) -> str:
-    """将基金持仓股票代码转为新浪格式：sh600519 / sz000333"""
+    """将基金持仓股票代码转为新浪格式：sh600519 / sz000333 / hk00700"""
     if code.startswith("6"):
         return f"sh{code}"
+    # 港股：5 位纯数字（如 00700）或带 hk 前缀
+    if code.startswith("hk") or code.startswith("HK"):
+        raw = code[2:]
+        return f"hk{raw}"
+    if code.isdigit() and len(code) == 5:
+        return f"hk{code}"
     return f"sz{code}"
 
 
@@ -479,11 +539,16 @@ def monitor() -> None:
              STOCK_JUMP_YELLOW, STOCK_JUMP_RED,
              STOCK_ACCUM_JUMP_YELLOW, STOCK_ACCUM_JUMP_RED)
 
-    today = datetime.date.today()
+    today = datetime.date.today().isoformat()
     states: dict[str, dict] = {}
     stock_states: dict[str, dict] = {}
     empty_rounds = 0  # 连续无数据轮次，用于判定休市日
     hold_loaded = False  # 当日是否已加载持仓
+
+    # 尝试从快照恢复（进程重启时保留当日累计数据）
+    recovered = _load_snapshot(today)
+    if recovered:
+        states, stock_states, empty_rounds, hold_loaded = recovered
 
     while True:
         now = datetime.datetime.now()
@@ -498,8 +563,9 @@ def monitor() -> None:
             stock_states.clear()
             _holdings_cache.clear()
             hold_loaded = False
+            _clear_snapshot()
             wait_until_next_trading()
-            today = datetime.date.today()
+            today = datetime.date.today().isoformat()
             continue
 
         # 非交易时段 → 等
@@ -540,8 +606,9 @@ def monitor() -> None:
                 stock_states.clear()
                 _holdings_cache.clear()
                 hold_loaded = False
+                _clear_snapshot()
                 wait_until_next_trading()
-                today = datetime.date.today()
+                today = datetime.date.today().isoformat()
                 empty_rounds = 0
                 continue
         else:
@@ -556,6 +623,9 @@ def monitor() -> None:
                      sum(1 for a in all_alerts if "持仓" in a))
         else:
             log.debug("本轮检查无警报")
+
+        # 持久化状态快照（进程崩溃恢复用）
+        _save_snapshot(states, stock_states, today, empty_rounds, hold_loaded)
 
         # 等待到下一轮
         time.sleep(POLL_INTERVAL)

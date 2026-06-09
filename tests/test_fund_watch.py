@@ -328,3 +328,59 @@ def test_trading_time_boundary():
     assert is_trading_time(datetime.datetime(2025, 3, 12, 13, 0)) is True
     # 15:00 整 → 收盘
     assert is_trading_time(datetime.datetime(2025, 3, 12, 15, 0)) is False
+
+
+# ── 港股代码转换测试 ──
+
+def test_sina_stock_code_hk():
+    """港股和 A 股代码转换"""
+    from fund_monitor import _sina_stock_code
+
+    # A 股
+    assert _sina_stock_code("600519") == "sh600519"
+    assert _sina_stock_code("688981") == "sh688981"
+    assert _sina_stock_code("000333") == "sz000333"
+    assert _sina_stock_code("300750") == "sz300750"
+
+    # 港股：5 位纯数字
+    assert _sina_stock_code("00700") == "hk00700"
+    assert _sina_stock_code("09988") == "hk09988"
+    assert _sina_stock_code("03690") == "hk03690"
+
+    # 港股：带前缀
+    assert _sina_stock_code("hk00700") == "hk00700"
+    assert _sina_stock_code("HK00700") == "hk00700"
+
+
+# ── 状态快照测试 ──
+
+def test_snapshot_save_load_clear(tmp_path):
+    """状态快照保存/恢复/删除"""
+    import os
+    from fund_monitor import _save_snapshot, _clear_snapshot
+
+    # 先清理
+    _clear_snapshot()
+
+    # 保存
+    states = {"001438": {"name": "test_fund", "last_td": 1.5}}
+    stock_states = {"001438:600519": {"name": "茅台", "chg": 2.0, "max_chg": 3.0, "min_chg": -1.0}}
+    _save_snapshot(states, stock_states, "2025-03-12", 0, True)
+
+    # 恢复（匹配日期）
+    from fund_monitor import _load_snapshot
+    result = _load_snapshot("2025-03-12")
+    assert result is not None
+    r_states, r_stock, r_empty, r_loaded = result
+    assert r_states["001438"]["last_td"] == 1.5
+    assert r_stock["001438:600519"]["chg"] == 2.0
+    assert r_loaded is True
+
+    # 恢复（不匹配日期 → 返回 None）
+    result2 = _load_snapshot("2099-01-01")
+    assert result2 is None
+
+    # 清理
+    _clear_snapshot()
+    from fund_monitor import _STATE_SNAPSHOT
+    assert not os.path.exists(_STATE_SNAPSHOT)
