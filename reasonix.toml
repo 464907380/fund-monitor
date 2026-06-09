@@ -50,8 +50,9 @@ enabled = true   # language server tools; servers launch lazily when used
 # Per-call gating. mode = writer fallback when no rule matches: ask|allow|deny.
 # Readers always default to allow. Precedence: deny > ask > allow > fallback.
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
-mode  = "ask"
-allow = ["explore", "Edit(reasonix.toml)", "Edit(fund_watch.py)", "Edit(fund_monitor.py)", "Edit(global_briefing.py)", "Edit(install_task.ps1)", "Edit(email_template.html)", "install_source", "Bash(python*)", "Bash(git*)"]
+mode  = "allow"
+# deny = ["Bash(rm -rf*)", "Bash(git push*)"]   # hard-blocked in every mode
+allow = ["Bash(git add reasonix.toml && git commit -m \"去掉权限提示：项目级 mode = allow\")"]
 # ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
 
 [sandbox]
