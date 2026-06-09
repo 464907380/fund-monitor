@@ -22,3 +22,6 @@ fund_watch.log
 # 操作系统
 Thumbs.db
 .DS_Store
+
+# 环境变量（含密钥，切勿提交）
+.env

@@ -2,17 +2,51 @@
 统一配置加载器
 
 从 config.json 加载所有可调参数（非密钥）。
-密钥通过环境变量读取，示例见 .env.example。
+自动从 .env 加载密钥到 os.environ（无需 python-dotenv）。
 
 用法：
     from config import CFG
     poll_interval = CFG["fund_monitor"]["poll_interval_seconds"]
+
+    # 密钥通过 os.getenv 读取（fund_watch.py 已自动使用）
+    webhook = os.getenv("WECHAT_WEBHOOK", "")
 """
+
 import json
 import os
+import re
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
+_ENV_PATH = os.path.join(_SCRIPT_DIR, ".env")
+
+# 内置默认值（config.json 不存在或字段缺失时使用）
+def _load_env(path: str) -> None:
+    """
+    加载 .env 文件，将 KEY=VALUE 写入 os.environ。
+    支持 # 注释和空行，引号自动剥离。
+    """
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$", line)
+                if m:
+                    key, val = m.group(1), m.group(2)
+                    # 去除引号
+                    if len(val) >= 2 and val[0] in ('"', "'") and val[-1] == val[0]:
+                        val = val[1:-1]
+                    os.environ[key] = val
+    except OSError:
+        pass
+
+
+# 在加载任何配置前，先加载 .env 到环境变量（这样 fund_watch.py 的 os.getenv() 能读到）
+_load_env(_ENV_PATH)
 
 # 内置默认值（config.json 不存在或字段缺失时使用）
 _DEFAULTS = {
