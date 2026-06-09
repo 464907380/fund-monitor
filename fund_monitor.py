@@ -4,6 +4,7 @@
 依赖 fund_watch.py 中的数据获取和推送函数。
 交易日 9:30-15:00 每 10 分钟检查一次实时估算，
 单次跌超阈值或累计跌超时立即企业微信推送。
+同时监控基金持仓个股的急涨急跌。
 """
 import datetime
 import json
@@ -12,9 +13,9 @@ import time
 import re
 from config import CFG
 from fund_watch import fetch, send_wechat, log, clear_cache, FUND_LIST, \
-    send_mail, WECHAT_WEBHOOK, QQ_EMAIL, QQ_AUTH_CODE
+    send_mail, _parse_holdings, WECHAT_WEBHOOK, QQ_EMAIL, QQ_AUTH_CODE
 
-# ── 急涨急跌阈值 ──────────────────────────────
+# ── 基金急涨急跌阈值 ──────────────────────────
 ALERT_DROP_ONCE = CFG["fund_monitor"]["alert_drop_once"]
 ALERT_DROP_ONCE_YELLOW = CFG["fund_monitor"]["alert_drop_once_yellow"]
 ALERT_JUMP_ONCE = CFG["fund_monitor"]["alert_jump_once"]
@@ -23,6 +24,16 @@ ALERT_ACCUM_DROP = CFG["fund_monitor"]["alert_accum_drop"]
 ALERT_ACCUM_DROP_YELLOW = CFG["fund_monitor"]["alert_accum_drop_yellow"]
 ALERT_ACCUM_JUMP = CFG["fund_monitor"]["accum_jump"]
 ALERT_ACCUM_JUMP_YELLOW = CFG["fund_monitor"]["accum_jump_yellow"]
+
+# ── 个股急涨急跌阈值（持仓监控） ──────────────
+STOCK_DROP_RED = CFG["fund_monitor"]["stock_alert_drop_red"]
+STOCK_DROP_YELLOW = CFG["fund_monitor"]["stock_alert_drop_yellow"]
+STOCK_JUMP_RED = CFG["fund_monitor"]["stock_alert_jump_red"]
+STOCK_JUMP_YELLOW = CFG["fund_monitor"]["stock_alert_jump_yellow"]
+STOCK_ACCUM_DROP_RED = CFG["fund_monitor"]["stock_alert_accum_drop_red"]
+STOCK_ACCUM_DROP_YELLOW = CFG["fund_monitor"]["stock_alert_accum_drop_yellow"]
+STOCK_ACCUM_JUMP_RED = CFG["fund_monitor"]["stock_alert_accum_jump_red"]
+STOCK_ACCUM_JUMP_YELLOW = CFG["fund_monitor"]["stock_alert_accum_jump_yellow"]
 
 # ── 轮询间隔（秒） ────────────────────────────
 POLL_INTERVAL = CFG["fund_monitor"]["poll_interval_seconds"]
@@ -41,6 +52,10 @@ _HOLIDAY_CACHE_TTL = CFG["fund_monitor"]["holiday_cache_ttl"]
 # 连续几次无数据则判定为节假日
 MAX_EMPTY_ROUNDS = CFG["fund_monitor"]["max_empty_rounds"]
 
+# ── 个股监控缓存（持仓一日内不变） ────────────
+_holdings_cache: dict[str, list[dict]] = {}
+
+# ── 辅助函数 ──────────────────────────────────
 
 def _load_holiday_cache() -> dict:
     """加载已缓存的节假日数据"""
@@ -156,6 +171,139 @@ def wait_until_next_trading() -> None:
             time.sleep(min(wait, 3600))  # 最多等 1 小时再重新判断
 
 
+# ── 持仓个股监控 ──────────────────────────────
+
+def _sina_stock_code(code: str) -> str:
+    """将基金持仓股票代码转为新浪格式：sh600519 / sz000333"""
+    if code.startswith("6"):
+        return f"sh{code}"
+    return f"sz{code}"
+
+
+def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
+    """
+    从新浪获取个股实时涨跌幅。
+    返回 (股票名称, 涨跌幅%)，失败返回 None。
+    """
+    url = f"https://hq.sinajs.cn/list={sina_code}"
+    try:
+        data = fetch(url)
+        m = re.search(r'"(.*?)"', data)
+        if not m:
+            return None
+        parts = m.group(1).split(",")
+        if len(parts) < 4:
+            return None
+        name = parts[0]
+        prev_close = float(parts[2]) if parts[2] else 0
+        current = float(parts[3]) if parts[3] else 0
+        if prev_close:
+            chg = round((current - prev_close) / prev_close * 100, 2)
+            return name, chg
+        return None
+    except Exception as e:
+        log.debug("获取个股 %s 失败: %s", sina_code, e)
+        return None
+
+
+def _get_fund_holdings(code: str) -> list[dict]:
+    """获取基金持仓（缓存，盘中不重复请求）"""
+    if code not in _holdings_cache:
+        holds = _parse_holdings(code)
+        if holds:
+            log.info("已加载 %s 持仓 %d 只个股", code, len(holds))
+            _holdings_cache[code] = holds
+    return _holdings_cache.get(code, [])
+
+
+def check_holdings_intraday(fund_code: str, fund_name: str,
+                            stock_states: dict[str, dict]) -> list[str]:
+    """
+    盘中检查基金持仓个股的涨跌，返回警报列表。
+    stock_states: 个股状态字典（key=f"{fund_code}:{stock_code}"）
+    """
+    alerts: list[str] = []
+    holds = _get_fund_holdings(fund_code)
+    if not holds:
+        return alerts
+
+    for h in holds:
+        stock_code = h.get("c", "")
+        stock_name = h.get("n", "")
+        ratio = h.get("p", 0)
+        if not stock_code:
+            continue
+
+        sina_code = _sina_stock_code(stock_code)
+        result = _fetch_stock_change(sina_code)
+        if result is None:
+            continue
+        _, chg = result  # chg = 当前涨跌幅%（相对昨收）
+
+        state_key = f"{fund_code}:{stock_code}"
+        if state_key not in stock_states:
+            stock_states[state_key] = {"first_chg": chg, "last_chg": chg, "name": stock_name}
+            continue
+
+        prev = stock_states[state_key]["last_chg"]
+
+        # ── 单次急涨急跌检测（与上次检查的差值） ──
+        diff = chg - prev
+        if diff <= STOCK_DROP_RED:
+            alerts.append(
+                f"🚩 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
+                f"急跌 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）</font>"
+            )
+        elif diff <= STOCK_DROP_YELLOW:
+            alerts.append(
+                f"🟡 {fund_name}持仓{stock_name}({stock_code})"
+                f"下跌 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）"
+            )
+        elif diff >= STOCK_JUMP_RED:
+            alerts.append(
+                f"🚩 <font color=\"info\">{fund_name}持仓{stock_name}({stock_code})"
+                f"急涨 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）</font>"
+            )
+        elif diff >= STOCK_JUMP_YELLOW:
+            alerts.append(
+                f"🟢 {fund_name}持仓{stock_name}({stock_code})"
+                f"上涨 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）"
+            )
+
+        # ── 累计涨跌幅检测（从当天首次检查到现在的总变动） ──
+        first_chg = stock_states[state_key]["first_chg"]
+        accum = chg - first_chg
+        abs_accum = abs(accum)
+        # 个股累计阈值取绝对值，只看变动幅度
+        if accum <= STOCK_ACCUM_DROP_RED:
+            alerts.append(
+                f"🚩 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
+                f"当日累计急跌 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
+            )
+        elif accum <= STOCK_ACCUM_DROP_YELLOW:
+            alerts.append(
+                f"🟡 {fund_name}持仓{stock_name}({stock_code})"
+                f"当日累计下跌 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）"
+            )
+        elif accum >= STOCK_ACCUM_JUMP_RED:
+            alerts.append(
+                f"🚩 <font color=\"info\">{fund_name}持仓{stock_name}({stock_code})"
+                f"当日累计急涨 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
+            )
+        elif accum >= STOCK_ACCUM_JUMP_YELLOW:
+            alerts.append(
+                f"🟢 {fund_name}持仓{stock_name}({stock_code})"
+                f"当日累计上涨 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）"
+            )
+
+        # 更新个股状态
+        stock_states[state_key]["last_chg"] = chg
+
+    return alerts
+
+
+# ── 基金盘中检查 ──────────────────────────────
+
 def check_intraday(code: str, state: dict) -> list[str]:
     """
     盘中检查一只基金，返回警报列表
@@ -247,7 +395,17 @@ def push_alert(alerts: list[str]) -> None:
     if not alerts:
         return
 
-    content = "**🚨 盘中警报**\n\n" + "\n\n".join(alerts)
+    # 区分基金警报和持仓个股警报
+    fund_alerts = [a for a in alerts if "持仓" not in a]
+    stock_alerts = [a for a in alerts if "持仓" in a]
+
+    parts = []
+    if fund_alerts:
+        parts.append("**📈 基金警报**\n\n" + "\n\n".join(fund_alerts))
+    if stock_alerts:
+        parts.append("**📋 持仓个股警报**\n\n" + "\n\n".join(stock_alerts))
+
+    content = "\n\n".join(parts)
 
     if WECHAT_WEBHOOK:
         send_wechat(content)
@@ -259,25 +417,38 @@ def push_alert(alerts: list[str]) -> None:
         send_mail("🚨 基金盘中警报", text)
 
 
-def push_summary(states: dict[str, dict]) -> None:
+def push_summary(states: dict[str, dict], stock_info: dict[str, dict] | None = None) -> None:
     """
     收盘后发送盘中汇总
+    stock_info: 个股汇总文本（可选）
     """
-    if not states:
+    if not states and not stock_info:
         return
 
     lines = ["📊 **盘中监控汇总**", ""]
-    for code, s in states.items():
-        name = s.get("name", code)
-        first = s.get("first_td", 0)
-        last = s.get("last_td", 0)
-        low = s.get("min_td", 0)
-        high = s.get("max_td", 0)
-        lines.append(
-            f"**{name}({code})** "
-            f"波动 {high:+.1f}%~{low:+.1f}% "
-            f"| 收盘估算 {last:+.2f}%"
-        )
+
+    if states:
+        lines.append("**📈 基金**")
+        for code, s in states.items():
+            name = s.get("name", code)
+            first = s.get("first_td", 0)
+            last = s.get("last_td", 0)
+            low = s.get("min_td", 0)
+            high = s.get("max_td", 0)
+            lines.append(
+                f"**{name}({code})** "
+                f"波动 {high:+.1f}%~{low:+.1f}% "
+                f"| 收盘估算 {last:+.2f}%"
+            )
+
+    if stock_info:
+        if states:
+            lines.append("")
+        lines.append("**📋 个股监控**")
+        for key, s in sorted(stock_info.items()):
+            lines.append(f"**{s['name']}({key.split(':')[1]})** "
+                         f"涨跌 {s['chg']:+.2f}% "
+                         f"| 最大涨 {s['max']:+.2f}% 最大跌 {s['min']:+.2f}%")
 
     content = "\n".join(lines)
     if WECHAT_WEBHOOK:
@@ -295,26 +466,32 @@ def monitor() -> None:
     log.info("推送方式: %s", "企业微信" if WECHAT_WEBHOOK else "邮件")
     log.info("监控基金: %d 只", len(FUND_LIST))
     log.info("轮询间隔: %d 分钟", POLL_INTERVAL // 60)
-    log.info("涨跌阈值: 单次超过%+.0f%%(黄)/%+.0f%%(红), 累计超过%+.0f%%(黄)/%+.0f%%(红)",
+    log.info("基金阈值: 单次超过%+.0f%%(黄)/%+.0f%%(红), 累计超过%+.0f%%(黄)/%+.0f%%(红)",
              ALERT_JUMP_ONCE_YELLOW, ALERT_JUMP_ONCE,
              ALERT_ACCUM_JUMP_YELLOW, ALERT_ACCUM_JUMP)
-    log.info("跌阈值: 单次低于%+.0f%%(黄)/%+.0f%%(红), 累计低于%+.0f%%(黄)/%+.0f%%(红)",
-             ALERT_DROP_ONCE_YELLOW, ALERT_DROP_ONCE,
-             ALERT_ACCUM_DROP_YELLOW, ALERT_ACCUM_DROP)
+    log.info("个股阈值: 单次超过%+.0f%%(黄)/%+.0f%%(红), 累计超过%+.0f%%(黄)/%+.0f%%(红)",
+             STOCK_JUMP_YELLOW, STOCK_JUMP_RED,
+             STOCK_ACCUM_JUMP_YELLOW, STOCK_ACCUM_JUMP_RED)
 
     today = datetime.date.today()
     states: dict[str, dict] = {}
+    stock_states: dict[str, dict] = {}
     empty_rounds = 0  # 连续无数据轮次，用于判定休市日
+    hold_loaded = False  # 当日是否已加载持仓
 
     while True:
         now = datetime.datetime.now()
 
         # 当天已收盘 → 推送汇总，等明天
         if now.time() >= datetime.time(15, 5):
-            if states:
-                push_summary(states)
-                log.info("收盘汇总已推送")
+            if states or stock_states:
+                push_summary(states, stock_states)
+                log.info("收盘汇总已推送（含 %d 只基金 + %d 只个股）",
+                         len(states), len(stock_states))
             states.clear()
+            stock_states.clear()
+            _holdings_cache.clear()
+            hold_loaded = False
             wait_until_next_trading()
             today = datetime.date.today()
             continue
@@ -324,7 +501,14 @@ def monitor() -> None:
             time.sleep(60)
             continue
 
-        # 交易中：轮询检查每只基金
+        # 交易中：首次检查时预加载所有基金持仓
+        if not hold_loaded:
+            for f in FUND_LIST:
+                _get_fund_holdings(f["code"])
+            hold_loaded = True
+            log.info("持仓数据加载完毕")
+
+        # 轮询检查每只基金 + 持仓个股
         all_alerts = []
         got_data = False
         for f in FUND_LIST:
@@ -336,12 +520,20 @@ def monitor() -> None:
             if states[code].get("last_td") is not None:
                 got_data = True
 
+            # 检查该基金的持仓个股
+            fund_name = states[code].get("name", code)
+            stock_alerts = check_holdings_intraday(code, fund_name, stock_states)
+            all_alerts.extend(stock_alerts)
+
         # 智能节假日检测：所有基金都无实时数据 → 可能是休市日
         if not got_data:
             empty_rounds += 1
             if empty_rounds >= MAX_EMPTY_ROUNDS:
                 log.info("连续 %d 轮无实时数据，判定为非交易日，等待下一个交易日...", empty_rounds)
                 states.clear()
+                stock_states.clear()
+                _holdings_cache.clear()
+                hold_loaded = False
                 wait_until_next_trading()
                 today = datetime.date.today()
                 empty_rounds = 0
@@ -352,7 +544,10 @@ def monitor() -> None:
         # 推送本周期警报
         if all_alerts:
             push_alert(all_alerts)
-            log.info("推送 %d 条盘中警报", len(all_alerts))
+            log.info("推送 %d 条盘中警报（基金 %d 条, 个股 %d 条）",
+                     len(all_alerts),
+                     sum(1 for a in all_alerts if "持仓" not in a),
+                     sum(1 for a in all_alerts if "持仓" in a))
         else:
             log.debug("本轮检查无警报")
 

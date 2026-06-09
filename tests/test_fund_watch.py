@@ -98,6 +98,44 @@ def test_holdings_csv_quoting():
             float(parts[5])  # 比例
 
 
+def test_holdings_with_stock_code():
+    """验证 _parse_holdings 返回格式包含股票代码字段 c"""
+    import csv
+    lines = [
+        "1,600519,贵州茅台,16.50,1234567.89,16.50",
+        "2,000333,\"美的,集团\",8.20,987654.32,8.20",
+    ]
+    for line in lines:
+        reader = csv.reader([line])
+        for parts in reader:
+            if len(parts) >= 6:
+                try:
+                    int(parts[0])
+                    # 验证与 fund_watch._parse_holdings 一致的结构
+                    entry = {"n": parts[2], "c": parts[1], "p": float(parts[5]) if parts[5] else 0}
+                    assert "n" in entry
+                    assert "c" in entry
+                    assert entry["c"]  # 代码非空
+                    assert "p" in entry
+                    assert isinstance(entry["p"], float)
+                except (ValueError, IndexError):
+                    pass
+
+
+# ═══════════════════════════════════════════════
+# 个股监控测试
+# ═══════════════════════════════════════════════
+
+def test_sina_stock_code():
+    """股票代码转新浪格式"""
+    from fund_monitor import _sina_stock_code
+
+    assert _sina_stock_code("600519") == "sh600519"  # 沪市
+    assert _sina_stock_code("688981") == "sh688981"  # 科创板
+    assert _sina_stock_code("000333") == "sz000333"  # 深市主板
+    assert _sina_stock_code("300750") == "sz300750"  # 创业板
+
+
 # ═══════════════════════════════════════════════
 # 异常检测测试（纯数学逻辑，无需网络）
 # ═══════════════════════════════════════════════

@@ -25,6 +25,15 @@
         "accum_jump": 7,
         "accum_jump_yellow": 5,
 
+        "stock_alert_drop_red": -5,
+        "stock_alert_drop_yellow": -3,
+        "stock_alert_jump_red": 5,
+        "stock_alert_jump_yellow": 3,
+        "stock_alert_accum_drop_red": -10,
+        "stock_alert_accum_drop_yellow": -7,
+        "stock_alert_accum_jump_red": 10,
+        "stock_alert_accum_jump_yellow": 7,
+
         "poll_interval_seconds": 600,
         "max_empty_rounds": 2,
         "holiday_cache_ttl": 86400

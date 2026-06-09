@@ -355,7 +355,7 @@ def _parse_holdings(code: str) -> list[dict] | None:
                     continue
                 try:
                     int(parts[0])
-                    holds.append({"n": parts[2], "p": float(parts[5]) if parts[5] else 0})
+                    holds.append({"n": parts[2], "c": parts[1], "p": float(parts[5]) if parts[5] else 0})
                 except (ValueError, IndexError):
                     pass
         return holds if holds else None
