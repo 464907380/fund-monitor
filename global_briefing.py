@@ -5,8 +5,33 @@
   - A股：新浪财经（主）→ 东方财富（备）
   - 全球：Yahoo Finance → 若失败跳过，不阻塞推送
 """
-import urllib.request, json, re, datetime, os, logging
+import time
+import urllib.error
+import urllib.request
+import json
+import re
+import datetime
+import os
+import logging
+from config import CFG
 from fund_watch import send_wechat, send_mail, log, HISTORY_DIR
+
+# ── 重试配置 ──────────────────────────────────
+_RETRY_MAX = CFG["global_briefing"]["retry_max"]
+_RETRY_BACKOFF = CFG["global_briefing"]["retry_backoff_seconds"]
+
+
+def _retry_fetch_url(url: str, headers: dict | None = None) -> bytes | None:
+    """带指数退避的 HTTP GET 请求，全部失败返回 None（返回原始字节，由调用方决定编码）"""
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
+    for attempt in range(1, _RETRY_MAX + 1):
+        try:
+            return urllib.request.urlopen(req, timeout=10).read()  # type: ignore[no-any-return]
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            if attempt < _RETRY_MAX:
+                wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
+                time.sleep(wait)
+    return None
 
 # ── 指数列表 ──────────────────────────────────
 A_INDICES = [
@@ -31,13 +56,15 @@ WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK", "")
 def fetch_sina(code: str) -> dict | None:
     """从新浪财经获取A股指数"""
     url = f"https://hq.sinajs.cn/list={code}"
-    req = urllib.request.Request(url, headers={
+    data = _retry_fetch_url(url, {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://finance.sina.com.cn",
     })
+    if data is None:
+        return None
     try:
-        data = urllib.request.urlopen(req, timeout=10).read().decode("gbk")
-        m = re.search(r'"(.*?)"', data)
+        text = data.decode("gbk")
+        m = re.search(r'"(.*?)"', text)
         if not m:
             return None
         parts = m.group(1).split(",")
@@ -55,16 +82,16 @@ def fetch_sina(code: str) -> dict | None:
 
 def fetch_eastmoney_a(code: str) -> dict | None:
     """备选：从东方财富获取A股指数"""
-    # secid 映射：sh=1., sz=0.
     mapping = {"sh000001": "1.000001", "sz399001": "0.399001", "sz399300": "1.000300"}
     secid = mapping.get(code)
     if not secid:
         return None
     url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f170"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    data = _retry_fetch_url(url)
+    if data is None:
+        return None
     try:
-        data = urllib.request.urlopen(req, timeout=10).read().decode("utf-8")
-        j = json.loads(data)
+        j = json.loads(data.decode("utf-8"))
         d = j.get("data", {})
         current = d.get("f43", 0)
         change_pct = d.get("f170", 0)
@@ -78,10 +105,11 @@ def fetch_eastmoney_a(code: str) -> dict | None:
 def fetch_yahoo(symbol: str) -> dict | None:
     """从Yahoo Finance获取全球指数"""
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    data = _retry_fetch_url(url)
+    if data is None:
+        return None
     try:
-        data = urllib.request.urlopen(req, timeout=10).read().decode("utf-8")
-        j = json.loads(data)
+        j = json.loads(data.decode("utf-8"))
         meta = j.get("chart", {}).get("result", [{}])[0].get("meta", {})
         reg_price = meta.get("regularMarketPrice")
         prev_close = meta.get("chartPreviousClose")

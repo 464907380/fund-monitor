@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════
+# 基金监控 — Docker Compose
+# ═══════════════════════════════════════════════════
+# 启动所有服务：  docker compose up -d
+# 仅盘中监控：   docker compose up -d monitor
+# 手动运行晚报：  docker compose run --rm watch
+# 手动运行简报：  docker compose run --rm briefing
+# 查看日志：     docker compose logs -f
+# ═══════════════════════════════════════════════════
+
+services:
+  # ── 盘中实时监控（前台运行，自动退出） ─────────
+  monitor:
+    build: .
+    image: fund-monitor
+    container_name: fund-monitor
+    command: python /app/fund_monitor.py
+    restart: unless-stopped
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./fund_list.json:/app/fund_list.json:ro
+      - ./.env:/app/.env:ro
+    env_file:
+      - .env
+
+  # ── 每日晚报（一次运行，配合宿主机 cron） ─────
+  watch:
+    build: .
+    image: fund-monitor
+    command: python /app/fund_watch.py
+    profiles: ["manual"]
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./fund_list.json:/app/fund_list.json:ro
+      - ./.env:/app/.env:ro
+    env_file:
+      - .env
+
+  # ── 全球简报（一次运行，配合宿主机 cron） ─────
+  briefing:
+    build: .
+    image: fund-monitor
+    command: python /app/global_briefing.py
+    profiles: ["manual"]
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./fund_list.json:/app/fund_list.json:ro
+      - ./.env:/app/.env:ro
+    env_file:
+      - .env

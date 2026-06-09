@@ -1,0 +1,14 @@
+[Unit]
+Description=基金监控 — 盘中实时监控（9:25-15:00）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/fund-monitor/fund_monitor.py
+WorkingDirectory=/opt/fund-monitor
+User=nobody
+Group=nogroup
+EnvironmentFile=/opt/fund-monitor/.env
+StandardOutput=journal
+StandardError=journal

@@ -6,43 +6,108 @@
 单次跌超阈值或累计跌超时立即企业微信推送。
 """
 import datetime
+import json
+import os
 import time
 import re
-import json
+from config import CFG
 from fund_watch import fetch, send_wechat, log, clear_cache, FUND_LIST, \
     send_mail, WECHAT_WEBHOOK, QQ_EMAIL, QQ_AUTH_CODE
 
 # ── 急涨急跌阈值 ──────────────────────────────
-ALERT_DROP_ONCE = -3       # 单次估值跌幅超 -3% → 🚩 推送
-ALERT_DROP_ONCE_YELLOW = -2    # 单次跌幅超 -2% → 🟡 推送
-ALERT_JUMP_ONCE = 3        # 单次估值涨幅超 +3% → 🚩 推送
-ALERT_JUMP_ONCE_YELLOW = 2     # 单次涨幅超 +2% → 🟡 推送
-ALERT_ACCUM_DROP = -7      # 当日累计跌幅超 -7% → 🚩 推送
-ALERT_ACCUM_DROP_YELLOW = -5   # 当日累计跌幅超 -5% → 🟡 推送
-ALERT_ACCUM_JUMP = 7       # 当日累计涨幅超 +7% → 🚩 推送
-ALERT_ACCUM_JUMP_YELLOW = 5    # 当日累计涨幅超 +5% → 🟡 推送
+ALERT_DROP_ONCE = CFG["fund_monitor"]["alert_drop_once"]
+ALERT_DROP_ONCE_YELLOW = CFG["fund_monitor"]["alert_drop_once_yellow"]
+ALERT_JUMP_ONCE = CFG["fund_monitor"]["alert_jump_once"]
+ALERT_JUMP_ONCE_YELLOW = CFG["fund_monitor"]["alert_jump_once_yellow"]
+ALERT_ACCUM_DROP = CFG["fund_monitor"]["alert_accum_drop"]
+ALERT_ACCUM_DROP_YELLOW = CFG["fund_monitor"]["alert_accum_drop_yellow"]
+ALERT_ACCUM_JUMP = CFG["fund_monitor"]["accum_jump"]
+ALERT_ACCUM_JUMP_YELLOW = CFG["fund_monitor"]["accum_jump_yellow"]
 
 # ── 轮询间隔（秒） ────────────────────────────
-POLL_INTERVAL = 10 * 60  # 10 分钟
+POLL_INTERVAL = CFG["fund_monitor"]["poll_interval_seconds"]
 
-# 简单节假日列表（农历/调休不处理，只标记固定节日）
-# 如果当天请求发现无实时数据则自动跳过
-# 简单节假日列表（仅标注固定日期，浮动节假日由智能检测补充）
-# 春节/清明/端午/中秋等农历节日每年变化，不在此列出
+# ── 节假日检测 ────────────────────────────────
+# 固定日期节假日（公历）
 FIXED_HOLIDAYS = {
     (1, 1),   # 元旦
     (5, 1), (5, 2), (5, 3),   # 劳动节
     (10, 1), (10, 2), (10, 3), (10, 4), (10, 5), (10, 6), (10, 7),  # 国庆
 }
 
+_HOLIDAY_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".holiday_cache.json")
+_HOLIDAY_CACHE_TTL = CFG["fund_monitor"]["holiday_cache_ttl"]
+
 # 连续几次无数据则判定为节假日
-MAX_EMPTY_ROUNDS = 2
+MAX_EMPTY_ROUNDS = CFG["fund_monitor"]["max_empty_rounds"]
 
 
-# ── 辅助函数 ──────────────────────────────────
+def _load_holiday_cache() -> dict:
+    """加载已缓存的节假日数据"""
+    if os.path.exists(_HOLIDAY_CACHE_FILE):
+        try:
+            with open(_HOLIDAY_CACHE_FILE, encoding="utf-8") as f:
+                return json.load(f)  # type: ignore[no-any-return]
+        except Exception:
+            pass
+    return {}
+
+
+def _save_holiday_cache(data: dict) -> None:
+    """持久化节假日数据"""
+    try:
+        with open(_HOLIDAY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception as e:
+        log.debug("保存节假日缓存失败: %s", e)
+
+
+def is_holiday_api(date_str: str) -> bool | None:
+    """
+    调用节假日 API 判断是否为非交易日。
+    返回 True=非交易日, False=交易日, None=API 不可用。
+    """
+    cache = _load_holiday_cache()
+    now_ts = time.time()
+
+    # 缓存命中且未过期
+    if date_str in cache:
+        entry = cache[date_str]
+        if now_ts - entry.get("ts", 0) < _HOLIDAY_CACHE_TTL:
+            return entry["holiday"]  # type: ignore[no-any-return]
+
+    # 调用公开节假日 API (https://timor.tech/api/holiday)
+    try:
+        data = fetch(f"https://timor.tech/api/holiday/info/{date_str}")
+        j = json.loads(data)
+        if j.get("code") == 0 and "type" in j.get("type", {}):
+            holiday = j["type"]["type"] != 0  # 0=工作日, 1=节假日, 2=调休日
+            log.debug("节假日 API: %s -> %s", date_str, "非交易日" if holiday else "交易日")
+            # 写入缓存
+            cache[date_str] = {"holiday": holiday, "ts": now_ts}
+            _save_holiday_cache(cache)
+            return holiday  # type: ignore[no-any-return]
+    except Exception as e:
+        log.debug("节假日 API 请求失败: %s", e)
+
+    return None  # API 不可用
+
 
 def is_trading_day(d: datetime.date) -> bool:
-    """判断是否为交易日（周一到周五，非固定假日）"""
+    """
+    判断是否为交易日：
+    1. API 检测（优先）
+    2. 周末判断
+    3. 固定假日列表
+    """
+    date_str = d.isoformat()
+
+    # 优先使用 API（覆盖春节、清明等农历节日及调休）
+    api_result = is_holiday_api(date_str)
+    if api_result is not None:
+        return not api_result  # API 返回 True=非交易日
+
+    # API 不可用时的后备逻辑
     if d.weekday() >= 5:
         return False
     if (d.month, d.day) in FIXED_HOLIDAYS:

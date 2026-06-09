@@ -1,0 +1,10 @@
+[Unit]
+Description=基金监控 — 盘中实时监控（工作日 09:25 启动，15:00 自动结束）
+
+[Timer]
+OnCalendar=Mon..Fri 09:25:00
+Persistent=false
+RandomizedDelaySec=5
+
+[Install]
+WantedBy=timers.target

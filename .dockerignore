@@ -1,0 +1,28 @@
+# Git / 版本控制
+.git/
+.gitignore
+.gitattributes
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 运行时数据（不打包进镜像）
+*.log
+*.json
+!.dockerignore
+!config.json
+!fund_list.json
+
+# 开发文件
+*.md
+*.toml
+requirements-dev.txt
+deploy/
+tests/
+
+# 操作系统
+Thumbs.db
+.DS_Store

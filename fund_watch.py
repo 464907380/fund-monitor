@@ -1,35 +1,39 @@
 """
-基金风险监控 v5.1 — 每日晚报 + 企业微信推送
+基金风险监控 v5.2 — 每日晚报 + 企业微信推送
 """
 import json
 import logging
 import os
 import re
 import datetime
+import time
+import urllib.error
 import urllib.request
 from email.header import Header
 from email.mime.text import MIMEText
 import smtplib
 from logging.handlers import RotatingFileHandler
+from config import CFG
 
 # ── 配置 ──────────────────────────────────────
-FUND_LIST = [
+
+# 基金列表：优先从 fund_list.json 加载（可编辑），不存在时使用内置默认列表
+_FUND_LIST_FALLBACK = [
     {"code": "001438"}, {"code": "180031"}, {"code": "018998"},
     {"code": "000979"}, {"code": "320007"}, {"code": "161725"},
     {"code": "001480"}, {"code": "001753"}, {"code": "001170"},
 ]
+FUND_LIST: list[dict] = []  # 占位，稍后由 _load_fund_list() 填充
 
-# 推送配置（优先级：企业微信 > 邮件）
+# 推送配置（优先级：企业微信 > 邮件。请通过环境变量 WECHAT_WEBHOOK / QQ_EMAIL / QQ_MAIL_AUTH 配置）
 WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK", "")
-QQ_EMAIL = os.getenv("QQ_EMAIL", "464907380@qq.com")
+QQ_EMAIL = os.getenv("QQ_EMAIL", "")
 QQ_AUTH_CODE = os.getenv("QQ_MAIL_AUTH", "")
-if not QQ_AUTH_CODE:
-    QQ_AUTH_CODE = "ivfqwtorvsnfcbch"
 
-ALERT_DROP_1M = -10
-ALERT_DROP_1M_RED = -15
-ALERT_SCALE_2X = 2.0
-ALERT_SCALE_1_5X = 1.5
+ALERT_DROP_1M = CFG["fund_watch"]["alert_drop_1m"]
+ALERT_DROP_1M_RED = CFG["fund_watch"]["alert_drop_1m_red"]
+ALERT_SCALE_2X = CFG["fund_watch"]["alert_scale_2x"]
+ALERT_SCALE_1_5X = CFG["fund_watch"]["alert_scale_1_5x"]
 
 HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -49,20 +53,71 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-_cache: dict[str, str] = {}
+# 在日志就绪后加载基金列表
+_fund_list_path = os.path.join(HISTORY_DIR, "fund_list.json")
+if os.path.exists(_fund_list_path):
+    try:
+        with open(_fund_list_path, encoding="utf-8") as _f:
+            FUND_LIST[:] = json.load(_f)
+        log.info("已从 fund_list.json 加载 %d 只基金", len(FUND_LIST))
+    except Exception as _e:
+        log.warning("读取 fund_list.json 失败 (%s)，使用内置默认列表", _e)
+        FUND_LIST[:] = _FUND_LIST_FALLBACK
+elif not FUND_LIST:
+    FUND_LIST[:] = _FUND_LIST_FALLBACK
+
+_cache: dict[str, tuple[float, str]] = {}       # url -> (timestamp, data)
+_CACHE_TTL = CFG["network"]["cache_ttl_seconds"]
+_CACHE_MAX = CFG["network"]["cache_max_entries"]
+
+# ── 重试配置 ──────────────────────────────────
+_RETRY_MAX = CFG["network"]["retry_max"]
+_RETRY_BACKOFF = CFG["network"]["retry_backoff_seconds"]
+
+
+def _cache_evict() -> None:
+    """清除过期缓存；超出上限时清除最旧的条目"""
+    now = time.time()
+    expired = [k for k, (t, _) in _cache.items() if now - t > _CACHE_TTL]
+    for k in expired:
+        del _cache[k]
+    # 超过最大条数时，按时间戳排序移除最旧的一半
+    if len(_cache) > _CACHE_MAX:
+        sorted_items = sorted(_cache.items(), key=lambda kv: kv[1][0])
+        for k, _ in sorted_items[:len(sorted_items) // 2]:
+            del _cache[k]
+    log.debug("缓存清理: 过期 %d, 当前 %d 条", len(expired), len(_cache))
+
+
+def _retry_fetch(url: str) -> str:
+    """带指数退避的 HTTP GET 请求"""
+    _cache_evict()
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    last_err = None
+    for attempt in range(1, _RETRY_MAX + 1):
+        try:
+            resp = urllib.request.urlopen(req, timeout=15).read().decode("utf-8", errors="ignore")
+            return resp  # type: ignore[no-any-return]
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            last_err = e
+            if attempt < _RETRY_MAX:
+                wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
+                log.debug("请求失败，第 %d 次重试 (等待 %ds): %s", attempt, wait, url)
+                time.sleep(wait)
+    log.warning("请求失败 %s (已重试 %d 次): %s", url, _RETRY_MAX, last_err)
+    raise urllib.error.URLError(str(last_err)) if last_err else urllib.error.URLError(f"Request failed: {url}")
 
 
 def fetch(url: str) -> str:
-    if url in _cache:
-        return _cache[url]
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        resp = urllib.request.urlopen(req, timeout=15).read().decode("utf-8", errors="ignore")
-        _cache[url] = resp
-        return resp
-    except Exception as e:
-        log.warning("请求失败 %s: %s", url, e)
-        raise
+    entry = _cache.get(url)
+    if entry:
+        ts, data = entry
+        if time.time() - ts <= _CACHE_TTL:
+            return data
+        del _cache[url]
+    resp = _retry_fetch(url)
+    _cache[url] = (time.time(), resp)
+    return resp
 
 
 def clear_cache() -> None:
@@ -92,9 +147,10 @@ def send_wechat(content: str, markdown: bool = True) -> bool:
 def send_mail(subject: str, text: str) -> None:
     """通过 QQ 邮箱发送纯文本邮件（供 fund_monitor.py 使用）"""
     if not QQ_EMAIL or not QQ_AUTH_CODE:
+        log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
     msg = MIMEText(text, "plain", "utf-8")
-    msg["Subject"] = Header(subject, "utf-8")
+    msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = QQ_EMAIL
     try:
         s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
@@ -109,6 +165,7 @@ def send_mail(subject: str, text: str) -> None:
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
     """通过 QQ 邮箱发送邮件（HTML 模板渲染）"""
     if not QQ_EMAIL or not QQ_AUTH_CODE:
+        log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
     tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
     if not os.path.exists(tpl_path):
@@ -143,7 +200,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     else:
         html = html.replace("{{ALERTS}}", "")
     msg = MIMEText(html, "html", "utf-8")
-    msg["Subject"] = Header(subject, "utf-8")
+    msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = QQ_EMAIL
     try:
         s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
@@ -193,84 +250,135 @@ def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
 
 # ── 数据获取 ──────────────────────────────────
 
-def get(code: str) -> dict:
-    d: dict = {"code": code}
-    data = fetch(f"https://fund.eastmoney.com/pingzhongdata/{code}.js")
-
+def _parse_name(data: str) -> str | None:
+    """从 pingzhongdata JS 中提取基金名称"""
     m = re.search(r'var fS_name\s*=\s*"([^"]+)"', data)
-    if m:
-        d["n"] = m.group(1)
+    return m.group(1) if m else None
 
+
+def _parse_scale(data: str) -> float | None:
+    """提取基金规模（亿元）"""
     m = re.findall(r'"y":([\d.]+),"mom":"[\d.-]+%"', data)
-    if m:
-        d["sc"] = float(m[-1])
+    return float(m[-1]) if m else None
 
+
+def _parse_period_returns(data: str) -> dict:
+    """提取阶段收益：近1月/近3月/近1年"""
+    result = {}
     for key, js_var in [("m1", "syl_1y"), ("m3", "syl_3y"), ("y1", "syl_1n")]:
         m = re.search(rf'var {js_var}\s*=\s*"([-\d.]+)"', data)
         if m:
-            d[key] = float(m.group(1))
+            result[key] = float(m.group(1))
+    return result
 
+
+def _parse_price_info(data: str) -> int | None:
+    """提取基金价格/净值"""
     m = re.search(r'"data":\[([\d.]+),([\d.]+),([\d.]+),([\d.]+),([\d.]+)\]', data)
-    if m:
-        d["sp"] = int(float(m.group(1)))
+    return int(float(m.group(1))) if m else None
 
+
+def _parse_manager(data: str) -> str | None:
+    """提取基金经理"""
     m = re.search(r'Data_currentFundManager.*?"name":"([^"]+)"', data, re.DOTALL)
-    if m:
-        d["mgr"] = m.group(1)
+    return m.group(1) if m else None
 
+
+def _parse_institutional_ratio(data: str) -> float | None:
+    """提取机构持有比例"""
     m = re.search(r'"机构持有比例","data":\[([^\]]+)\]', data)
-    if m:
-        vs = m.group(1).split(",")
-        if vs:
-            d["inst"] = float(vs[-1].strip())
+    if not m:
+        return None
+    vs = m.group(1).split(",")
+    return float(vs[-1].strip()) if vs else None
 
+
+def _parse_net_trend(data: str) -> list[dict] | None:
+    """提取净值趋势（最近6条）"""
     ts = data.find("var Data_netWorthTrend")
-    if ts >= 0:
-        as_ = data.find("[{", ts)
-        if as_ >= 0:
-            dep, end = 0, as_
-            for i in range(as_, min(as_ + 500000, len(data))):
-                if data[i] == "[":
-                    dep += 1
-                elif data[i] == "]":
-                    dep -= 1
-                    if dep == 0:
-                        end = i
-                        break
-            tail = data[max(as_, end - 3000):end + 1]
-            ms = re.findall(r'\{"x":(\d+),"y":([\d.]+),"equityReturn"', tail)
-            if ms:
-                d["nav"] = []
-                for t, v in ms[-6:]:
-                    dt = datetime.datetime.fromtimestamp(int(t) // 1000)
-                    d["nav"].append({"d": dt.strftime("%m-%d"), "v": float(v), "ts": int(t)})
+    if ts < 0:
+        return None
+    as_ = data.find("[{", ts)
+    if as_ < 0:
+        return None
+    dep, end = 0, as_
+    for i in range(as_, min(as_ + 500000, len(data))):
+        if data[i] == "[":
+            dep += 1
+        elif data[i] == "]":
+            dep -= 1
+            if dep == 0:
+                end = i
+                break
+    tail = data[max(as_, end - 3000):end + 1]
+    ms = re.findall(r'\{"x":(\d+),"y":([\d.]+),"equityReturn"', tail)
+    if not ms:
+        return None
+    nav = []
+    for t, v in ms[-6:]:
+        dt = datetime.datetime.fromtimestamp(int(t) // 1000)
+        nav.append({"d": dt.strftime("%m-%d"), "v": float(v), "ts": int(t)})
+    return nav
 
+
+def _parse_real_time(code: str) -> float | None:
+    """获取实时估算涨跌幅"""
     try:
         gz = fetch(f"https://fundgz.1234567.com.cn/js/{code}.js")
         m = re.search(r'"gszzl":"([-\d.]+)"', gz)
-        if m:
-            d["td"] = float(m.group(1))
+        return float(m.group(1)) if m else None
     except Exception as e:
         log.debug("拉取实时估算失败 %s: %s", code, e)
+        return None
 
+
+def _parse_holdings(code: str) -> list[dict] | None:
+    """获取前5大持仓明细"""
     try:
         jj = fetch(
             f"https://fund.eastmoney.com/f10/FundArchivesDatas.aspx"
             f"?type=jjcc&code={code}&topline=5&year=&month=&rt=0.1"
         )
         cm = re.search(r'content:"([^"]+)"', jj, re.DOTALL)
-        if cm:
-            d["holds"] = []
-            for line in cm.group(1).split("\\n"):
-                parts = line.split(",")
-                if len(parts) >= 6:
-                    try:
-                        int(parts[0])
-                        d["holds"].append({"n": parts[2], "p": float(parts[5]) if parts[5] else 0})
-                    except Exception:
-                        pass
+        if not cm:
+            return None
+        holds = []
+        for line in cm.group(1).split("\\n"):
+            parts = line.split(",")
+            if len(parts) >= 6:
+                try:
+                    int(parts[0])
+                    holds.append({"n": parts[2], "p": float(parts[5]) if parts[5] else 0})
+                except Exception:
+                    pass
+        return holds if holds else None
     except Exception as e:
         log.debug("拉取持仓失败 %s: %s", code, e)
+        return None
+
+
+def get(code: str) -> dict:
+    """拉取一只基金的全量数据并组装返回"""
+    d: dict = {"code": code}
+    data = fetch(f"https://fund.eastmoney.com/pingzhongdata/{code}.js")
+
+    if name := _parse_name(data):
+        d["n"] = name
+    if sc := _parse_scale(data):
+        d["sc"] = sc
+    d.update(_parse_period_returns(data))
+    if sp := _parse_price_info(data):
+        d["sp"] = sp
+    if mgr := _parse_manager(data):
+        d["mgr"] = mgr
+    if inst := _parse_institutional_ratio(data):
+        d["inst"] = inst
+    if nav := _parse_net_trend(data):
+        d["nav"] = nav
+    if td := _parse_real_time(code):
+        d["td"] = td
+    if holds := _parse_holdings(code):
+        d["holds"] = holds
 
     return d
 
@@ -282,7 +390,7 @@ def load_hist(code: str) -> dict:
     if os.path.exists(p):
         try:
             with open(p, encoding="utf-8") as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[no-any-return]
         except Exception as e:
             log.warning("读取历史文件失败 %s: %s", code, e)
     return {}
@@ -295,11 +403,11 @@ def save_hist(code: str, h: dict) -> None:
 
 # ── 主检查逻辑 ────────────────────────────────
 
-STAGNATION_THRESHOLD = 0.05    # 日涨跌幅 < 0.05% 视为停滞
-STAGNATION_DAYS = 3            # 连续 3 天
-CONSECUTIVE_DROP_DAYS = 3      # 连跌 3 天起
-CONSECUTIVE_DROP_TOTAL = -3    # 累计跌幅超 -3%
-DIVIDEND_DROP = -4             # 单日净值跌超 -4% 提示分红/拆分
+STAGNATION_THRESHOLD = CFG["fund_watch"]["stagnation_threshold"]
+STAGNATION_DAYS = CFG["fund_watch"]["stagnation_days"]
+CONSECUTIVE_DROP_DAYS = CFG["fund_watch"]["consecutive_drop_days"]
+CONSECUTIVE_DROP_TOTAL = CFG["fund_watch"]["consecutive_drop_total"]
+DIVIDEND_DROP = CFG["fund_watch"]["dividend_drop"]
 
 
 def check_stagnation(navs: list[dict]) -> str | None:
@@ -449,7 +557,7 @@ def main() -> None:
     if all_alerts:
         lines.append("")
         lines.append("🚨 警报:")
-        for a in all_alerts:
+        for a in all_alerts:  # type: ignore[assignment]
             lines.append(f"  {a}")
     full_text = "\n".join(lines)
 

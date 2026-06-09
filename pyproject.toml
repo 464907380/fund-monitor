@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "fund-monitor"
+version = "5.2.0"
+description = "基金盘中监控 + 每日晚报 + 全球股市简报"
+requires-python = ">=3.10"
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_return_any = true
+warn_unreachable = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+
+# 允许 import 但不安装的包
+[[tool.mypy.overrides]]
+module = ["smtplib", "email.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

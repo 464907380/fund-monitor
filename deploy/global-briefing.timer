@@ -1,0 +1,10 @@
+[Unit]
+Description=基金监控 — 全球股市简报（工作日 08:30）
+
+[Timer]
+OnCalendar=Mon..Fri 08:30:00
+Persistent=false
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
