@@ -273,6 +273,9 @@ def _get_fund_holdings(code: str) -> list[dict]:
         if holds:
             log.info("已加载 %s 持仓 %d 只个股", code, len(holds))
             _holdings_cache[code] = holds
+        else:
+            log.info("%s 无持仓数据", code)
+            _holdings_cache[code] = []
     return _holdings_cache.get(code, [])
 
 
@@ -287,6 +290,7 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
     if not holds:
         return alerts
 
+    checked = 0
     for h in holds:
         stock_code = h.get("c", "")
         stock_name = h.get("n", "")
@@ -294,6 +298,7 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
         if not stock_code:
             continue
 
+        checked += 1
         sina_code = _sina_stock_code(stock_code)
         result = _fetch_stock_change(sina_code)
         if result is None:
@@ -365,6 +370,8 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
         state["max_chg"] = max(state.get("max_chg", chg), chg)
         state["min_chg"] = min(state.get("min_chg", chg), chg)
 
+    if checked:
+        log.debug("%s 个股检查: %d 只", fund_name, checked)
     return alerts
 
 

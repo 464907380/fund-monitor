@@ -27,7 +27,6 @@ def test_load_config_with_json():
     assert "fund_watch" in cfg
     assert "fund_monitor" in cfg
     assert "network" in cfg
-    assert "global_briefing" in cfg
 
     # 验证默认值与 config.json 一致
     assert cfg["fund_watch"]["alert_drop_1m"] == -10

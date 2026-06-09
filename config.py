@@ -88,10 +88,6 @@ _DEFAULTS = {
         "cache_ttl_seconds": 300,
         "cache_max_entries": 100,
     },
-    "global_briefing": {
-        "retry_max": 3,
-        "retry_backoff_seconds": [1, 3, 8],
-    },
 }
 
 

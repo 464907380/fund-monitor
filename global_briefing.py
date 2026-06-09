@@ -5,33 +5,12 @@
   - A股：新浪财经（主）→ 东方财富（备）
   - 全球：新浪财经（支持美股/日韩/欧洲等主要指数）
 """
-import time
-import urllib.error
-import urllib.request
 import json
 import re
 import datetime
 import os
-import logging
-from config import CFG
-from fund_watch import send_wechat, send_mail, log, HISTORY_DIR
+from fund_watch import send_wechat, send_mail, log, HISTORY_DIR, fetch_bytes
 
-# ── 重试配置 ──────────────────────────────────
-_RETRY_MAX = CFG["global_briefing"]["retry_max"]
-_RETRY_BACKOFF = CFG["global_briefing"]["retry_backoff_seconds"]
-
-
-def _retry_fetch_url(url: str, headers: dict | None = None) -> bytes | None:
-    """带指数退避的 HTTP GET 请求，全部失败返回 None（返回原始字节，由调用方决定编码）"""
-    req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
-    for attempt in range(1, _RETRY_MAX + 1):
-        try:
-            return urllib.request.urlopen(req, timeout=10).read()  # type: ignore[no-any-return]
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
-            if attempt < _RETRY_MAX:
-                wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
-                time.sleep(wait)
-    return None
 
 # ── 指数列表 ──────────────────────────────────
 A_INDICES = [
@@ -57,7 +36,7 @@ WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK", "")
 def fetch_sina(code: str) -> dict | None:
     """从新浪财经获取A股指数"""
     url = f"https://hq.sinajs.cn/list={code}"
-    data = _retry_fetch_url(url, {
+    data = fetch_bytes(url, headers={
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://finance.sina.com.cn",
     })
@@ -88,7 +67,7 @@ def fetch_eastmoney_a(code: str) -> dict | None:
     if not secid:
         return None
     url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f170"
-    data = _retry_fetch_url(url)
+    data = fetch_bytes(url)
     if data is None:
         return None
     try:
@@ -123,7 +102,7 @@ def fetch_sina_global() -> list[dict]:
     """
     codes = ",".join(code for code, _ in GLOBAL_INDICES)
     url = f"https://hq.sinajs.cn/list={codes}"
-    data = _retry_fetch_url(url, {
+    data = fetch_bytes(url, headers={
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://finance.sina.com.cn",
     })

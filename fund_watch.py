@@ -125,7 +125,48 @@ def clear_cache() -> None:
     _cache.clear()
 
 
+def fetch_bytes(url: str, headers: dict | None = None) -> bytes | None:
+    """带指数退避的 HTTP GET，返回原始 bytes（不缓存，供新浪等非标准编码使用）"""
+    _cache_evict()
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
+    for attempt in range(1, _RETRY_MAX + 1):
+        try:
+            return urllib.request.urlopen(req, timeout=15).read()  # type: ignore[no-any-return]
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            if attempt < _RETRY_MAX:
+                wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
+                time.sleep(wait)
+    log.warning("请求失败 %s (已重试 %d 次)", url, _RETRY_MAX)
+    return None
+
+
 # ── 推送 ──────────────────────────────────────
+
+def _color_cls(val: str) -> str:
+    """数值颜色 class：涨红跌绿"""
+    if not val:
+        return ""
+    if val.startswith("+"):
+        return ' class="red"'
+    if val.startswith("-"):
+        return ' class="green"'
+    return ""
+
+
+def _strip_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text)
+
+
+def _send_smtp(msg: MIMEText) -> None:
+    """发送 SMTP 邮件（QQ 邮箱）"""
+    try:
+        s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
+        s.login(QQ_EMAIL, QQ_AUTH_CODE)
+        s.sendmail(QQ_EMAIL, [QQ_EMAIL], msg.as_string())
+        s.quit()
+        log.info("邮件发送成功")
+    except Exception as e:
+        log.error("邮件发送失败: %s", e)
 
 def send_wechat(content: str, markdown: bool = True) -> bool:
     if not WECHAT_WEBHOOK:
@@ -153,14 +194,7 @@ def send_mail(subject: str, text: str) -> None:
     msg = MIMEText(text, "plain", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = QQ_EMAIL
-    try:
-        s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
-        s.login(QQ_EMAIL, QQ_AUTH_CODE)
-        s.sendmail(QQ_EMAIL, [QQ_EMAIL], msg.as_string())
-        s.quit()
-        log.info("邮件发送成功")
-    except Exception as e:
-        log.error("邮件发送失败: %s", e)
+    _send_smtp(msg)
 
 
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
@@ -168,19 +202,6 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     if not QQ_EMAIL or not QQ_AUTH_CODE:
         log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
-    def _color_cls(val: str) -> str:
-        """数值颜色 class"""
-        if not val:
-            return ""
-        if val.startswith("+"):
-            return ' class="red"'
-        if val.startswith("-"):
-            return ' class="green"'
-        return ""
-
-    def _strip_html(text: str) -> str:
-        return re.sub(r"<[^>]+>", "", text)
-
     tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
     if not os.path.exists(tpl_path):
         log.warning("email_template.html 不存在，跳过邮件")
@@ -216,14 +237,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = QQ_EMAIL
-    try:
-        s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
-        s.login(QQ_EMAIL, QQ_AUTH_CODE)
-        s.sendmail(QQ_EMAIL, [QQ_EMAIL], msg.as_string())
-        s.quit()
-        log.info("邮件发送成功")
-    except Exception as e:
-        log.error("邮件发送失败: %s", e)
+    _send_smtp(msg)
 
 
 def push(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
