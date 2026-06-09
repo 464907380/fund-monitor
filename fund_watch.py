@@ -198,7 +198,7 @@ def send_mail(subject: str, text: str) -> None:
 
 
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
-    """通过 QQ 邮箱发送邮件（HTML 模板渲染）"""
+    """通过 QQ 邮箱发送邮件（HTML 模板渲染，含评分排名）"""
     if not QQ_EMAIL or not QQ_AUTH_CODE:
         log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
@@ -208,9 +208,14 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         return
     html = open(tpl_path, encoding="utf-8").read()
     html = html.replace("{{DATE}}", today)
-    # 表格行
+
+    # 按评分排序
+    rows_sorted = sorted(rows, key=lambda r: r.get("score", 0), reverse=True)
+
+    # 表格行（含评分列）
     row_htmls = []
-    for r in rows:
+    for r in rows_sorted:
+        score_str = f"{r.get('score', 0):.1f}"
         row_htmls.append(
             f'<tr>'
             f'<td>{r["code"]}</td>'
@@ -221,19 +226,46 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
             f'<td class="num"{_color_cls(r["m3"])}>{r["m3"]}</td>'
             f'<td class="num"{_color_cls(r["y1"])}>{r["y1"]}</td>'
             f'<td>{r["mgr"]}</td>'
+            f'<td class="num">{score_str}</td>'
             f'</tr>'
         )
     html = html.replace("{{ROWS}}", "\n".join(row_htmls))
+
+    # 构造排名 + 警报 HTML
+    extra_parts = []
+
+    # 评分排名榜
+    medals = ["🥇", "🥈", "🥉"]
+    rank_items = []
+    for i, r in enumerate(rows_sorted[:5], 1):
+        badge = medals[i - 1] if i <= 3 else f"{i}."
+        rp = r.get("rank_pct", "")
+        rank_items.append(
+            f'<div style="font-size:13px;margin:4px 0;padding:4px 0;'
+            f'border-bottom:1px solid #eee;">'
+            f'{badge} <b>{r["name_short"]}</b> — {r.get("score", 0):.1f}分 '
+            f'{rp} {r["y1"]}</div>'
+        )
+    if rank_items:
+        extra_parts.append(
+            '<div style="margin-top:16px;background:#f0f8ff;border:1px solid #bcd;'
+            'border-radius:8px;padding:12px;">'
+            '<div style="font-weight:bold;font-size:14px;margin-bottom:8px;">'
+            '🏆 基金综合评分排名</div>'
+            + "\n".join(rank_items) + '</div>'
+        )
+
     # 警报
     if alerts:
-        al = '<div class="alerts">'
-        al += '<div class="alerts-title">🚨 警报</div>'
+        al = '<div style="margin-top:12px;background:#fff5f5;border:1px solid #fcc;border-radius:8px;padding:12px;">'
+        al += '<div style="font-weight:bold;font-size:14px;margin-bottom:8px;color:#c62828;">🚨 警报</div>'
         for a in alerts:
-            al += f'<div class="alerts-item">{_strip_html(a)}</div>'
+            al += f'<div style="font-size:13px;margin:4px 0;padding:4px 0;border-bottom:1px solid #fee;">{_strip_html(a)}</div>'
         al += '</div>'
-        html = html.replace("{{ALERTS}}", al)
-    else:
-        html = html.replace("{{ALERTS}}", "")
+        extra_parts.append(al)
+
+    html = html.replace("{{ALERTS}}", "\n".join(extra_parts) if extra_parts else "")
+
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = QQ_EMAIL
@@ -247,17 +279,27 @@ def push(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
 
 
 def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
-    """构造 Markdown 内容（企业微信推送用）"""
+    """构造 Markdown 内容（含评分排名，企业微信推送用）"""
     md_lines = [
         f"📊 **基金晚报 {today}**",
         "",
-        "|代码|基金名|涨跌|近5日|近1月|近3月|近1年|经理|",
-        "|:---|:---|---:|----:|----:|----:|----:|:---|",
+        "|代码|基金名|涨跌|近5日|近1月|近3月|近1年|经理|评分|",
+        "|:---|:---|---:|----:|----:|----:|----:|:---|:---|",
     ]
-    for r in rows:
+    rows_sorted = sorted(rows, key=lambda r: r.get("score", 0), reverse=True)
+    for r in rows_sorted:
+        score_str = f"{r.get('score', 0):.1f}"
         md_lines.append(
-            f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r['mgr']}|"
+            f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r['mgr']}|{score_str}|"
         )
+    # 评分排名榜
+    medals = ["🥇", "🥈", "🥉"]
+    rank_lines = ["", "**🏆 基金综合评分排名**"]
+    for i, r in enumerate(rows_sorted[:5], 1):
+        badge = medals[i - 1] if i <= 3 else f"{i}."
+        rp = r.get("rank_pct", "")
+        rank_lines.append(f"{badge} **{r['name_short']}** — {r.get('score', 0):.1f}分  {rp}  {r['y1']}")
+    md_lines.append("\n".join(rank_lines))
     if alerts:
         md_lines.append("")
         md_lines.append("**🚨 警报:**")
@@ -378,6 +420,129 @@ def _parse_holdings(code: str) -> list[dict] | None:
         return None
 
 
+# ── 评分相关解析 ──────────────────────────────
+
+def _parse_performance_eval(data: str) -> dict | None:
+    """提取天天基金绩效评分：选证能力/收益率/抗风险/稳定性/择时能力"""
+    m = re.search(r'var Data_performanceEvaluation = (\{.*?\});', data, re.DOTALL)
+    if not m:
+        return None
+    try:
+        pe = json.loads(m.group(1))
+        return {
+            "score_avg": float(pe.get("avr", 0)),
+            "scores": dict(zip(pe.get("categories", []), pe.get("data", []))),
+        }
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
+def _parse_rank_info(data: str) -> tuple[int, int] | None:
+    """提取同类排名 (当前排名, 同类总数)"""
+    m = re.search(r'var Data_rateInSimilarType = (\[.*?\]);', data, re.DOTALL)
+    if not m:
+        return None
+    try:
+        ranks = json.loads(m.group(1))
+        if not ranks:
+            return None
+        last = ranks[-1]
+        return int(last["y"]), int(last.get("sc", 1))
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+        return None
+
+
+def _parse_fund_rate(data: str) -> float | None:
+    """提取基金现费率（%）"""
+    m = re.search(r'fund_Rate="([^"]+)"', data)
+    if m:
+        try:
+            return float(m.group(1))
+        except ValueError:
+            pass
+    return None
+
+
+def _calc_score(d: dict, peer_returns: list[float] | None = None) -> float:
+    """
+    计算基金综合评分 (0-100)
+    加权维度：收益率、同类排名、选证能力、抗风险、稳定性、择时、费率
+    peer_returns: 同组基金的近1年收益率列表，用于相对评分
+    """
+    scores: list[float] = []
+    total_weight = 0.0
+
+    # 1. 阶段收益评分 (相对组内排名，缓解各基金收益率差异大的问题)
+    y1 = d.get("y1")
+    if y1 is not None and peer_returns and len(peer_returns) > 1:
+        # 组内百分位评分: 最佳→100, 最差→0
+        sorted_ret = sorted(peer_returns)
+        rank_in_group = sum(1 for r in sorted_ret if r <= y1)
+        ret_score = (rank_in_group - 1) / (len(sorted_ret) - 1) * 100
+        scores.append(ret_score * 0.25)
+        total_weight += 0.25
+
+    # 2. 同类排名评分 (top 5% → 100, top 20% → 80, top 50% → 50)
+    rk = d.get("rank")
+    rk_total = d.get("rank_total")
+    if rk is not None and rk_total and rk_total > 0:
+        pct = rk / rk_total * 100  # 越小越好
+        if pct <= 1:
+            rank_score = 100
+        elif pct <= 5:
+            rank_score = 95
+        elif pct <= 10:
+            rank_score = 85
+        elif pct <= 20:
+            rank_score = 70
+        elif pct <= 30:
+            rank_score = 55
+        elif pct <= 50:
+            rank_score = 35
+        else:
+            rank_score = max(0, 25 - (pct - 50) * 0.5)
+        scores.append(rank_score * 0.25)
+        total_weight += 0.25
+
+    # 3. 天天基金绩效评分（选证能力+抗风险+稳定性+择时）
+    pe = d.get("pe")
+    if pe and isinstance(pe, dict):
+        raw = pe.get("scores", {})
+        for key, w in [("选证能力", 0.15), ("抗风险", 0.15),
+                       ("稳定性", 0.10), ("择时能力", 0.10)]:
+            val = raw.get(key)
+            if val is not None:
+                scores.append(val * w)
+                total_weight += w
+
+    # 4. 费率评分 (0%→100, 0.5%→70, 1.5%→40, 2%→20)
+    rate = d.get("rate")
+    if rate is not None:
+        rate_score = max(20, 100 - rate * 40)
+        scores.append(rate_score * 0.05)
+        total_weight += 0.05
+
+    if not scores:
+        return 0.0
+
+    return round(min(100, sum(scores) / total_weight), 1)
+
+
+def _rank_percentile_str(d: dict) -> str:
+    """返回排名百分位字符串，如 'top 1.2%'"""
+    rk = d.get("rank")
+    total = d.get("rank_total")
+    if rk is not None and total:
+        pct = rk / total * 100
+        if pct <= 5:
+            return f"top {pct:.1f}%🌟"
+        elif pct <= 20:
+            return f"top {pct:.1f}%"
+        else:
+            return f"{pct:.1f}%"
+    return ""
+
+
 def get(code: str) -> dict:
     """拉取一只基金的全量数据并组装返回"""
     d: dict = {"code": code}
@@ -400,6 +565,12 @@ def get(code: str) -> dict:
         d["td"] = td
     if holds := _parse_holdings(code):
         d["holds"] = holds
+    if pe := _parse_performance_eval(data):
+        d["pe"] = pe
+    if rp := _parse_rank_info(data):
+        d["rank"], d["rank_total"] = rp
+    if rate := _parse_fund_rate(data):
+        d["rate"] = rate
 
     return d
 
@@ -543,6 +714,11 @@ def check(code: str) -> tuple[dict, list[str]]:
         "y1": f"{d['y1']:+.1f}%" if d.get("y1") is not None else "",
         "mgr": d.get("mgr", "")[:6],
         "holds": d.get("holds", []),
+        "_y1_raw": d.get("y1"),
+        "_rank": d.get("rank"),
+        "_rank_total": d.get("rank_total"),
+        "_pe": d.get("pe"),
+        "_rate": d.get("rate"),
     }
     return row, alerts
 
@@ -556,30 +732,61 @@ def main() -> None:
     if not WECHAT_WEBHOOK:
         log.info("WECHAT_WEBHOOK 未设置，走邮件推送")
 
-    rows, all_alerts = [], []
+    # 第一遍：拉取所有基金原始数据
+    raw_rows: list[dict] = []
+    all_alerts: list[str] = []
     for f in FUND_LIST:
         try:
             r, a = check(f["code"])
-            rows.append(r)
+            raw_rows.append(r)
             all_alerts.extend(a)
             log.info("  %s(%s) %s | 近1月%s | 近3月%s | 近1年%s", r["name"], r["code"], r["day"], r["m1"], r["m3"], r["y1"])
         except Exception as e:
             log.error("❌ %s: %s", f["code"], e)
 
+    # 第二遍：计算评分（需要全部基金数据才能做相对评分）
+    peer_y1 = [r["_y1_raw"] for r in raw_rows if r.get("_y1_raw") is not None]
+    for r in raw_rows:
+        d = {
+            "y1": r.get("_y1_raw"),
+            "rank": r.get("_rank"),
+            "rank_total": r.get("_rank_total"),
+            "pe": r.get("_pe"),
+            "rate": r.get("_rate"),
+        }
+        r["score"] = _calc_score(d, peer_y1)
+        r["rank_pct"] = _rank_percentile_str(d)
+
+    # 按综合评分排序
+    rows = sorted(raw_rows, key=lambda r: r.get("score", 0), reverse=True)
+
     # 纯文本（终端用）
     lines = [
         f"📊 基金晚报 {today}",
         "",
-        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6}",
-        "-" * 68,
+        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6}",
+        "-" * 80,
     ]
-    for r in rows:
-        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6}")
+    for i, r in enumerate(rows, 1):
+        score_str = f"{r.get('score', 0):.1f}"
+        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6}")
     if all_alerts:
         lines.append("")
         lines.append("🚨 警报:")
         for a in all_alerts:  # type: ignore[assignment]
             lines.append(f"  {a}")
+
+    # 综合评分排名
+    if rows:
+        lines.append("")
+        lines.append("🏆 基金综合评分排名")
+        lines.append(f"{'排名':<4} {'基金名':<14} {'评分':<6} {'同类排名':<12} {'近1年':<8} {'经理':<6}")
+        lines.append("-" * 56)
+        medals = ["🥇", "🥈", "🥉"]
+        for i, r in enumerate(rows[:5], 1):
+            badge = medals[i - 1] if i <= 3 else f"{i:>2d}."
+            rp = r.get("rank_pct", "")
+            lines.append(f"{badge:<4} {r['name_short']:<14} {r.get('score', 0):<6.1f} {rp:<12} {r['y1']:<8} {r['mgr']:<6}")
     full_text = "\n".join(lines)
 
     print(full_text)

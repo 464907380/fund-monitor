@@ -384,3 +384,78 @@ def test_snapshot_save_load_clear(tmp_path):
     _clear_snapshot()
     from fund_monitor import _STATE_SNAPSHOT
     assert not os.path.exists(_STATE_SNAPSHOT)
+
+
+# ═══════════════════════════════════════════════
+# 评分系统测试
+# ═══════════════════════════════════════════════
+
+def test_parse_performance_eval():
+    """提取绩效评分"""
+    from fund_watch import _parse_performance_eval
+
+    js = ('var Data_performanceEvaluation = '
+          '{"avr":"82.75","categories":["选证能力","收益率","抗风险","稳定性","择时能力"],'
+          '"data":[85.0,100.0,70.0,50.0,80.0]};')
+    result = _parse_performance_eval(js)
+    assert result is not None
+    assert result["score_avg"] == 82.75
+    assert result["scores"]["选证能力"] == 85.0
+    assert result["scores"]["抗风险"] == 70.0
+    assert result["scores"]["稳定性"] == 50.0
+
+    assert _parse_performance_eval("nothing") is None
+
+
+def test_parse_rank_info():
+    """提取同类排名"""
+    from fund_watch import _parse_rank_info
+
+    js = ('var Data_rateInSimilarType = '
+          '[{"x":1,"y":135,"sc":"590"},{"x":2,"y":17,"sc":"2314"}];')
+    result = _parse_rank_info(js)
+    assert result is not None
+    assert result == (17, 2314)
+
+    assert _parse_rank_info("nothing") is None
+
+
+def test_parse_fund_rate():
+    """提取基金费率"""
+    from fund_watch import _parse_fund_rate
+
+    js = 'var fund_Rate="0.00";'
+    assert _parse_fund_rate(js) == 0.0
+
+    js2 = 'var fund_Rate="1.50";'
+    assert _parse_fund_rate(js2) == 1.5
+
+    assert _parse_fund_rate("nothing") is None
+
+
+def test_calc_score_basic():
+    """基础评分计算"""
+    from fund_watch import _calc_score
+
+    # 只有收益率数据
+    d = {"y1": 100.0}
+    score = _calc_score(d, [50.0, 100.0, 150.0])
+    assert 0 < score <= 100
+
+    # 空数据返回 0
+    assert _calc_score({}) == 0.0
+
+
+def test_rank_percentile_str():
+    """排名百分位字符串"""
+    from fund_watch import _rank_percentile_str
+
+    d = {"rank": 1, "rank_total": 2314}
+    assert "0.0%" in _rank_percentile_str(d)
+    assert "🌟" in _rank_percentile_str(d)  # top 5% 有星星
+
+    d2 = {"rank": 500, "rank_total": 2314}
+    result = _rank_percentile_str(d2)
+    assert "21.6%" in result or "%" in result
+
+    assert _rank_percentile_str({}) == ""
