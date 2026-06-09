@@ -46,6 +46,7 @@ GLOBAL_INDICES = [
     ("gb_$inx",   "标普500"),
     ("gb_$hsi",   "恒生指数"),
     ("gb_$n225",  "日经225"),
+    ("gb_$ks11",  "韩国KOSPI"),
     ("gb_$ftse",  "英国富时100"),
     ("gb_$gdaxi", "德国DAX"),
 ]
