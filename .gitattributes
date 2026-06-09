@@ -1,0 +1,6 @@
+# Git 配置
+*.py text
+*.ps1 text
+*.html text
+*.toml text
+*.md text

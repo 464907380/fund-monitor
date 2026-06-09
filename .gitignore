@@ -1,0 +1,21 @@
+# 基金监控项目
+
+# 自动生成的基金历史快照（经理名、规模等）
+.fw_*.json
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行日志
+fund_watch.log
+
+# 临时测试文件
+test_*.py
+preview_*.py
+preview_*.html
+
+# 操作系统
+Thumbs.db
+.DS_Store
