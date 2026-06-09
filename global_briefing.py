@@ -41,13 +41,13 @@ A_INDICES = [
 ]
 
 GLOBAL_INDICES = [
-    ("^DJI",  "道琼斯"),
-    ("^GSPC", "标普500"),
-    ("^IXIC", "纳斯达克"),
-    ("^HSI",  "恒生指数"),
-    ("^N225", "日经225"),
-    ("^FTSE", "英国富时100"),
-    ("^GDAXI","德国DAX"),
+    ("gb_$dji",   "道琼斯"),
+    ("gb_$ixic",  "纳斯达克"),
+    ("gb_$inx",   "标普500"),
+    ("gb_$hsi",   "恒生指数"),
+    ("gb_$n225",  "日经225"),
+    ("gb_$ftse",  "英国富时100"),
+    ("gb_$gdaxi", "德国DAX"),
 ]
 
 WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK", "")
@@ -102,26 +102,6 @@ def fetch_eastmoney_a(code: str) -> dict | None:
     return None
 
 
-def fetch_yahoo(symbol: str) -> dict | None:
-    """从Yahoo Finance获取全球指数"""
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    data = _retry_fetch_url(url)
-    if data is None:
-        return None
-    try:
-        j = json.loads(data.decode("utf-8"))
-        meta = j.get("chart", {}).get("result", [{}])[0].get("meta", {})
-        reg_price = meta.get("regularMarketPrice")
-        prev_close = meta.get("chartPreviousClose")
-        if reg_price is None or prev_close is None:
-            return None
-        change_pct = round((reg_price - prev_close) / prev_close * 100, 2)
-        return {"current": reg_price, "change": change_pct}
-    except Exception as e:
-        log.warning("Yahoo获取 %s 失败: %s", symbol, e)
-        return None
-
-
 def get_a_share() -> list[dict]:
     """获取A股三大指数（新浪→东方财富备选）"""
     results = []
@@ -133,15 +113,53 @@ def get_a_share() -> list[dict]:
     return results
 
 
+def fetch_eastmoney_global() -> list[dict]:
+    """从新浪财经获取全球主要指数（批量请求，国内可访问）
+
+    新浪全球指数返回格式（不同于A股）：
+    var hq_str_gb_$dji="名称,当前价,涨跌幅%,日期时间,..."
+    字段索引: 0=名称, 1=当前价, 2=涨跌幅%, 3=日期
+    """
+    codes = ",".join(code for code, _ in GLOBAL_INDICES)
+    url = f"https://hq.sinajs.cn/list={codes}"
+    data = _retry_fetch_url(url, {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://finance.sina.com.cn",
+    })
+    if data is None:
+        return []
+    name_map = dict(GLOBAL_INDICES)
+    results = []
+    try:
+        text = data.decode("gbk")
+        for line in text.strip().split("\n"):
+            m = re.search(r'var hq_str_gb_\$(\w+)="(.+?)"', line)
+            if not m:
+                continue
+            raw_code = m.group(1)
+            parts = m.group(2).split(",")
+            if len(parts) < 6:
+                continue
+            # 全球指数格式: 0=名称, 1=最新价, 2=涨跌幅%
+            current = float(parts[1]) if parts[1] else 0
+            change_pct = float(parts[2]) if parts[2] else 0
+            if current:
+                full_code = f"gb_${raw_code}"
+                display_name = name_map.get(full_code, raw_code)
+                results.append({
+                    "code": display_name,
+                    "current": current,
+                    "change": round(change_pct, 2),
+                })
+        return results
+    except Exception as e:
+        log.warning("新浪全球指数获取失败: %s", e)
+        return []
+
+
 def get_global() -> list[dict]:
     """获取全球主要指数"""
-    results = []
-    for symbol, name in GLOBAL_INDICES:
-        data = fetch_yahoo(symbol)
-        if data:
-            data["code"] = name
-            results.append(data)
-    return results
+    return fetch_eastmoney_global()
 
 
 def build_briefing() -> str:
