@@ -520,6 +520,20 @@ def _score_rank(d: dict) -> tuple[float, float]:
     return (min(100, ret_score), 0.10)
 
 
+def _score_y1(d: dict) -> tuple[float, float]:
+    """近1年收益评分 (权重10%)"""
+    y1 = d.get("y1")
+    if y1 is None:
+        return (0.0, 0.0)
+    if y1 >= 100:       y1_score = 100
+    elif y1 >= 50:      y1_score = 80 + (y1 - 50) / 50 * 20
+    elif y1 >= 30:      y1_score = 65 + (y1 - 30) / 20 * 15
+    elif y1 >= 10:      y1_score = 45 + (y1 - 10) / 20 * 20
+    elif y1 >= 0:       y1_score = 10 + y1 / 10 * 35
+    else:               y1_score = 0
+    return (min(100, y1_score), 0.10)
+
+
 def _score_sharpe(d: dict) -> tuple[float, float]:
     """夏普比率评分 (权重15%)"""
     sharpe = d.get("sharpe")
@@ -562,7 +576,7 @@ def _score_sy3(d: dict) -> tuple[float, float]:
     elif sy3 >= 20:  sy3_score = 60 + (sy3 - 20) / 30 * 20
     elif sy3 >= 0:   sy3_score = 20 + sy3 / 20 * 40
     else:            sy3_score = 0
-    return (sy3_score, 0.20)
+    return (sy3_score, 0.15)
 
 
 def _score_max_dd(d: dict) -> tuple[float, float]:
@@ -570,7 +584,7 @@ def _score_max_dd(d: dict) -> tuple[float, float]:
     max_dd = d.get("max_dd")
     if max_dd is None:
         return (0.0, 0.0)
-    return (max(0, min(90, 110 - max_dd * 2)), 0.10)
+    return (max(0, min(90, 110 - max_dd * 1.2)), 0.10)
 
 
 def _score_win_rate(d: dict) -> tuple[float, float]:
@@ -586,7 +600,7 @@ def _score_institutional(d: dict) -> tuple[float, float]:
     inst = d.get("inst")
     if inst is None:
         return (0.0, 0.0)
-    return (max(10, min(90, inst * 1.5 + 20)), 0.05)
+    return (max(10, min(90, inst * 1.5 + 20)), 0.02)
 
 
 def _score_scale(d: dict) -> tuple[float, float]:
@@ -599,7 +613,7 @@ def _score_scale(d: dict) -> tuple[float, float]:
     elif 50 < sc <= 100:    scale_score = 70
     elif sc > 100:          scale_score = 40
     else:                   scale_score = 30
-    return (scale_score, 0.05)
+    return (scale_score, 0.03)
 
 
 def _score_rate(d: dict) -> tuple[float, float]:
@@ -615,20 +629,21 @@ def _calc_score(d: dict) -> float:
     计算基金综合评分 (0-100)
 
     11 维全透明评分：
-      - 年化收益率 (10%): 长期年化回报
+      - 近1年收益 (10%): 最近一年的表现，反映近期赚钱能力
+      - 年化收益率 (10%): 成立以来年化回报
       - 夏普比率 (15%): 每单位总波动的超额收益
       - 索提诺比率 (10%): 每单位下行波动的超额收益
       - 盈亏比 (5%): 平均盈利 / 平均亏损，赚比亏多才算好
       - 修复系数 (10%): 总收益 / 最大回撤，跌下去能涨回来
-      - 近3年收益 (20%): 长期表现，覆盖90%以上基金
-      - 最大回撤 (10%): 历史最大跌幅
+      - 近3年收益 (15%): 中长期表现
+      - 最大回撤 (10%): 历史最大跌幅，公式放宽30%回撤仍可得74分
       - 上行胜率 (5%): 日收益率 > 0 的天数占比
-      - 机构持有比例 (5%): 机构资金认可度
-      - 基金规模 (5%): 1~50亿最理想
+      - 机构持有比例 (2%): 机构资金认可度
+      - 基金规模 (3%): 1~50亿最理想
       - 费率 (10%): 申购费越低越好
     """
     sub_scores = [
-        _score_rank(d), _score_sharpe(d), _score_sortino(d),
+        _score_y1(d), _score_rank(d), _score_sharpe(d), _score_sortino(d),
         _score_profit_ratio(d), _score_recovery(d), _score_sy3(d),
         _score_max_dd(d), _score_win_rate(d), _score_institutional(d),
         _score_scale(d), _score_rate(d),
@@ -1018,29 +1033,32 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
     lines.append("     拉取全市场近 1 年收益排行前 200 名（不限类型），")
     lines.append("     再剔除近 1 年收益为负的基金，其余全部进入深度评分。")
     lines.append("     每只基金独立拉取净值数据，从净值数组真实计算各项指标。")
-    lines.append("  🧮 评分方式：11 个维度加权打分（0-100 分），权重合计 100%")
+    lines.append("  🧮 评分方式：12 个维度加权打分（0-100 分），权重合计 100%")
     lines.append("")
-    lines.append("  1️⃣  年化收益率（权重 10%）")
-    lines.append("      → 基金成立以来年化回报，按梯度打分（年化≥50%得100分，≥30%得80+分...）")
-    lines.append("  2️⃣  夏普比率（权重 15%）")
-    lines.append("      → 每承受 1 份波动能换来多少超额收益，越高说明性价比越好")
-    lines.append("  3️⃣  索提诺比率（权重 10%）")
-    lines.append("      → 跟夏普类似但只考虑下跌波动，更贴近真实风险感受")
-    lines.append("  4️⃣  最大回撤（权重 10%）")
-    lines.append("      → 历史最大跌幅，公式：max(0, min(90, 110 - 回撤×2))，回撤越小分越高")
-    lines.append("  5️⃣  上行胜率（权重 5%）")
+    lines.append("  1️⃣  近1年收益 ⭐（权重 10%，新增）")
+    lines.append("      → 最近一年的表现，反映基金近期赚钱能力")
+    lines.append("  2️⃣  年化收益率（权重 10%）")
+    lines.append("      → 基金成立以来年化回报，按梯度打分（年化≥50%得100分...）")
+    lines.append("  3️⃣  夏普比率（权重 15%）")
+    lines.append("      → 每承受 1 份波动能换来多少超额收益，越高性价比越好")
+    lines.append("  4️⃣  索提诺比率（权重 10%）")
+    lines.append("      → 只考虑下跌波动，更贴近真实风险感受")
+    lines.append("  5️⃣  最大回撤（权重 10%，公式放宽）")
+    lines.append("      → 得分 = max(0, min(90, 110 - 回撤×1.2))")
+    lines.append("         30%回撤得74分，50%回撤得50分，不再轻易归零")
+    lines.append("  6️⃣  上行胜率（权重 5%）")
     lines.append("      → 赚钱天数占总交易天数的比例")
-    lines.append("  6️⃣  盈亏比（权重 5%）")
-    lines.append("      → 平均盈利 ÷ 平均亏损，> 1 说明赚的时候比亏的时候多")
-    lines.append("  7️⃣  修复系数（权重 10%）")
-    lines.append("      → 总收益 ÷ 最大回撤，衡量跌下去能不能快速涨回来")
-    lines.append("  8️⃣  近3年收益 ⭐（权重 20%，最高）")
-    lines.append("      → 从净值数据取约 750 个交易日精确计算，权重最大，看基金能否穿越牛熊")
-    lines.append("  9️⃣  机构持有比例（权重 5%）")
-    lines.append("      → 专业机构认可度，公式：inst×1.5+20，机构持有多的通常更稳")
-    lines.append("  🔟  基金规模（权重 5%）")
-    lines.append("      → 1~50 亿最理想得 90 分，太小不灵活、太大难操作")
-    lines.append("  1️⃣1️⃣ 费率（权重 10%）")
+    lines.append("  7️⃣  盈亏比（权重 5%）")
+    lines.append("      → 平均盈利 ÷ 平均亏损，> 1 说明赚比亏多")
+    lines.append("  8️⃣  修复系数（权重 10%）")
+    lines.append("      → 总收益 ÷ 最大回撤，衡量跌下去能不能涨回来")
+    lines.append("  9️⃣  近3年收益（权重 15%）")
+    lines.append("      → 约 750 个交易日净值精确计算，看穿越牛熊能力")
+    lines.append("  🔟  机构持有比例（权重 2%）")
+    lines.append("      → 专业机构认可度，小幅参考")
+    lines.append("  1️⃣1️⃣ 基金规模（权重 3%）")
+    lines.append("      → 1~50 亿最理想，太小不灵活、太大难操作")
+    lines.append("  1️⃣2️⃣ 费率（权重 10%）")
     lines.append("      → 申购费越低越好，公式：max(20, 100 - 费率×40)")
 
     return lines
