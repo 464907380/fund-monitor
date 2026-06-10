@@ -251,6 +251,10 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         header_done = False
         for line in compare_lines:
             clean = line.strip()
+            # 跳过函数自带的标题（HTML 已有）
+            if clean.startswith("🏆"):
+                continue
+            # 空行 — 结束表格（如果有的话）
             if not clean:
                 if in_table:
                     cp += '</tbody></table>'
@@ -278,7 +282,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
                         cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #eee;color:#444;white-space:nowrap;">{c.strip()}</td>'
                     cp += '</tr>'
                 continue
-            # 非表行
+            # 非表行（评分说明、提示等）
             if not in_table:
                 cp += f'<p style="margin:2px 0;font-size:12px;color:#666;">{clean}</p>'
         if in_table:
@@ -1009,7 +1013,10 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         lines.append(f"|{badge:<4}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
     lines.append("")
-    lines.append(f"💡 加入监控: python fund_recommend.py --add 基金代码")
+    lines.append("  📊 评分维度: 年化10% | 夏普15% | 索提诺10% | 回撤10% |")
+    lines.append("            胜率5% | 盈亏比5% | 修复10% | 近3年20% |")
+    lines.append("            机构5% | 规模5% | 费率5%")
+    lines.append("  💡 加入监控: python fund_recommend.py --add 基金代码")
 
     return lines
 
