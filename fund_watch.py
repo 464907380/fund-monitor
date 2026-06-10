@@ -237,25 +237,24 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     # 持仓 vs 推荐对比
     compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
-        compare_html = '<div style="margin-top:12px;background:#fffbe6;border:1px solid #e6c300;border-radius:8px;padding:12px;">'
-        compare_html += '<div style="font-weight:bold;font-size:14px;margin-bottom:6px;">⚔️ 持仓 vs 市场优选</div>'
+        compare_html = '<div class="compare"><div class="compare-content">'
+        compare_html += '<div class="compare-title">⚔️ 持仓 vs 市场优选</div>'
         for line in compare_lines:
             clean = line.strip()
             if not clean:
                 continue
-            # 简单 markdown→html 转换
             clean = clean.replace("**", "")
-            compare_html += f'<div style="font-size:13px;margin:2px 0;">{clean}</div>'
-        compare_html += '</div>'
+            compare_html += f'<div class="compare-item">{clean}</div>'
+        compare_html += '</div></div>'
         extra_parts.append(compare_html)
 
     # 警报
     if alerts:
-        al = '<div style="margin-top:12px;background:#fff5f5;border:1px solid #fcc;border-radius:8px;padding:12px;">'
-        al += '<div style="font-weight:bold;font-size:14px;margin-bottom:8px;color:#c62828;">🚨 警报</div>'
+        al = '<div class="alerts"><div class="alerts-content">'
+        al += '<div class="alerts-title">🚨 警报</div>'
         for a in alerts:
-            al += f'<div style="font-size:13px;margin:4px 0;padding:4px 0;border-bottom:1px solid #fee;">{_strip_html(a)}</div>'
-        al += '</div>'
+            al += f'<div class="alerts-item">{_strip_html(a)}</div>'
+        al += '</div></div>'
         extra_parts.append(al)
 
     html = html.replace("{{ALERTS}}", "\n".join(extra_parts) if extra_parts else "")

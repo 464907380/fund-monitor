@@ -4,42 +4,99 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
-  /* 邮件客户端兼容：仅保留动态生成的 class 定义 */
-  td.num { text-align:right; font-weight:bold; font-family:Consolas,monospace; }
-  .red { color:#d32f2f; }
-  .green { color:#2e7d32; }
+  /* ── 基础重置 ── */
+  body { margin:0; padding:0; background:#f0f2f5; font-family:-apple-system,'PingFang SC','Microsoft YaHei','Helvetica Neue',Arial,sans-serif; font-size:14px; color:#1a1a2e; line-height:1.5; }
+
+  /* ── 容器 ── */
+  .wrapper { max-width:600px; margin:0 auto; padding:0; }
+
+  /* ── 头部 ── */
+  .header { background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460); padding:28px 24px 22px; text-align:center; }
+  .header h1 { margin:0; color:#fff; font-size:20px; font-weight:700; letter-spacing:0.5px; }
+  .header .date { display:block; color:#8899bb; font-size:12px; margin-top:4px; }
+
+  /* ── 卡片内容区 ── */
+  .card { background:#fff; margin:12px; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+
+  /* ── 表格 ── */
+  .data-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .data-table th { background:#f8f9fc; padding:10px 8px; font-size:11px; color:#666; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; border-bottom:2px solid #e8ecf2; }
+  .data-table th:first-child { padding-left:14px; }
+  .data-table th:last-child { padding-right:14px; }
+  .data-table td { padding:10px 8px; border-bottom:1px solid #f0f2f5; font-size:13px; }
+  .data-table td:first-child { padding-left:14px; font-family:Consolas,monospace; color:#666; font-size:11px; }
+  .data-table td:last-child { padding-right:14px; }
+  .data-table tr:last-child td { border-bottom:none; }
+  .data-table tr:active { background:#f8f9fc; }
+  td.num { text-align:right; font-weight:700; font-family:Consolas,monospace; font-size:13px; }
+  .red { color:#e53935; }
+  .green { color:#43a047; }
+
+  /* ── 警报区块 ── */
+  .alerts { margin:12px; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+  .alerts-content { background:#fff; padding:16px; }
+  .alerts-title { font-weight:700; font-size:15px; color:#c62828; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+  .alerts-item { font-size:13px; padding:8px 0; border-bottom:1px solid #fff0f0; color:#333; }
+  .alerts-item:last-child { border-bottom:none; }
+
+  /* ── 对比区块 ── */
+  .compare { margin:12px; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+  .compare-content { background:#fffbe6; padding:16px; }
+  .compare-title { font-weight:700; font-size:15px; color:#b8860b; margin-bottom:8px; }
+  .compare-item { font-size:13px; padding:4px 0; color:#555; }
+
+  /* ── 底部 ── */
+  .footer { text-align:center; padding:16px 12px 24px; font-size:11px; color:#999; }
+
+  /* ── 移动端适配 ── */
+  @media screen and (max-width:480px) {
+    .header { padding:20px 16px 18px; }
+    .header h1 { font-size:17px; }
+    .card, .alerts, .compare { margin:8px; border-radius:8px; }
+    .data-table { font-size:12px; }
+    .data-table th { padding:8px 4px; font-size:10px; }
+    .data-table td { padding:8px 4px; font-size:12px; }
+    .data-table td:first-child { padding-left:8px; font-size:10px; }
+    .data-table td:last-child { padding-right:8px; }
+    td.num { font-size:12px; }
+  }
 </style>
 </head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Microsoft YaHei','PingFang SC',Arial,sans-serif;font-size:13px;color:#333;">
-<div style="max-width:700px;margin:0 auto;padding:12px;">
+<body>
+<div class="wrapper">
 
-<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:18px 24px;border-radius:10px 10px 0 0;">
-  <h1 style="margin:0;color:#fff;font-size:18px;font-weight:bold;display:inline;">📊 基金晚报</h1>
-  <span style="color:#889;font-size:12px;margin-left:12px;">{{DATE}}</span>
+<!-- ── 头部 ── -->
+<div class="header">
+  <h1>📊 基金晚报</h1>
+  <span class="date">{{DATE}}</span>
 </div>
 
-<div style="background:#fff;padding:16px 12px;border-radius:0 0 10px 10px;">
-<table style="width:100%;border-collapse:collapse;font-size:13px;">
+<!-- ── 基金列表 ── -->
+<div class="card">
+<table class="data-table">
   <thead>
-  <tr style="background:#f5f5f5;">
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;text-align:left;white-space:nowrap;font-size:12px;color:#666;">代码</th>
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;text-align:left;white-space:nowrap;font-size:12px;color:#666;">基金名</th>
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;font-size:12px;color:#666;">涨跌</th>
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;font-size:12px;color:#666;">近5日</th>
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;font-size:12px;color:#666;">近1月</th>
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;font-size:12px;color:#666;">近3月</th>
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;font-size:12px;color:#666;">近1年</th>
-    <th style="padding:8px 6px;border-bottom:2px solid #ddd;text-align:left;white-space:nowrap;font-size:12px;color:#666;">经理</th>
+  <tr>
+    <th>代码</th>
+    <th>基金名</th>
+    <th class="num">涨跌</th>
+    <th class="num">近5日</th>
+    <th class="num">近1月</th>
+    <th class="num">近3月</th>
+    <th class="num">近1年</th>
+    <th>经理</th>
   </tr>
 </thead>
 <tbody>
 {{ROWS}}
 </tbody>
 </table>
-{{ALERTS}}
 </div>
 
-<div style="padding:10px 20px;font-size:11px;color:#999;text-align:center;border-top:1px solid #eee;margin-top:8px;">Fund Monitor &middot; 数据来源：天天基金</div>
+<!-- ── 警报 ── -->
+{{ALERTS}}
+
+<!-- ── 底部 ── -->
+<div class="footer">Fund Monitor · 数据来源：天天基金</div>
 </div>
 </body>
 </html>
