@@ -2,13 +2,10 @@
 基金风险监控 v5.2 — 每日晚报 + 企业微信推送
 """
 import json
-import logging
 import os
 import re
 import datetime
-import time
-import urllib.error
-import urllib.request
+import math
 import csv
 import html as _html
 from typing import Callable
@@ -16,8 +13,8 @@ from email.header import Header
 from email.mime.text import MIMEText
 from config import CFG
 from config import get_secret as _get_secret
-from fund_utils import fetch, clear_cache, fetch_bytes, log, HISTORY_DIR, \
-    _color_cls, _color_inline, _strip_html, _send_smtp, send_wechat, send_mail
+from fund_utils import fetch, log, HISTORY_DIR, \
+    _color_inline, _strip_html, _send_smtp, send_wechat
 
 # ── 基金列表 ──────────────────────────────────
 _FUND_LIST_FALLBACK = [
@@ -61,6 +58,49 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 # ── 推送 ──────────────────────────────────────
 
+def _pipe_table_to_html(compare_lines: list[str]) -> str:
+    """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
+    cp = '<tr><td style="padding:12px 14px;background:#f0f8ff;border:1px solid #bcd;border-radius:6px;">'
+    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#1a1a2e;">🏆 市场优选基金 TOP 10 （11 维评分）</p>'
+    in_table = False
+    header_done = False
+    for line in compare_lines:
+        clean = line.strip()
+        if clean.startswith("🏆"):
+            continue
+        if not clean:
+            if in_table:
+                cp += '</tbody></table>'
+                in_table = False
+            cp += '<br>'
+            continue
+        if clean.startswith("|:---"):
+            continue
+        if clean.startswith("|"):
+            if not in_table:
+                in_table = True
+                header_done = False
+                cp += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
+            if not header_done:
+                cp += '<thead><tr>'
+                for c in clean.strip("|").split("|"):
+                    cp += f'<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #ccc;color:#555;white-space:nowrap;">{c.strip()}</th>'
+                cp += '</tr></thead><tbody>'
+                header_done = True
+            else:
+                cp += '<tr>'
+                for c in clean.strip("|").split("|"):
+                    cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #eee;color:#444;white-space:nowrap;">{c.strip()}</td>'
+                cp += '</tr>'
+            continue
+        if not in_table:
+            cp += f'<p style="margin:2px 0;font-size:12px;color:#666;">{clean}</p>'
+    if in_table:
+        cp += '</tbody></table>'
+    cp += '</td></tr>'
+    return cp
+
+
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
     """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
     if not QQ_EMAIL or not QQ_AUTH_CODE:
@@ -97,52 +137,10 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     # 警报区块
     extra_parts = []
 
-    # 持仓对比
+    # 持仓对比（将管道表转为 HTML）
     compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
-        cp = '<tr><td style="padding:12px 14px;background:#f0f8ff;border:1px solid #bcd;border-radius:6px;">'
-        cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#1a1a2e;">🏆 市场优选基金 TOP 10 （11 维评分）</p>'
-        in_table = False
-        header_done = False
-        for line in compare_lines:
-            clean = line.strip()
-            # 跳过函数自带的标题（HTML 已有）
-            if clean.startswith("🏆"):
-                continue
-            # 空行 — 结束表格（如果有的话）
-            if not clean:
-                if in_table:
-                    cp += '</tbody></table>'
-                    in_table = False
-                cp += '<br>'
-                continue
-            # 管道表分隔行 (|:---|:---|...)
-            if clean.startswith("|:---"):
-                continue
-            # 管道表行
-            if clean.startswith("|"):
-                if not in_table:
-                    in_table = True
-                    header_done = False
-                    cp += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
-                if not header_done:
-                    cp += '<thead><tr>'
-                    for c in clean.strip("|").split("|"):
-                        cp += f'<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #ccc;color:#555;white-space:nowrap;">{c.strip()}</th>'
-                    cp += '</tr></thead><tbody>'
-                    header_done = True
-                else:
-                    cp += '<tr>'
-                    for c in clean.strip("|").split("|"):
-                        cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #eee;color:#444;white-space:nowrap;">{c.strip()}</td>'
-                    cp += '</tr>'
-                continue
-            # 非表行（评分说明、提示等）
-            if not in_table:
-                cp += f'<p style="margin:2px 0;font-size:12px;color:#666;">{clean}</p>'
-        if in_table:
-            cp += '</tbody></table>'
-        cp += '</td></tr>'
+        cp = _pipe_table_to_html(compare_lines)
         extra_parts.append(cp)
 
     # 警报
@@ -287,8 +285,7 @@ def _parse_full_nav(data: str) -> list[dict] | None:
                 end = i
                 break
     try:
-        import json as _json
-        full = _json.loads(data[as_:end + 1])
+        full = json.loads(data[as_:end + 1])
         return [{"d": datetime.datetime.fromtimestamp(int(n["x"]) // 1000).strftime("%Y-%m-%d"),
                  "v": float(n["y"]), "ts": int(n["x"])} for n in full]
     except (ValueError, KeyError, TypeError, IndexError):
@@ -521,42 +518,13 @@ def _calc_score(d: dict) -> float:
     return round(min(100, total / total_weight), 1)
 
 
-def _calc_nav_metrics(full_nav: list[dict]) -> dict:
-    """
-    从完整净值列表计算风险指标。
+def _calc_daily_returns(prices: list[float]) -> list[float]:
+    """计算日收益率（小数形式）"""
+    return [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, len(prices))]
 
-    返回:
-      annual_return: 年化收益率(%)
-      volatility: 年化波动率(%)
-      max_dd: 最大回撤(%)
-      calmar: 卡玛比率
-      sharpe: 夏普比率
-      sortino: 索提诺比率
-      win_rate: 上行胜率(%)
-      profit_ratio: 盈亏比 — 平均盈利 / 平均亏损
-      recovery: 修复系数 — 总收益 / 最大回撤
-      max_loss_days: 最长连续下跌天数
-    """
-    if not full_nav or len(full_nav) < 30:
-        return {}
-    prices = [n["v"] for n in full_nav]
-    days = len(prices)
 
-    # 日收益率（小数形式，非百分比）
-    daily_r = [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, days)]
-    n = len(daily_r)
-
-    # 年化收益率
-    total_return = (prices[-1] - prices[0]) / prices[0]
-    annual_return = ((1 + total_return) ** (250 / days) - 1) * 100
-
-    # 年化波动率
-    mean_r = sum(daily_r) / n
-    variance = sum((r - mean_r) ** 2 for r in daily_r) / n
-    import math
-    volatility = math.sqrt(variance * 250) * 100
-
-    # 最大回撤
+def _calc_max_drawdown(prices: list[float]) -> float:
+    """计算最大回撤（%）"""
     peak = prices[0]
     max_dd = 0.0
     for p in prices:
@@ -565,19 +533,48 @@ def _calc_nav_metrics(full_nav: list[dict]) -> dict:
         dd = (peak - p) / peak * 100
         if dd > max_dd:
             max_dd = dd
+    return max_dd
 
-    # 卡玛比率
-    calmar = annual_return / max_dd if max_dd > 0 else 0
 
-    # 下行波动率（只算负收益）
+def _calc_downside_deviation(daily_r: list[float], mean_r: float, n: int) -> float:
+    """计算下行波动率"""
     neg_r = [r for r in daily_r if r < 0]
     if len(neg_r) > 1:
         down_var = sum((r - mean_r) ** 2 for r in neg_r) / len(neg_r)
-        down_dev = math.sqrt(down_var * 250) * 100
-    else:
-        down_dev = volatility  # fallback
+        return float(math.sqrt(down_var * 250) * 100)
+    return 0.0
 
-    # 夏普比率 & 索提诺比率（无风险利率 2.5%）
+
+def _calc_nav_metrics(full_nav: list[dict]) -> dict:
+    """
+    从完整净值列表计算风险指标。
+    拆分为多个小函数以降低圈复杂度。
+    """
+    if not full_nav or len(full_nav) < 30:
+        return {}
+    prices = [n["v"] for n in full_nav]
+    days = len(prices)
+
+    daily_r = _calc_daily_returns(prices)
+    n = len(daily_r)
+    total_return = (prices[-1] - prices[0]) / prices[0]
+    annual_return = ((1 + total_return) ** (250 / days) - 1) * 100
+
+    # 波动率
+    mean_r = sum(daily_r) / n
+    variance = sum((r - mean_r) ** 2 for r in daily_r) / n
+    volatility = math.sqrt(variance * 250) * 100
+
+    # 最大回撤
+    max_dd = _calc_max_drawdown(prices)
+    calmar = annual_return / max_dd if max_dd > 0 else 0
+
+    # 下行波动率
+    down_dev = _calc_downside_deviation(daily_r, mean_r, n)
+    if down_dev == 0:
+        down_dev = volatility
+
+    # 夏普比率 & 索提诺比率
     rf = 2.5
     sharpe = (annual_return - rf) / volatility if volatility > 0 else 0
     sortino = (annual_return - rf) / down_dev if down_dev > 0 else 0
@@ -590,7 +587,7 @@ def _calc_nav_metrics(full_nav: list[dict]) -> dict:
     avg_loss = abs(sum(r for r in daily_r if r < 0) / max(sum(1 for r in daily_r if r < 0), 1))
     profit_ratio = avg_win / avg_loss if avg_loss > 0 else 0
 
-    # 修复系数 = 总收益 / 最大回撤
+    # 修复系数
     total_return_pct = total_return * 100
     recovery = abs(total_return_pct / max_dd) if max_dd > 0 else 0
 
@@ -851,7 +848,7 @@ def _load_recommend_results() -> list[dict] | None:
     return data.get("results", [])  # type: ignore[no-any-return]
 
 
-def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
+def _compare_with_recommendations(_held_rows: list[dict]) -> list[str]:
     """
     展示市场优选基金排行（来自上次推荐结果）。
     """
@@ -876,7 +873,7 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
                     lines.append("")
                     lines.append(f"⚠️ 推荐结果已是 {days_old} 天前的，建议重新运行")
                     lines.append(f"   python fund_recommend.py")
-        except Exception:
+        except (ValueError, KeyError, TypeError):
             pass
 
     lines.append("")

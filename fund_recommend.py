@@ -170,8 +170,51 @@ def main() -> None:
     rows = _fetch_rank_list(_TOP)
     print(f"   获取到 {len(rows)} 只基金")
 
+    candidates = _filter_candidates(rows)
+    print(f"   剔除负收益后: {len(candidates)} 只全部进入深度评分")
+    print(f"   ⏱ 预计耗时约 {est_min} 分钟\n")
+
+    scored = _run_scoring_pipeline(candidates)
+
+    # ── 保存并输出 ──
+    _save_result(scored)
+    print(f"\n🏆 基金推荐 TOP {SHOW_TOP}  (12 维评分)")
+    print("=" * 90)
+
+    medals = ["🥇", "🥈", "🥉"]
+    for i, item in enumerate(scored[:SHOW_TOP], 1):
+        badge = medals[i - 1] if i <= 3 else f" {i}."
+        print(f"{badge} {item[2]} ({item[1]}) — {item[0]:.1f}分  年化{item[3]:.1f}%")
+
+    # 详细对比表 — 12 维评分全透明
+    print()
+    parts = [f"{name} {int(w*100)}%" for name, _, w, _ in SCORE_DIMS]
+    print("  评分维度说明: " + " | ".join(parts))
+    print()
+    h = (f"{'排名':<4} {'代码':<7} {'评分':<6} {'年化%':<7} {'近1月':<8} {'近3月':<8} {'近1年':<8} "
+         f"{'夏普':<6} {'索提诺':<6} {'回撤':<6}")
+    print(h)
+    print("-" * 72)
+    medals2 = ["🥇", "🥈", "🥉"]
+    for i, item in enumerate(scored[:SHOW_TOP], 1):
+        b = medals2[i-1] if i <= 3 else f" {i}."
+        print(f"{b:<4} {item[1]:<7} {item[0]:<6.1f} {item[3]:<7.1f} "
+              f"{item[4]:<8s} {item[5]:<8s} {item[6]:<8s} "
+              f"{item[7]:<6.2f} {item[8]:<6.2f} {item[9]:<6.1f}")
+
+    print()
+    print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
+    print("   查看上次结果: python fund_recommend.py --load")
+
+
+if __name__ == "__main__":
+    main()
+
+
+def _filter_candidates(rows: list) -> list:
+    """剔除近1年收益为负的基金"""
     candidates = []
-    for r in rows:  # type: ignore[assignment]
+    for r in rows:
         try:
             y1 = float(r[11]) if len(r) > 11 and r[11] else 0
             if y1 <= 0:
@@ -179,11 +222,11 @@ def main() -> None:
             candidates.append(r)
         except (ValueError, IndexError):
             continue
+    return candidates
 
-    print(f"   剔除负收益后: {len(candidates)} 只全部进入深度评分")
-    print(f"   ⏱ 预计耗时约 {est_min} 分钟\n")
 
-    # ── 并行拉取数据，12 维评分 ──
+def _run_scoring_pipeline(candidates: list) -> list[tuple]:
+    """并行评分管道，返回已排序的评分结果列表"""
     scored: list[tuple] = []
     futures = {}
 
@@ -224,41 +267,4 @@ def main() -> None:
                 print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {'跳过':<8}")
 
     scored.sort(key=lambda x: x[0], reverse=True)
-
-    # ── 保存结果 ──
-    _save_result(scored)
-
-    # ── 输出推荐 ──
-    print()
-    print("=" * 90)
-    print(f"🏆 基金推荐 TOP {SHOW_TOP}  (12 维评分)")
-    print("=" * 90)
-
-    medals = ["🥇", "🥈", "🥉"]
-    for i, item in enumerate(scored[:SHOW_TOP], 1):
-        badge = medals[i - 1] if i <= 3 else f" {i}."
-        print(f"{badge} {item[2]} ({item[1]}) — {item[0]:.1f}分  年化{item[3]:.1f}%")
-
-    # 详细对比表 — 11 维评分全透明
-    print()
-    parts = [f"{name} {int(w*100)}%" for name, _, w, _ in SCORE_DIMS]
-    print("  评分维度说明: " + " | ".join(parts))
-    print()
-    h = (f"{'排名':<4} {'代码':<7} {'评分':<6} {'年化%':<7} {'近1月':<8} {'近3月':<8} {'近1年':<8} "
-         f"{'夏普':<6} {'索提诺':<6} {'回撤':<6}")
-    print(h)
-    print("-" * 72)
-    medals2 = ["🥇", "🥈", "🥉"]
-    for i, item in enumerate(scored[:SHOW_TOP], 1):
-        b = medals2[i-1] if i <= 3 else f" {i}."
-        print(f"{b:<4} {item[1]:<7} {item[0]:<6.1f} {item[3]:<7.1f} "
-              f"{item[4]:<8s} {item[5]:<8s} {item[6]:<8s} "
-              f"{item[7]:<6.2f} {item[8]:<6.2f} {item[9]:<6.1f}")
-
-    print()
-    print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
-    print("   查看上次结果: python fund_recommend.py --load")
-
-
-if __name__ == "__main__":
-    main()
+    return scored
