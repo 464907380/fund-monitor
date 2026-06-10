@@ -9,7 +9,7 @@ import json
 import re
 import datetime
 import os
-from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail
+from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail, parse_sina_csv
 from config import get_secret as _get_secret
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
@@ -48,12 +48,8 @@ def fetch_sina(code: str) -> dict | None:
     if data is None:
         return None
     try:
-        text = data.decode("gbk")
-        m = re.search(r'"(.*?)"', text)
-        if not m:
-            return None
-        parts = m.group(1).split(",")
-        if len(parts) < 6:
+        parts = parse_sina_csv(data, encoding="gbk")
+        if parts is None or len(parts) < 6:
             return None
         name = parts[0]
         prev_close = float(parts[2]) if parts[2] else 0

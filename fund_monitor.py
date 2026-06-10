@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG
-from fund_utils import fetch, log, clear_cache, send_wechat, send_mail
+from fund_utils import fetch, log, clear_cache, send_wechat, send_mail, parse_sina_csv
 from fund_watch import FUND_LIST, _parse_holdings, WECHAT_WEBHOOK, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
@@ -66,8 +66,8 @@ def _load_holiday_cache() -> dict:
         try:
             with open(_HOLIDAY_CACHE_FILE, encoding="utf-8") as f:
                 return json.load(f)  # type: ignore[no-any-return]
-        except Exception:
-            pass  # 缓存文件损坏或格式不对，重新获取
+        except (json.JSONDecodeError, OSError):
+            log.debug("节假日缓存读取失败，重新获取")
     return {}
 
 
@@ -253,11 +253,8 @@ def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
     url = f"https://hq.sinajs.cn/list={sina_code}"
     try:
         data = fetch(url)
-        m = re.search(r'"(.*?)"', data)
-        if not m:
-            return None
-        parts = m.group(1).split(",")
-        if len(parts) < 4:
+        parts = parse_sina_csv(data)
+        if parts is None:
             return None
         name = parts[0]
         prev_close = float(parts[2]) if parts[2] else 0
@@ -389,12 +386,10 @@ def check_intraday(code: str, state: dict) -> list[str]:
     """
     alerts: list[str] = []
 
-    # 不缓存实时数据（每次都最新）
-    clear_cache()
 
     try:
         gz = fetch(f"https://fundgz.1234567.com.cn/js/{code}.js")
-        m = re.search(r'"fundcode":"([^"]+)","name":"([^"]*)","gszzl":"([-\d.]+)"', gz)
+        m = re.search(r'"fundcode":"([^"]+)","name":"([^"]*)","gszzl":"([-+\d.]+)"', gz)
         if not m:
             return []
 

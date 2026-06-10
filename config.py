@@ -131,6 +131,8 @@ def load_config() -> dict:
         with open(_CONFIG_PATH, encoding="utf-8") as f:
             user_cfg = json.load(f)
     except (json.JSONDecodeError, OSError):
+        import logging
+        logging.warning("⚠️ config.json 损坏或无法读取，使用默认配置（部分阈值可能不符合预期）")
         return _DEFAULTS.copy()
     return _deep_merge(_DEFAULTS, user_cfg)
 

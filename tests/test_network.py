@@ -92,7 +92,7 @@ class TestFetchBytes(unittest.TestCase):
         ]
         from fund_utils import _RETRY_MAX
         result = fetch_bytes("https://example.com/dead")
-        self.assertIsNone(result)
+        self.assertIsNone(result, "所有重试耗尽应返回 None")
         self.assertEqual(mock_urlopen.call_count, _RETRY_MAX)
 
     @patch("fund_utils.urllib.request.urlopen")

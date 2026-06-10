@@ -53,22 +53,30 @@ def _cache_evict() -> None:
     log.debug("缓存清理: 过期 %d, 当前 %d 条", len(expired), len(_cache))
 
 
-def _retry_fetch(url: str) -> str:
-    """带指数退避的 HTTP GET 请求"""
-    _cache_evict()
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+def _request_with_retry(req: urllib.request.Request, decode: bool = True) -> str | bytes | None:
+    """带指数退避的 HTTP 请求，返回 str（decode=True）或 bytes（decode=False），失败返回 None"""
     last_err = None
     for attempt in range(1, _RETRY_MAX + 1):
         try:
-            resp = urllib.request.urlopen(req, timeout=15).read().decode("utf-8", errors="ignore")
+            resp = urllib.request.urlopen(req, timeout=15).read()
+            if decode:
+                return resp.decode("utf-8", errors="ignore")  # type: ignore[no-any-return]
             return resp  # type: ignore[no-any-return]
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             last_err = e
             if attempt < _RETRY_MAX:
                 wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
                 time.sleep(wait)
-    log.warning("请求失败 %s (已重试 %d 次) %s", url, _RETRY_MAX, last_err)
-    return ""
+    log.warning("请求失败 %s (已重试 %d 次) %s", req.full_url, _RETRY_MAX, last_err)
+    return None
+
+
+def _retry_fetch(url: str) -> str:
+    """带指数退避的 HTTP GET 请求"""
+    _cache_evict()
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    result = _request_with_retry(req, decode=True)
+    return result if isinstance(result, str) else ""
 
 
 def fetch(url: str) -> str:
@@ -93,15 +101,21 @@ def fetch_bytes(url: str, headers: dict | None = None) -> bytes | None:
     """带指数退避的 HTTP GET，返回原始 bytes（不缓存，供新浪等非标准编码使用）"""
     _cache_evict()
     req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
-    for attempt in range(1, _RETRY_MAX + 1):
-        try:
-            return urllib.request.urlopen(req, timeout=15).read()  # type: ignore[no-any-return]
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
-            if attempt < _RETRY_MAX:
-                wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
-                time.sleep(wait)
-    log.warning("请求失败 %s (已重试 %d 次)", url, _RETRY_MAX)
-    return None
+    result = _request_with_retry(req, decode=False)
+    return result if isinstance(result, bytes) else None
+
+
+def parse_sina_csv(data: str | bytes, encoding: str = "utf-8") -> list[str] | None:
+    """解析新浪财经 CSV 数据，返回字段列表"""
+    if isinstance(data, bytes):
+        text = data.decode(encoding, errors="ignore")
+    else:
+        text = data
+    m = re.search(r'"(.*?)"', text)
+    if not m:
+        return None
+    parts = m.group(1).split(",")
+    return parts if len(parts) >= 4 else None
 
 
 # ── 颜色与文本工具 ────────────────────────────

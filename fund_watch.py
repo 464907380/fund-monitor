@@ -284,7 +284,7 @@ def _parse_full_nav(data: str) -> list[dict] | None:
         full = _json.loads(data[as_:end + 1])
         return [{"d": datetime.datetime.fromtimestamp(int(n["x"]) // 1000).strftime("%Y-%m-%d"),
                  "v": float(n["y"]), "ts": int(n["x"])} for n in full]
-    except Exception:
+    except (ValueError, KeyError, TypeError, IndexError):
         return None
 
 
@@ -674,8 +674,8 @@ def load_hist(code: str) -> dict:
         try:
             with open(p, encoding="utf-8") as f:
                 return json.load(f)  # type: ignore[no-any-return]
-        except Exception as e:
-            log.warning("读取历史文件失败 %s: %s", code, e)
+        except (json.JSONDecodeError, OSError) as _e:
+            log.warning("读取历史文件失败 %s: %s", code, _e)
     return {}
 
 
