@@ -22,7 +22,7 @@ check_untyped_defs = true
 
 # 允许 import 但不安装的包
 [[tool.mypy.overrides]]
-module = ["smtplib", "email.*"]
+module = ["smtplib", "email.*", "mjml"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

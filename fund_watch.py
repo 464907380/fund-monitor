@@ -213,61 +213,92 @@ def send_mail(subject: str, text: str) -> None:
 
 
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
-    """通过 QQ 邮箱发送邮件（HTML 模板渲染）"""
+    """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
     if not QQ_EMAIL or not QQ_AUTH_CODE:
         log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
+    tpl_path = os.path.join(HISTORY_DIR, "email_template.mjml")
+    if not os.path.exists(tpl_path):
+        log.warning("email_template.mjml 不存在，试试 email_template.html")
+        _send_mail_html_fallback(subject, rows, alerts, today)
+        return
+    with open(tpl_path, encoding="utf-8") as f:
+        mjml = f.read()
+    mjml = mjml.replace("{{DATE}}", today)
+
+    # 表格行
+    row_mjml = []
+    for r in rows:
+        row_mjml.append("<tr>")
+        row_mjml.append(f'<td style="padding:8px 4px;font-family:Consolas;font-size:11px;color:#888;width:15%;">{r["code"]}</td>')
+        row_mjml.append(f'<td style="padding:8px 4px;font-size:13px;width:30%;">{r["name_short"]}</td>')
+        row_mjml.append(f'<td style="padding:8px 4px;text-align:right;font-weight:600;width:13%;{_color_inline(r["day"])}">{r["day"]}</td>')
+        row_mjml.append(f'<td style="padding:8px 4px;text-align:right;font-weight:600;width:14%;{_color_inline(r["m1"])}">{r["m1"]}</td>')
+        row_mjml.append(f'<td style="padding:8px 4px;text-align:right;font-weight:600;width:14%;{_color_inline(r["m3"])}">{r["m3"]}</td>')
+        row_mjml.append(f'<td style="padding:8px 4px;text-align:right;font-weight:600;width:14%;{_color_inline(r["y1"])}">{r["y1"]}</td>')
+        row_mjml.append("</tr>")
+    mjml = mjml.replace("{{ROWS}}", "\n".join(row_mjml))
+
+    # 持仓对比区块
+    compare_parts = []
+    compare_lines = _compare_with_recommendations(rows)
+    if compare_lines:
+        compare_parts.append('<mj-text font-size="14px" font-weight="700" color="#b8860b" padding="12px 0 4px">⚔️ 持仓 vs 市场优选</mj-text>')
+        for line in compare_lines:
+            clean = line.strip().replace("**", "")
+            if clean:
+                compare_parts.append(f'<mj-text font-size="13px" color="#666" padding="2px 0">{clean}</mj-text>')
+    mjml = mjml.replace("{{COMPARE}}", "\n".join(compare_parts))
+
+    # 警报区块
+    alert_parts = []
+    if alerts:
+        alert_parts.append('<mj-text font-size="14px" font-weight="700" color="#c62828" padding="12px 0 4px">🚨 警报</mj-text>')
+        for a in alerts:
+            alert_parts.append(f'<mj-text font-size="13px" color="#555" padding="2px 0">{_strip_html(a)}</mj-text>')
+    mjml = mjml.replace("{{ALERTS}}", "\n".join(alert_parts))
+
+    try:
+        from mjml import mjml_to_html
+    except ImportError:
+        log.warning("mjml 未安装，使用 fallback 模板")
+        _send_mail_html_fallback(subject, rows, alerts, today)
+        return
+
+    result = mjml_to_html(mjml)
+    html = result.html if hasattr(result, "html") else result[0]
+
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
+    msg["From"] = msg["To"] = QQ_EMAIL
+    _send_smtp(msg)
+    log.info("MJML 邮件已发送")
+
+
+def _send_mail_html_fallback(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
+    """备用：用旧的 HTML 模板发送"""
     tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
     if not os.path.exists(tpl_path):
-        log.warning("email_template.html 不存在，跳过邮件")
+        log.warning("email_template.html 也不存在，跳过邮件")
         return
     with open(tpl_path, encoding="utf-8") as f:
         html = f.read()
     html = html.replace("{{DATE}}", today)
 
-    # 表格行（匹配6列：代码/基金名/涨跌/近1月/近3月/近1年）
     row_htmls = []
     for r in rows:
         row_htmls.append(
-            f'<tr>'
-            f'<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;font-family:Consolas,monospace;font-size:11px;color:#888;">{r["code"]}</td>'
-            f'<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;font-size:13px;">{r["name_short"]}</td>'
-            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["day"])}">{r["day"]}</td>'
-            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["m1"])}">{r["m1"]}</td>'
-            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["m3"])}">{r["m3"]}</td>'
-            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["y1"])}">{r["y1"]}</td>'
-            f'</tr>'
+            "<tr>"
+            + '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;font-family:Consolas,monospace;font-size:11px;color:#888;">' + r["code"] + "</td>"
+            + '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;font-size:13px;">' + r["name_short"] + "</td>"
+            + '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:13px;' + _color_inline(r["day"]) + '">' + r["day"] + "</td>"
+            + '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:13px;' + _color_inline(r["m1"]) + '">' + r["m1"] + "</td>"
+            + '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:13px;' + _color_inline(r["m3"]) + '">' + r["m3"] + "</td>"
+            + '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:13px;' + _color_inline(r["y1"]) + '">' + r["y1"] + "</td>"
+            + "</tr>"
         )
     html = html.replace("{{ROWS}}", "\n".join(row_htmls))
-
-    # 构造警报区块
-    extra_parts = []
-
-    # 持仓 vs 推荐对比
-    compare_lines = _compare_with_recommendations(rows)
-    if compare_lines:
-        compare_html = '<tr><td style="background-color:#ffffff;border-radius:6px;padding:16px 20px;border:1px solid #e8c300;">'
-        compare_html += '<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#b8860b;">⚔️ 持仓 vs 市场优选</p>'
-        for line in compare_lines:
-            clean = line.strip()
-            if not clean:
-                continue
-            clean = clean.replace("**", "")
-            compare_html += f'<p style="margin:2px 0;font-size:13px;color:#666;">{clean}</p>'
-        compare_html += '</td></tr><tr><td style="height:12px;">&nbsp;</td></tr>'
-        extra_parts.append(compare_html)
-
-    # 警报
-    if alerts:
-        al = '<tr><td style="background-color:#ffffff;border-radius:6px;padding:16px 20px;border:1px solid #f0d0d0;">'
-        al += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#c62828;">🚨 警报</p>'
-        for a in alerts:
-            al += f'<p style="margin:4px 0;padding:6px 0;font-size:13px;color:#555;">{_strip_html(a)}</p>'
-        al += '</td></tr>'
-        extra_parts.append(al)
-
-    html = html.replace("{{ALERTS}}", "\n".join(extra_parts) if extra_parts else "")
-
+    html = html.replace("{{ALERTS}}", "")
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = QQ_EMAIL
