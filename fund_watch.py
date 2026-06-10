@@ -203,7 +203,7 @@ def send_mail(subject: str, text: str) -> None:
 
 
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
-    """通过 QQ 邮箱发送邮件（HTML 模板渲染，含评分排名）"""
+    """通过 QQ 邮箱发送邮件（HTML 模板渲染）"""
     if not QQ_EMAIL or not QQ_AUTH_CODE:
         log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
@@ -215,13 +215,9 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         html = f.read()
     html = html.replace("{{DATE}}", today)
 
-    # 按评分排序
-    rows_sorted = sorted(rows, key=lambda r: r.get("score", 0), reverse=True)
-
-    # 表格行（含评分列）
+    # 表格行
     row_htmls = []
-    for r in rows_sorted:
-        score_str = f"{r.get('score', 0):.1f}"
+    for r in rows:
         row_htmls.append(
             f'<tr>'
             f'<td>{r["code"]}</td>'
@@ -232,38 +228,15 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
             f'<td class="num"{_color_cls(r["m3"])}>{r["m3"]}</td>'
             f'<td class="num"{_color_cls(r["y1"])}>{r["y1"]}</td>'
             f'<td>{r["mgr"]}</td>'
-            f'<td class="num">{score_str}</td>'
             f'</tr>'
         )
     html = html.replace("{{ROWS}}", "\n".join(row_htmls))
 
-    # 构造排名 + 警报 HTML
+    # 构造警报 HTML
     extra_parts = []
 
-    # 评分排名榜
-    medals = ["🥇", "🥈", "🥉"]
-    rank_items = []
-    for i, r in enumerate(rows_sorted[:5], 1):
-        badge = medals[i - 1] if i <= 3 else f"{i}."
-        ann_ret = r.get("_annual_return", 0)
-        ar_str = f"年化{ann_ret:.1f}%" if isinstance(ann_ret, (int, float)) else ""
-        rank_items.append(
-            f'<div style="font-size:13px;margin:4px 0;padding:4px 0;'
-            f'border-bottom:1px solid #eee;">'
-            f'{badge} <b>{r["name_short"]}</b> — {r.get("score", 0):.1f}分 '
-            f'{ar_str} {r["y1"]}</div>'
-        )
-    if rank_items:
-        extra_parts.append(
-            '<div style="margin-top:16px;background:#f0f8ff;border:1px solid #bcd;'
-            'border-radius:8px;padding:12px;">'
-            '<div style="font-weight:bold;font-size:14px;margin-bottom:8px;">'
-            '🏆 基金综合评分排名</div>'
-            + "\n".join(rank_items) + '</div>'
-        )
-
     # 持仓 vs 推荐对比
-    compare_lines = _compare_with_recommendations(rows_sorted)
+    compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
         compare_html = '<div style="margin-top:12px;background:#fffbe6;border:1px solid #e6c300;border-radius:8px;padding:12px;">'
         compare_html += '<div style="font-weight:bold;font-size:14px;margin-bottom:6px;">⚔️ 持仓 vs 市场优选</div>'
@@ -301,34 +274,20 @@ def push(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
 
 
 def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
-    """构造 Markdown 内容（含评分排名，企业微信推送用）"""
+    """构造 Markdown 内容（企业微信推送用）"""
     md_lines = [
         f"📊 **基金晚报 {today}**",
         "",
-        "|代码|基金名|涨跌|近5日|近1月|近3月|近1年|经理|评分|",
-        "|:---|:---|---:|----:|----:|----:|----:|:---|:---|",
+        "|代码|基金名|涨跌|近5日|近1月|近3月|近1年|经理|",
+        "|:---|:---|---:|----:|----:|----:|----:|:---|",
     ]
-    rows_sorted = sorted(rows, key=lambda r: r.get("score", 0), reverse=True)
-    for r in rows_sorted:
-        score_str = f"{r.get('score', 0):.1f}"
+    for r in rows:
         md_lines.append(
-            f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r['mgr']}|{score_str}|"
+            f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r['mgr']}|"
         )
-    # 评分排名榜
-    medals = ["🥇", "🥈", "🥉"]
-    rank_lines = ["", "**🏆 基金综合评分排名**"]
-    for i, r in enumerate(rows_sorted[:5], 1):
-        badge = medals[i - 1] if i <= 3 else f"{i}."
-        ann_ret = r.get("_annual_return", 0)
-        if isinstance(ann_ret, (int, float)):
-            ar_str = f"年化{ann_ret:.1f}%"
-        else:
-            ar_str = ""
-        rank_lines.append(f"{badge} **{r['name_short']}** — {r.get('score', 0):.1f}分  {ar_str}  {r['y1']}")
-    md_lines.append("\n".join(rank_lines))
 
     # 持仓 vs 推荐对比
-    compare_lines = _compare_with_recommendations(rows_sorted)
+    compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
         md_lines.append("")
         md_lines.extend(compare_lines)
@@ -1133,58 +1092,22 @@ def main() -> None:
         except Exception as e:
             log.error("❌ %s: %s", f["code"], e)
 
-    # 第二遍：计算评分（全透明指标，不分类型）
-    for r in raw_rows:
-        d = {
-            "annual_return": r.get("_annual_return"),
-            "sharpe": r.get("_sharpe"),
-            "sortino": r.get("_sortino"),
-            "max_dd": r.get("_max_dd"),
-            "win_rate": r.get("_win_rate"),
-            "inst": r.get("_inst"),
-            "sc": r.get("_sc"),
-            "rate": r.get("_rate"),
-            "profit_ratio": r.get("_profit_ratio"),
-            "recovery": r.get("_recovery"),
-            "sy6": r.get("_sy6"),
-        }
-        r["score"] = _calc_score(d)
-
-    # 按综合评分排序
-    rows = sorted(raw_rows, key=lambda r: r.get("score", 0), reverse=True)
-
-    # 记录评分历史并标注趋势（必须在排序后，否则 rank 是遍历顺序而非评分顺序）
-    _record_scores(rows, today)
+    rows = raw_rows
 
     # 纯文本（终端用）
     lines = [
         f"📊 基金晚报 {today}",
         "",
-        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6} {'趋势':<4}",
-        "-" * 80,
+        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6}",
+        "-" * 68,
     ]
-    for i, r in enumerate(rows, 1):
-        score_str = f"{r.get('score', 0):.1f}"
-        trend = r.get("_trend", "")
-        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6} {trend:<4}")
+    for r in rows:
+        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6}")
     if all_alerts:
         lines.append("")
         lines.append("🚨 警报:")
         for a in all_alerts:  # type: ignore[assignment]
             lines.append(f"  {a}")
-
-    # 综合评分排名
-    if rows:
-        lines.append("")
-        lines.append("🏆 基金综合评分排名")
-        lines.append(f"{'排名':<4} {'基金名':<14} {'评分':<6} {'年化收益':<10} {'近1年':<8} {'经理':<6}")
-        lines.append("-" * 56)
-        medals = ["🥇", "🥈", "🥉"]
-        for i, r in enumerate(rows[:5], 1):
-            badge = medals[i - 1] if i <= 3 else f"{i:>2d}."
-            ann_ret = r.get("_annual_return", 0)
-            ar_str = f"{ann_ret:.1f}%" if isinstance(ann_ret, (int, float)) else ""
-            lines.append(f"{badge:<4} {r['name_short']:<14} {r.get('score', 0):<6.1f} {ar_str:<10} {r['y1']:<8} {r['mgr']:<6}")
 
     # 持仓 vs 推荐对比
     if rows:
