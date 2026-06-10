@@ -334,6 +334,18 @@ def _parse_price_info(data: str) -> int | None:
     return int(float(m.group(1))) if m else None
 
 
+def _calc_period_return(full_nav: list[dict], lookback_days: int) -> float | None:
+    """从净值数据计算指定区间收益(%)，lookback_days≈交易日数"""
+    if not full_nav or len(full_nav) < 2:
+        return None
+    prices: list[float] = [float(n["v"]) for n in full_nav]
+    if len(prices) < lookback_days:
+        return None  # 数据不够
+    start = prices[-lookback_days]
+    end = prices[-1]
+    return (end - start) / start * 100
+
+
 def _parse_manager(data: str) -> str | None:
     """提取基金经理"""
     m = re.search(r'Data_currentFundManager.*?"name":"([^"]+)"', data, re.DOTALL)
@@ -350,10 +362,9 @@ def _parse_institutional_ratio(data: str) -> float | None:
 
 
 def _parse_syl_6y(data: str) -> float | None:
-    """提取近6年收益率"""
+    """提取近6月收益率"""
     m = re.search(r'syl_6y="([-\d.]+)"', data)
     return float(m.group(1)) if m else None
-
 
 def _parse_net_trend(data: str) -> list[dict] | None:
     """提取净值趋势（最近6条，供日报表使用）"""
@@ -504,17 +515,17 @@ def _score_recovery(d: dict) -> tuple[float, float]:
     return (max(0, min(100, rec * 4 + 5)), 0.10)
 
 
-def _score_sy6(d: dict) -> tuple[float, float]:
-    """近6年收益评分 (权重20%)"""
-    sy6 = d.get("sy6")
-    if sy6 is None:
+def _score_sy3(d: dict) -> tuple[float, float]:
+    """近3年收益评分 (权重20%) — 从净值数据计算"""
+    sy3 = d.get("sy3")
+    if sy3 is None:
         return (0.0, 0.0)
-    if sy6 >= 100:   sy6_score = 100
-    elif sy6 >= 50:  sy6_score = 80 + (sy6 - 50) / 50 * 20
-    elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 20
-    elif sy6 >= 0:   sy6_score = 20 + sy6 / 20 * 40
-    else:            sy6_score = 0
-    return (sy6_score, 0.20)
+    if sy3 >= 100:   sy3_score = 100
+    elif sy3 >= 50:  sy3_score = 80 + (sy3 - 50) / 50 * 20
+    elif sy3 >= 20:  sy3_score = 60 + (sy3 - 20) / 30 * 20
+    elif sy3 >= 0:   sy3_score = 20 + sy3 / 20 * 40
+    else:            sy3_score = 0
+    return (sy3_score, 0.20)
 
 
 def _score_max_dd(d: dict) -> tuple[float, float]:
@@ -572,7 +583,7 @@ def _calc_score(d: dict) -> float:
       - 索提诺比率 (10%): 每单位下行波动的超额收益
       - 盈亏比 (5%): 平均盈利 / 平均亏损，赚比亏多才算好
       - 修复系数 (10%): 总收益 / 最大回撤，跌下去能涨回来
-      - 近6年收益 (20%): 穿越牛熊的长期表现
+      - 近3年收益 (20%): 长期表现，覆盖90%以上基金
       - 最大回撤 (10%): 历史最大跌幅
       - 上行胜率 (5%): 日收益率 > 0 的天数占比
       - 机构持有比例 (5%): 机构资金认可度
@@ -581,7 +592,7 @@ def _calc_score(d: dict) -> float:
     """
     sub_scores = [
         _score_rank(d), _score_sharpe(d), _score_sortino(d),
-        _score_profit_ratio(d), _score_recovery(d), _score_sy6(d),
+        _score_profit_ratio(d), _score_recovery(d), _score_sy3(d),
         _score_max_dd(d), _score_win_rate(d), _score_institutional(d),
         _score_scale(d), _score_rate(d),
     ]
@@ -732,6 +743,8 @@ def get(code: str) -> dict:
         d["full_nav"] = full_nav
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
+        # 从净值数据计算近3年收益
+        d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3个交易日
     if td := _parse_real_time(code):
         d["td"] = td
     if holds := _parse_holdings(code):
@@ -957,10 +970,10 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         sharpe = r.get("sharpe", 0)
         dd = r.get("max_dd", 0)
         wr = r.get("win_rate", 0)
-        sy6 = r.get("sy6", 0)
+        sy3 = r.get("sy3") or r.get("sy6", 0)
         lines.append(f"  {badge} {name}  —  评分{r.get('score',0):.0f}分  年化{ar:.1f}%")
         lines.append(f"     近1月{m1}  近3月{m3}  近1年{y1}")
-        lines.append(f"     夏普{sharpe:.2f}  回撤{dd:.1f}%  胜率{wr:.0f}%  近6年{sy6:.1f}%")
+        lines.append(f"     夏普{sharpe:.2f}  回撤{dd:.1f}%  胜率{wr:.0f}%  近3年{sy3:.1f}%")
 
     lines.append("")
     lines.append(f"💡 加入监控: python fund_recommend.py --add 基金代码")
