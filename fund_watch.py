@@ -931,7 +931,7 @@ def check(code: str) -> tuple[dict, list[str]]:
         alerts.append(f"🚩 <font color=\"warning\">{name}({code}) 经理: {h['m']}→{d['mgr']}</font>")
     h["m"] = d.get("mgr", "")
 
-    if h.get("s") is not None and d.get("sc") is not None:
+    if h.get("s") and d.get("sc") is not None:
         r = d["sc"] / h["s"]
         if r >= ALERT_SCALE_2X:
             alerts.append(f"🚩 <font color=\"warning\">{name}({code}) 规模翻倍 {h['s']:.1f}亿→{d['sc']:.1f}亿</font>")
@@ -1117,11 +1117,11 @@ def main() -> None:
         }
         r["score"] = _calc_score(d)
 
-    # 记录评分历史并标注趋势
-    _record_scores(raw_rows, today)
-
     # 按综合评分排序
     rows = sorted(raw_rows, key=lambda r: r.get("score", 0), reverse=True)
+
+    # 记录评分历史并标注趋势（必须在排序后，否则 rank 是遍历顺序而非评分顺序）
+    _record_scores(rows, today)
 
     # 纯文本（终端用）
     lines = [
