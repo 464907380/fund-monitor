@@ -99,7 +99,7 @@ def main() -> None:
 
     # 拉取详细评分数据
     top_candidates = candidates[:MAX_CANDIDATES]
-    scored: list[tuple[float, str, str, str]] = []  # (score, code, name, rank_pct)
+    scored: list[tuple] = []  # (score, code, name, rank_pct, sharpe, max_dd, win_rate, inst)
 
     print(f"{'进度':<6} {'代码':<7} {'基金名':<20} {'近1年':<8} {'评分':<6}")
     print("-" * 55)
@@ -113,7 +113,10 @@ def main() -> None:
             d = get(code)
             score = _calc_score(d)
             rp = _rank_percentile_str(d)
-            scored.append((score, code, name, rp))
+            scored.append((score, code, name, rp,
+                          d.get("sharpe", 0), d.get("sortino", 0),
+                          d.get("max_dd", 0), d.get("win_rate", 0),
+                          d.get("inst", 0), d.get("sc", 0), d.get("rate", 0)))
             print(f"{i}/{MAX_CANDIDATES:<3} {code:<7} {name[:18]:<20} {y1_display:<8} {score:<6.1f}")
         except Exception as e:
             log.debug("跳过 %s: %s", code, e)
@@ -122,15 +125,24 @@ def main() -> None:
     scored.sort(key=lambda x: x[0], reverse=True)
 
     # 输出推荐
-    print("\n" + "=" * 60)
+    print()
+    print("=" * 80)
     print(f"🏆 基金推荐 TOP {SHOW_TOP}")
-    print("=" * 60)
-    print(f"{'排名':<4} {'代码':<7} {'基金名':<20} {'评分':<6} {'同类排名':<12}")
-    print("-" * 55)
+    print("=" * 80)
     medals = ["🥇", "🥈", "🥉"]
-    for i, (score, code, name, rp) in enumerate(scored[:SHOW_TOP], 1):
+    for i, item in enumerate(scored[:SHOW_TOP], 1):
+        score, code, name, rp = item[0], item[1], item[2], item[3]
         badge = medals[i - 1] if i <= 3 else f" {i}."
-        print(f"{badge:<4} {code:<7} {name[:18]:<20} {score:<6.1f} {rp:<12}")
+        print(f"{badge} {name} ({code}) — {score:.1f}分 同类{rp}")
+
+    # 详细对比表
+    print()
+    print(f"{'排名':<4} {'代码':<7} {'评分':<6} {'夏普':<6} {'索提诺':<7} {'回撤':<6} {'胜率':<6} {'机构%':<6} {'规模':<7}")
+    print("-" * 54)
+    medals2 = ["🥇", "🥈", "🥉"]
+    for i, item in enumerate(scored[:SHOW_TOP], 1):
+        b = medals2[i-1] if i <= 3 else f" {i}."
+        print(f"{b:<4} {item[1]:<7} {item[0]:<6.1f} {item[4]:<6.2f} {item[5]:<7.2f} {item[6]:<6.1f} {item[7]:<6.1f} {item[8]:<6.1f} {item[9]:<7.1f}亿")
 
     print("\n💡 提示: 将感兴趣的基金代码加入 fund_list.json 即可开始监控")
 

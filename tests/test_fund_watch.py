@@ -427,6 +427,9 @@ def test_calc_nav_metrics():
     assert "volatility" in result
     assert "calmar" in result
     assert "annual_return" in result
+    assert "sharpe" in result
+    assert "sortino" in result
+    assert "win_rate" in result
     # 稳步上涨应该有正的年化收益
     assert result["annual_return"] > 0
 
@@ -441,32 +444,36 @@ def test_calc_nav_metrics():
 
 
 def test_calc_score_transparent():
-    """透明评分系统计算"""
+    """透明评分系统计算（8 维度）"""
     from fund_watch import _calc_score
 
     # 一只各项指标都比较优秀的基金
     d = {
         "rank": 10, "rank_total": 1000,       # top 1%
-        "calmar": 3.0,                          # 优秀
+        "sharpe": 2.5,                          # 优秀
+        "sortino": 3.5,                         # 优秀
         "max_dd": 15.0,                         # 回撤控制好
-        "volatility": 18.0,                     # 波动低
+        "win_rate": 55.0,                       # 胜率高
+        "inst": 40.0,                           # 机构认可
         "sc": 20.0,                             # 规模适中
         "rate": 0.0,                            # 0费率
     }
     score = _calc_score(d)
-    assert 80 <= score <= 100  # 应该高分
+    assert 70 <= score <= 100  # 应该高分
 
     # 一只各项指标都差的基金
     d2 = {
         "rank": 900, "rank_total": 1000,        # 垫底
-        "calmar": 0.1,                          # 很差
+        "sharpe": -0.1,                         # 负收益
+        "sortino": -0.1,
         "max_dd": 55.0,                         # 回撤巨大
-        "volatility": 60.0,                     # 波动巨大
-        "sc": 0.3,                              # 规模太小(清盘风险)
+        "win_rate": 35.0,                       # 胜率低
+        "inst": 0.5,                            # 机构不认可
+        "sc": 0.3,                              # 规模太小
         "rate": 1.5,                            # 费率高
     }
     score2 = _calc_score(d2)
-    assert 0 <= score2 <= 50  # 应该低分
+    assert 0 <= score2 <= 40  # 应该低分
 
     # 空数据返回 0
     assert _calc_score({}) == 0.0

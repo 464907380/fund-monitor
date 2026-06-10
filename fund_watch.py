@@ -454,22 +454,24 @@ def _parse_fund_rate(data: str) -> float | None:
     return None
 
 
-def _calc_score(d: dict, peer_returns: list[float] | None = None) -> float:
+def _calc_score(d: dict) -> float:
     """
     计算基金综合评分 (0-100)
 
-    透明指标（所有数据均可追溯来源，无黑盒评分）：
-      - 同类排名百分位 (25%): 在同类基金中的排位
-      - 卡玛比率 (20%): 年化收益 ÷ 最大回撤，综合衡量收益-风险
-      - 最大回撤 (15%): 历史最大跌幅，越小越好
-      - 年化波动率 (15%): 收益波动幅度，越小越稳定
-      - 基金规模 (15%): 1~50亿最理想，过小有清盘风险，过大收益钝化
-      - 费率 (10%): 申购费越低越好
+    8 维透明评分（所有数据均可追溯）：
+      - 同类排名百分位 (20%): 在同类基金中的排位
+      - 夏普比率 (20%): 每单位总波动的超额收益（经典风险调整指标）
+      - 索提诺比率 (15%): 每单位下行波动的超额收益（只惩罚下跌）
+      - 最大回撤 (10%): 历史最大跌幅，越小越好
+      - 上行胜率 (10%): 日收益率 > 0 的天数占比
+      - 机构持有比例 (10%): 机构资金认可度
+      - 基金规模 (5%): 1~50亿最理想
+      - 费率 (5%): 申购费越低越好
     """
     scores: list[float] = []
     total_weight = 0.0
 
-    # 1. 同类排名评分 (25%)
+    # 1. 同类排名评分 (20%)
     rk = d.get("rank")
     rk_total = d.get("rank_total")
     if rk is not None and rk_total and rk_total > 0:
@@ -481,34 +483,50 @@ def _calc_score(d: dict, peer_returns: list[float] | None = None) -> float:
         elif pct <= 30:     rank_score = 55
         elif pct <= 50:     rank_score = 35
         else:               rank_score = max(0, 25 - (pct - 50) * 0.5)
-        scores.append(rank_score * 0.25)
-        total_weight += 0.25
-
-    # 2. 卡玛比率 (20%) — 自己从净值算
-    calmar = d.get("calmar")
-    if calmar is not None:
-        # >3 → 100分, 2→80, 1→50, 0.5→25, 0→0
-        calmar_score = min(100, calmar * 25)
-        scores.append(calmar_score * 0.20)
+        scores.append(rank_score * 0.20)
         total_weight += 0.20
 
-    # 3. 最大回撤 (15%) — 自己从净值算
+    # 2. 夏普比率 (20%) — 每单位总波动的超额收益
+    sharpe = d.get("sharpe")
+    if sharpe is not None:
+        # >3 → 100, 2→80, 1.5→65, 1→50, 0.5→30, 0→10, <0→0
+        s = max(0, min(100, sharpe * 25 + 10))
+        scores.append(s * 0.20)
+        total_weight += 0.20
+
+    # 3. 索提诺比率 (15%) — 每单位下行波动的超额收益
+    sortino = d.get("sortino")
+    if sortino is not None:
+        # >4 → 100, 3→80, 2→60, 1→35, 0→10, <0→0
+        s = max(0, min(100, sortino * 17 + 10))
+        scores.append(s * 0.15)
+        total_weight += 0.15
+
+    # 4. 最大回撤 (10%)
     max_dd = d.get("max_dd")
     if max_dd is not None:
         # <10% → 90分, 20%→70, 30%→50, 40%→30, 50%→10
         dd_score = max(0, min(90, 110 - max_dd * 2))
-        scores.append(dd_score * 0.15)
-        total_weight += 0.15
+        scores.append(dd_score * 0.10)
+        total_weight += 0.10
 
-    # 4. 年化波动率 (15%) — 自己从净值算
-    vol = d.get("volatility")
-    if vol is not None:
-        # <15% → 90分, 25%→70, 35%→50, 45%→30, 55%→10
-        vol_score = max(0, min(90, 120 - vol * 2))
-        scores.append(vol_score * 0.15)
-        total_weight += 0.15
+    # 5. 上行胜率 (10%)
+    win_rate = d.get("win_rate")
+    if win_rate is not None:
+        # >55% → 90, 50%→70, 45%→50, 40%→30, <35%→10
+        wr_score = max(0, min(90, (win_rate - 30) * 3))
+        scores.append(wr_score * 0.10)
+        total_weight += 0.10
 
-    # 5. 基金规模 (15%) — 1~50亿最理想
+    # 6. 机构持有比例 (10%)
+    inst = d.get("inst")
+    if inst is not None:
+        # >50% → 90, 30%→70, 10%→50, 5%→30, <1%→10
+        inst_score = max(10, min(90, inst * 1.5 + 20))
+        scores.append(inst_score * 0.10)
+        total_weight += 0.10
+
+    # 7. 基金规模 (5%)
     sc = d.get("sc")
     if sc is not None:
         if 1 <= sc <= 50:
@@ -520,16 +538,16 @@ def _calc_score(d: dict, peer_returns: list[float] | None = None) -> float:
         elif sc > 100:
             scale_score = 40
         else:
-            scale_score = 30  # < 0.5亿，清盘风险
-        scores.append(scale_score * 0.15)
-        total_weight += 0.15
+            scale_score = 30  # < 0.5亿
+        scores.append(scale_score * 0.05)
+        total_weight += 0.05
 
-    # 6. 费率 (10%)
+    # 8. 费率 (5%)
     rate = d.get("rate")
     if rate is not None:
         rate_score = max(20, 100 - rate * 40)
-        scores.append(rate_score * 0.10)
-        total_weight += 0.10
+        scores.append(rate_score * 0.05)
+        total_weight += 0.05
 
     if not scores:
         return 0.0
@@ -542,26 +560,30 @@ def _calc_nav_metrics(full_nav: list[dict]) -> dict:
     从完整净值列表计算风险指标。
 
     返回:
-      max_dd: 最大回撤(%)
-      volatility: 年化波动率(%)
-      calmar: 卡玛比率
       annual_return: 年化收益率(%)
+      volatility: 年化波动率(%)
+      max_dd: 最大回撤(%)
+      calmar: 卡玛比率
+      sharpe: 夏普比率 — (年化收益 - 无风险) / 年化波动率
+      sortino: 索提诺比率 — (年化收益 - 无风险) / 下行波动率
+      win_rate: 上行胜率(%) — 日收益率 > 0 的天数占比
     """
     if not full_nav or len(full_nav) < 30:
         return {}
     prices = [n["v"] for n in full_nav]
     days = len(prices)
 
-    # 日收益率
-    daily_returns = [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, days)]
+    # 日收益率（小数形式，非百分比）
+    daily_r = [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, days)]
+    n = len(daily_r)
 
     # 年化收益率
     total_return = (prices[-1] - prices[0]) / prices[0]
     annual_return = ((1 + total_return) ** (250 / days) - 1) * 100
 
     # 年化波动率
-    mean = sum(daily_returns) / len(daily_returns)
-    variance = sum((r - mean) ** 2 for r in daily_returns) / len(daily_returns)
+    mean_r = sum(daily_r) / n
+    variance = sum((r - mean_r) ** 2 for r in daily_r) / n
     import math
     volatility = math.sqrt(variance * 250) * 100
 
@@ -578,11 +600,30 @@ def _calc_nav_metrics(full_nav: list[dict]) -> dict:
     # 卡玛比率
     calmar = annual_return / max_dd if max_dd > 0 else 0
 
+    # 下行波动率（只算负收益）
+    neg_r = [r for r in daily_r if r < 0]
+    if len(neg_r) > 1:
+        down_var = sum((r - mean_r) ** 2 for r in neg_r) / len(neg_r)
+        down_dev = math.sqrt(down_var * 250) * 100
+    else:
+        down_dev = volatility  # fallback
+
+    # 夏普比率 & 索提诺比率（无风险利率 2.5%）
+    rf = 2.5
+    sharpe = (annual_return - rf) / volatility if volatility > 0 else 0
+    sortino = (annual_return - rf) / down_dev if down_dev > 0 else 0
+
+    # 上行胜率
+    win_rate = sum(1 for r in daily_r if r > 0) / n * 100
+
     return {
         "annual_return": round(annual_return, 2),
         "volatility": round(volatility, 2),
         "max_dd": round(max_dd, 2),
         "calmar": round(calmar, 2),
+        "sharpe": round(sharpe, 2),
+        "sortino": round(sortino, 2),
+        "win_rate": round(win_rate, 1),
     }
 
 
@@ -778,9 +819,11 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_y1_raw": d.get("y1"),
         "_rank": d.get("rank"),
         "_rank_total": d.get("rank_total"),
+        "_sharpe": d.get("sharpe"),
+        "_sortino": d.get("sortino"),
         "_max_dd": d.get("max_dd"),
-        "_volatility": d.get("volatility"),
-        "_calmar": d.get("calmar"),
+        "_win_rate": d.get("win_rate"),
+        "_inst": d.get("inst"),
         "_sc": d.get("sc"),
         "_rate": d.get("rate"),
     }
@@ -813,9 +856,11 @@ def main() -> None:
         d = {
             "rank": r.get("_rank"),
             "rank_total": r.get("_rank_total"),
+            "sharpe": r.get("_sharpe"),
+            "sortino": r.get("_sortino"),
             "max_dd": r.get("_max_dd"),
-            "volatility": r.get("_volatility"),
-            "calmar": r.get("_calmar"),
+            "win_rate": r.get("_win_rate"),
+            "inst": r.get("_inst"),
             "sc": r.get("_sc"),
             "rate": r.get("_rate"),
         }
