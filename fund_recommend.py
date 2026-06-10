@@ -20,7 +20,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
-    from fund_watch import get, log, _calc_score
+    from fund_watch import get, log, _calc_score, SCORE_DIMS
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
     sys.exit(1)
@@ -119,8 +119,8 @@ def _print_results(results: list[dict], show_detail: bool = True) -> None:
 
     if show_detail:
         print()
-        print("  评分维度说明: 年化10% | 夏普15% | 索提诺10% | 回撤10% |")
-        print("  胜率5% | 盈亏比5% | 修复10% | 近3年20% | 机构5% | 规模5% | 费率5%")
+        parts = [f"{name} {int(w*100)}%" for name, _, w, _ in SCORE_DIMS]
+        print("  评分维度说明: " + " | ".join(parts))
         print()
         h = f"{'排名':<4} {'代码':<7} {'评分':<6} {'年化%':<7} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'夏普':<6} {'索提诺':<6} {'回撤':<6}"
         print(h)
@@ -243,8 +243,8 @@ def main() -> None:
 
     # 详细对比表 — 11 维评分全透明
     print()
-    print("  评分维度说明: 年化10% | 夏普15% | 索提诺10% | 回撤10% |")
-    print("  胜率5% | 盈亏比5% | 修复10% | 近3年20% | 机构5% | 规模5% | 费率5%")
+    parts = [f"{name} {int(w*100)}%" for name, _, w, _ in SCORE_DIMS]
+    print("  评分维度说明: " + " | ".join(parts))
     print()
     h = (f"{'排名':<4} {'代码':<7} {'评分':<6} {'年化%':<7} {'近1月':<8} {'近3月':<8} {'近1年':<8} "
          f"{'夏普':<6} {'索提诺':<6} {'回撤':<6}")
