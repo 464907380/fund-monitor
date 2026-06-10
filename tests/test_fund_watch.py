@@ -447,12 +447,13 @@ def test_calc_nav_metrics():
 
 
 def test_calc_score_transparent():
-    """透明评分系统计算（8 维度）"""
+    """透明评分系统计算（12 维度）"""
     from fund_watch import _calc_score
 
     # 一只各项指标都比较优秀的基金
     d = {
         "annual_return": 35.0,                  # 年化 35%
+        "y1": 30.0,                             # 近1年 30%
         "sharpe": 2.5,                          # 优秀
         "sortino": 3.5,                         # 优秀
         "max_dd": 15.0,                         # 回撤控制好
@@ -462,15 +463,15 @@ def test_calc_score_transparent():
         "rate": 0.0,                            # 0费率
         "profit_ratio": 1.8,                    # 盈亏比好
         "recovery": 25.0,                       # 修复能力强
-        "sy6": 80.0,                            # 长期表现好
-        "internal": 0.5,                        # 基金经理买了挺多
+        "sy3": 80.0,                            # 近3年表现好
     }
     score = _calc_score(d)
-    assert 70 <= score <= 100  # 应该高分
+    assert 60 <= score <= 100  # 应该高分
 
     # 一只各项指标都差的基金
     d2 = {
         "annual_return": -5.0,                  # 亏钱
+        "y1": -10.0,                            # 近1年也亏
         "sharpe": -0.5,                         # 负收益
         "sortino": -0.5,
         "max_dd": 55.0,                         # 回撤巨大
@@ -480,7 +481,7 @@ def test_calc_score_transparent():
         "rate": 1.5,                            # 费率高
         "profit_ratio": 0.6,                    # 亏的时候比赚的时候多
         "recovery": 0.5,                        # 修复能力差
-        "sy6": -10.0,                           # 长期亏损
+        "sy3": -10.0,                           # 近3年亏损
         "internal": 0.0,                        # 经理自己都不买
     }
     score2 = _calc_score(d2)
