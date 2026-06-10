@@ -245,7 +245,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     # 持仓对比
     compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
-        cp = '<tr><td style="padding:12px 14px;margin:0 10px;background:#fffbe6;border:1px solid #e8c300;border-radius:6px;"><p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#b8860b;">⚔️ 持仓 vs 市场优选</p>'
+        cp = '<tr><td style="padding:12px 14px;margin:0 10px;background:#fffbe6;border:1px solid #e8c300;border-radius:6px;"><p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#b8860b;">🏆 市场优选基金 TOP 5</p>'
         for line in compare_lines:
             clean = line.strip().replace("**", "")
             if clean:
@@ -919,19 +919,17 @@ def _load_recommend_results() -> list[dict] | None:
 
 def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
     """
-    对比持仓基金和推荐基金，返回对比文本行。
-    加载最近一次 fund_recommend.py 的结果做比较。
+    展示市场优选基金排行（来自上次推荐结果）。
     """
     lines: list[str] = []
     recs = _load_recommend_results()
     if recs is None:
         lines.append("")
-        lines.append("💡 **想看看你的持仓 vs 市场优选？**")
-        lines.append("   运行 python fund_recommend.py（约15分钟）")
-        lines.append("   之后晚报自动展示对比分析")
+        lines.append("💡 **想看看市场上有哪些优秀基金？**")
+        lines.append("   运行 python fund_recommend.py（约4分钟）")
+        lines.append("   之后晚报自动展示推荐排行")
         return lines
 
-    # 检查推荐结果是否过旧
     try:
         with open(_RECOMMEND_RESULT_FILE, encoding="utf-8") as f:
             meta = json.load(f)
@@ -946,34 +944,20 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
     except Exception:
         pass
 
-    # 计算持仓平均分
-    held_scores = [r.get("score", 0) for r in held_rows]
-    avg_held = sum(held_scores) / len(held_scores) if held_scores else 0
-
-    # 推荐 TOP5 平均分
-    top_recs = recs[:5]
-    rec_avg = sum(r.get("score", 0) for r in top_recs) / len(top_recs) if top_recs else 0
-
-    diff = rec_avg - avg_held
     lines.append("")
-    lines.append("⚔️ **持仓 vs 市场优选**")
-    lines.append(f"你的持仓平均分: {avg_held:.1f}")
-    lines.append(f"市场优选平均分: {rec_avg:.1f}  (差距 {diff:+.1f}分)")
-    if diff > 5:
-        lines.append(f"💡 市场优选明显优于你的持仓，建议关注推荐结果")
-    elif diff < -5:
-        lines.append(f"💪 你的持仓表现优于市场平均，继续保持")
+    lines.append("🏆 **市场优选基金 TOP 5**")
+    medals = ["🥇", "🥈", "🥉"]
+    for i, r in enumerate(recs[:5], 1):
+        badge = medals[i - 1] if i <= 3 else f" {i}."
+        name = r.get("name", "")[:16]
+        ar = r.get("annual_return", 0)
+        sharpe = r.get("sharpe", 0)
+        dd = r.get("max_dd", 0)
+        wr = r.get("win_rate", 0)
+        lines.append(f"  {badge} {name} — 年化{ar:.1f}%  夏普{sharpe:.2f}  回撤{dd:.1f}%  胜率{wr:.1f}%")
 
-    # 找出持仓中评分最低的，推荐替代品
-    sorted_held = sorted(held_rows, key=lambda r: r.get("score", 0))
-    worst = sorted_held[0]
-    worst_score = worst.get("score", 0)
-    if worst_score < 50 and top_recs:
-        best_rec = top_recs[0]
-        lines.append("")
-        lines.append(f"⚠️  **{worst['name_short']}({worst['code']})** 评分仅 {worst_score:.1f}")
-        lines.append(f"   同类优选 **{best_rec['name']}({best_rec['code']})** 评分 {best_rec['score']:.1f}")
-        lines.append(f"   对比: 你的持仓评分偏低，可考虑替换")
+    lines.append("")
+    lines.append(f"💡 加入监控: python fund_recommend.py --add 基金代码")
 
     return lines
 
