@@ -16,8 +16,10 @@ import smtplib
 from logging.handlers import RotatingFileHandler
 from config import CFG
 
-# ── 评分历史文件 ──────────────────────────────
-_SCORE_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".score_history.json")
+# ── 文件路径 ──────────────────────────────────
+_HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
+_SCORE_HISTORY_FILE = os.path.join(_HISTORY_DIR, ".score_history.json")
+_RECOMMEND_RESULT_FILE = os.path.join(_HISTORY_DIR, ".fund_recommend_result.json")
 
 # ── 配置 ──────────────────────────────────────
 
@@ -260,6 +262,21 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
             + "\n".join(rank_items) + '</div>'
         )
 
+    # 持仓 vs 推荐对比
+    compare_lines = _compare_with_recommendations(rows_sorted)
+    if compare_lines:
+        compare_html = '<div style="margin-top:12px;background:#fffbe6;border:1px solid #e6c300;border-radius:8px;padding:12px;">'
+        compare_html += '<div style="font-weight:bold;font-size:14px;margin-bottom:6px;">⚔️ 持仓 vs 市场优选</div>'
+        for line in compare_lines:
+            clean = line.strip()
+            if not clean:
+                continue
+            # 简单 markdown→html 转换
+            clean = clean.replace("**", "")
+            compare_html += f'<div style="font-size:13px;margin:2px 0;">{clean}</div>'
+        compare_html += '</div>'
+        extra_parts.append(compare_html)
+
     # 警报
     if alerts:
         al = '<div style="margin-top:12px;background:#fff5f5;border:1px solid #fcc;border-radius:8px;padding:12px;">'
@@ -309,6 +326,13 @@ def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
             ar_str = ""
         rank_lines.append(f"{badge} **{r['name_short']}** — {r.get('score', 0):.1f}分  {ar_str}  {r['y1']}")
     md_lines.append("\n".join(rank_lines))
+
+    # 持仓 vs 推荐对比
+    compare_lines = _compare_with_recommendations(rows_sorted)
+    if compare_lines:
+        md_lines.append("")
+        md_lines.extend(compare_lines)
+
     if alerts:
         md_lines.append("")
         md_lines.append("**🚨 警报:**")
@@ -540,7 +564,6 @@ def _record_scores(rows: list[dict], today: str) -> None:
                 r["_trend"] = "→"
         else:
             r["_trend"] = ""
-
 
 def _calc_score(d: dict) -> float:
     """
@@ -979,6 +1002,62 @@ def check(code: str) -> tuple[dict, list[str]]:
     return row, alerts
 
 
+# ── 持仓 vs 推荐对比 ──────────────────────────
+
+def _load_recommend_results() -> list[dict] | None:
+    """加载基金推荐结果"""
+    if not os.path.exists(_RECOMMEND_RESULT_FILE):
+        return None
+    try:
+        with open(_RECOMMEND_RESULT_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("results", [])  # type: ignore[no-any-return]
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
+    """
+    对比持仓基金和推荐基金，返回对比文本行。
+    加载最近一次 fund_recommend.py 的结果做比较。
+    """
+    lines: list[str] = []
+    recs = _load_recommend_results()
+    if not recs:
+        return lines
+
+    # 计算持仓平均分
+    held_scores = [r.get("score", 0) for r in held_rows]
+    avg_held = sum(held_scores) / len(held_scores) if held_scores else 0
+
+    # 推荐 TOP5 平均分
+    top_recs = recs[:5]
+    rec_avg = sum(r.get("score", 0) for r in top_recs) / len(top_recs) if top_recs else 0
+
+    diff = rec_avg - avg_held
+    lines.append("")
+    lines.append("⚔️ **持仓 vs 市场优选**")
+    lines.append(f"你的持仓平均分: {avg_held:.1f}")
+    lines.append(f"市场优选平均分: {rec_avg:.1f}  (差距 {diff:+.1f}分)")
+    if diff > 5:
+        lines.append(f"💡 市场优选明显优于你的持仓，建议关注推荐结果")
+    elif diff < -5:
+        lines.append(f"💪 你的持仓表现优于市场平均，继续保持")
+
+    # 找出持仓中评分最低的，推荐替代品
+    sorted_held = sorted(held_rows, key=lambda r: r.get("score", 0))
+    worst = sorted_held[0]
+    worst_score = worst.get("score", 0)
+    if worst_score < 50 and top_recs:
+        best_rec = top_recs[0]
+        lines.append("")
+        lines.append(f"⚠️  **{worst['name_short']}({worst['code']})** 评分仅 {worst_score:.1f}")
+        lines.append(f"   同类优选 **{best_rec['name']}({best_rec['code']})** 评分 {best_rec['score']:.1f}")
+        lines.append(f"   对比: 你的持仓评分偏低，可考虑替换")
+
+    return lines
+
+
 # ── 主程序 ────────────────────────────────────
 
 def main() -> None:
@@ -1053,6 +1132,13 @@ def main() -> None:
             ann_ret = r.get("_annual_return", 0)
             ar_str = f"{ann_ret:.1f}%" if isinstance(ann_ret, (int, float)) else ""
             lines.append(f"{badge:<4} {r['name_short']:<14} {r.get('score', 0):<6.1f} {ar_str:<10} {r['y1']:<8} {r['mgr']:<6}")
+
+    # 持仓 vs 推荐对比
+    if rows:
+        compare_lines = _compare_with_recommendations(rows)
+        if compare_lines:
+            lines.extend(compare_lines)
+
     full_text = "\n".join(lines)
 
     print(full_text)
