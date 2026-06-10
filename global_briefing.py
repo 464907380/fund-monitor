@@ -11,6 +11,10 @@ import datetime
 import os
 from fund_watch import send_wechat, send_mail, log, HISTORY_DIR, fetch_bytes
 
+# ── 成交额历史（用于动态百分位阈值） ──────────
+_VOLUME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".volume_history.json")
+_VOLUME_HISTORY_DAYS = 60  # 取近60个交易日做百分位计算
+
 
 # ── 指数列表 ──────────────────────────────────
 A_INDICES = [
@@ -194,7 +198,7 @@ def build_briefing() -> str:
 
 
 def _fetch_sentiment() -> dict | None:
-    """获取市场情绪指标：成交额、涨跌家数"""
+    """获取市场情绪指标：成交额（基于历史百分位动态阈值）"""
     try:
         url = "https://hq.sinajs.cn/list=sh000001,sz399001"
         data = fetch_bytes(url, headers={
@@ -213,21 +217,67 @@ def _fetch_sentiment() -> dict | None:
                     total_amount += float(parts[9])
 
         amount_yi = total_amount / 1e8
-        if amount_yi > 20000:
-            mood = "🔥🔥 极端放量（>20000亿）"
-        elif amount_yi > 14000:
-            mood = "🔥 成交火爆（14000-20000亿）"
-        elif amount_yi > 10000:
-            mood = "🟡 成交活跃（10000-14000亿）"
-        elif amount_yi > 7000:
-            mood = "🟢 成交正常（7000-10000亿）"
+        today = datetime.date.today().isoformat()
+
+        # 保存当日成交额到历史
+        history = _load_volume_history()
+        history[today] = round(amount_yi, 0)
+        # 只保留最近 N 天
+        dates = sorted(history.keys())
+        if len(dates) > _VOLUME_HISTORY_DAYS:
+            for d in dates[:-_VOLUME_HISTORY_DAYS]:
+                del history[d]
+        _save_volume_history(history)
+
+        # 用历史百分位判断情绪
+        if len(dates) >= 10:
+            vals = sorted(history.values())
+            n = len(vals)
+            # 计算当前值在历史中的百分位
+            pct = sum(1 for v in vals if v <= amount_yi) / n * 100
+            if pct >= 95:
+                mood = f"🔥🔥 历史高位（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
+            elif pct >= 80:
+                mood = f"🔥 放量（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
+            elif pct >= 50:
+                mood = f"🟡 活跃（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
+            elif pct >= 20:
+                mood = f"🟢 正常（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
+            else:
+                mood = f"🔵 低迷（{amount_yi:.0f}亿, 仅高于{pct:.0f}%的交易日）"
         else:
-            mood = "🔵 成交低迷（<7000亿）"
+            # 历史数据不足时退回简单判断
+            if amount_yi > 12000:
+                mood = f"成交{amount_yi:.0f}亿（量较大）"
+            elif amount_yi > 7000:
+                mood = f"成交{amount_yi:.0f}亿（正常）"
+            else:
+                mood = f"成交{amount_yi:.0f}亿（偏低）"
 
         return {"amount": round(amount_yi, 0), "mood": mood}
     except Exception as e:
         log.debug("获取情绪指标失败: %s", e)
         return None
+
+
+def _load_volume_history() -> dict:
+    """加载成交额历史"""
+    if not os.path.exists(_VOLUME_HISTORY_FILE):
+        return {}
+    try:
+        with open(_VOLUME_HISTORY_FILE, encoding="utf-8") as f:
+            return json.load(f)  # type: ignore[no-any-return]
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_volume_history(history: dict) -> None:
+    """保存成交额历史"""
+    try:
+        with open(_VOLUME_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False)
+    except OSError as e:
+        log.debug("保存成交额历史失败: %s", e)
 
 
 def _fetch_market_breadth() -> str | None:
