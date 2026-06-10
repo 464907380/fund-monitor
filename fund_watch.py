@@ -726,52 +726,6 @@ def _calc_score(d: dict) -> float:
     return round(min(100, sum(scores) / total_weight), 1)
 
 
-def _generate_signal(d: dict) -> str:
-    """
-    基于回撤和均线生成买卖信号。
-
-    规则:
-      🔴 强烈卖出: 当前价 < MA60（跌破）
-      🟡 谨慎卖出: 反弹 ≥ 10%（从低点）
-      🔵 强烈买入: 回撤 ≥ 20%（从高点）
-      🟢 可以买入: 回撤 ≥ 15%
-      ⚪ 持有观望: 其他
-
-    参数:
-        d: get() 返回的全量数据字典，需包含 "full_nav"
-    返回:
-        带 emoji 的信号字符串
-    """
-    full_nav = d.get("full_nav")
-    if not full_nav or len(full_nav) < 60:
-        return "⚪ 持有观望"
-
-    vals = [n["v"] for n in full_nav]
-    current = vals[-1]
-
-    # 从高点的最大回撤百分比
-    peak = max(vals)
-    drawdown_pct = (peak - current) / peak * 100
-
-    # 从低点的反弹百分比
-    low = min(vals)
-    bounce_pct = (current - low) / low * 100
-
-    # 简单移动平均 60 日
-    ma60 = sum(vals[-60:]) / 60
-
-    # 信号规则（高优先级优先）
-    if current < ma60:
-        return "🔴 强烈卖出"
-    if bounce_pct >= 10:
-        return "🟡 谨慎卖出"
-    if drawdown_pct >= 20:
-        return "🔵 强烈买入"
-    if drawdown_pct >= 15:
-        return "🟢 可以买入"
-    return "⚪ 持有观望"
-
-
 def _calc_nav_metrics(full_nav: list[dict]) -> dict:
     """
     从完整净值列表计算风险指标。
@@ -1079,7 +1033,6 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_recovery": d.get("recovery"),
         "_sy6": d.get("sy6"),
         "_internal": d.get("internal"),
-        "_signal": _generate_signal(d),
     }
     return row, alerts
 
@@ -1207,14 +1160,13 @@ def main() -> None:
     lines = [
         f"📊 基金晚报 {today}",
         "",
-        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6} {'趋势':<4} {'信号':<12}",
-        "-" * 92,
+        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6} {'趋势':<4}",
+        "-" * 80,
     ]
     for i, r in enumerate(rows, 1):
         score_str = f"{r.get('score', 0):.1f}"
         trend = r.get("_trend", "")
-        signal = r.get("_signal", "")
-        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6} {trend:<4} {signal:<12}")
+        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6} {trend:<4}")
     if all_alerts:
         lines.append("")
         lines.append("🚨 警报:")
