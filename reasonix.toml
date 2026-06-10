@@ -68,10 +68,10 @@ auto_install = true   # fetch the runtime when CodeGraph is enabled but missing
 
 [lsp]
 enabled = true   # language server tools; servers launch lazily when used
-# [lsp.servers.go]
-# command = "gopls"
-# args = []
-# extensions = [".go"]
+[lsp.servers.python]
+command = "pyright"
+args = []
+extensions = [".py"]
 
 [skills]
 # paths = ["~/my-skills", "../shared/skills"]   # extra custom skill roots
