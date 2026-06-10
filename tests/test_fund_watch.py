@@ -390,23 +390,6 @@ def test_snapshot_save_load_clear(tmp_path):
 # 评分系统测试
 # ═══════════════════════════════════════════════
 
-def test_parse_performance_eval():
-    """提取绩效评分"""
-    from fund_watch import _parse_performance_eval
-
-    js = ('var Data_performanceEvaluation = '
-          '{"avr":"82.75","categories":["选证能力","收益率","抗风险","稳定性","择时能力"],'
-          '"data":[85.0,100.0,70.0,50.0,80.0]};')
-    result = _parse_performance_eval(js)
-    assert result is not None
-    assert result["score_avg"] == 82.75
-    assert result["scores"]["选证能力"] == 85.0
-    assert result["scores"]["抗风险"] == 70.0
-    assert result["scores"]["稳定性"] == 50.0
-
-    assert _parse_performance_eval("nothing") is None
-
-
 def test_parse_rank_info():
     """提取同类排名"""
     from fund_watch import _parse_rank_info
@@ -433,14 +416,57 @@ def test_parse_fund_rate():
     assert _parse_fund_rate("nothing") is None
 
 
-def test_calc_score_basic():
-    """基础评分计算"""
+def test_calc_nav_metrics():
+    """净值风险指标计算（最大回撤/波动率/卡玛比率）"""
+    from fund_watch import _calc_nav_metrics
+
+    # 模拟稳步上涨的净值（无回撤、低波动）
+    nav_up = [{"v": 1.0 + i * 0.001} for i in range(500)]
+    result = _calc_nav_metrics(nav_up)
+    assert "max_dd" in result
+    assert "volatility" in result
+    assert "calmar" in result
+    assert "annual_return" in result
+    # 稳步上涨应该有正的年化收益
+    assert result["annual_return"] > 0
+
+    # 模拟震荡下跌的净值（高回撤）
+    nav_down = [{"v": 1.0 - i * 0.01} for i in range(100)]
+    result2 = _calc_nav_metrics(nav_down)
+    assert result2["max_dd"] > 30  # 大幅回撤
+
+    # 数据不足时返回空
+    assert _calc_nav_metrics([{"v": 1.0}]) == {}
+    assert _calc_nav_metrics([{"v": 1.0}, {"v": 1.01}]) == {}
+
+
+def test_calc_score_transparent():
+    """透明评分系统计算"""
     from fund_watch import _calc_score
 
-    # 只有收益率数据
-    d = {"y1": 100.0}
-    score = _calc_score(d, [50.0, 100.0, 150.0])
-    assert 0 < score <= 100
+    # 一只各项指标都比较优秀的基金
+    d = {
+        "rank": 10, "rank_total": 1000,       # top 1%
+        "calmar": 3.0,                          # 优秀
+        "max_dd": 15.0,                         # 回撤控制好
+        "volatility": 18.0,                     # 波动低
+        "sc": 20.0,                             # 规模适中
+        "rate": 0.0,                            # 0费率
+    }
+    score = _calc_score(d)
+    assert 80 <= score <= 100  # 应该高分
+
+    # 一只各项指标都差的基金
+    d2 = {
+        "rank": 900, "rank_total": 1000,        # 垫底
+        "calmar": 0.1,                          # 很差
+        "max_dd": 55.0,                         # 回撤巨大
+        "volatility": 60.0,                     # 波动巨大
+        "sc": 0.3,                              # 规模太小(清盘风险)
+        "rate": 1.5,                            # 费率高
+    }
+    score2 = _calc_score(d2)
+    assert 0 <= score2 <= 50  # 应该低分
 
     # 空数据返回 0
     assert _calc_score({}) == 0.0

@@ -353,7 +353,15 @@ def _parse_institutional_ratio(data: str) -> float | None:
 
 
 def _parse_net_trend(data: str) -> list[dict] | None:
-    """提取净值趋势（最近6条）"""
+    """提取净值趋势（最近6条，供日报表使用）"""
+    nav = _parse_full_nav(data)
+    if not nav:
+        return None
+    return nav[-6:]
+
+
+def _parse_full_nav(data: str) -> list[dict] | None:
+    """提取完整净值趋势（全部历史数据，供评分计算使用）"""
     ts = data.find("var Data_netWorthTrend")
     if ts < 0:
         return None
@@ -369,15 +377,13 @@ def _parse_net_trend(data: str) -> list[dict] | None:
             if dep == 0:
                 end = i
                 break
-    tail = data[max(as_, end - 3000):end + 1]
-    ms = re.findall(r'\{"x":(\d+),"y":([\d.]+),"equityReturn"', tail)
-    if not ms:
+    try:
+        import json as _json
+        full = _json.loads(data[as_:end + 1])
+        return [{"d": datetime.datetime.fromtimestamp(int(n["x"]) // 1000).strftime("%Y-%m-%d"),
+                 "v": float(n["y"]), "ts": int(n["x"])} for n in full]
+    except Exception:
         return None
-    nav = []
-    for t, v in ms[-6:]:
-        dt = datetime.datetime.fromtimestamp(int(t) // 1000)
-        nav.append({"d": dt.strftime("%m-%d"), "v": float(v), "ts": int(t)})
-    return nav
 
 
 def _parse_real_time(code: str) -> float | None:
@@ -422,21 +428,6 @@ def _parse_holdings(code: str) -> list[dict] | None:
 
 # ── 评分相关解析 ──────────────────────────────
 
-def _parse_performance_eval(data: str) -> dict | None:
-    """提取天天基金绩效评分：选证能力/收益率/抗风险/稳定性/择时能力"""
-    m = re.search(r'var Data_performanceEvaluation = (\{.*?\});', data, re.DOTALL)
-    if not m:
-        return None
-    try:
-        pe = json.loads(m.group(1))
-        return {
-            "score_avg": float(pe.get("avr", 0)),
-            "scores": dict(zip(pe.get("categories", []), pe.get("data", []))),
-        }
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return None
-
-
 def _parse_rank_info(data: str) -> tuple[int, int] | None:
     """提取同类排名 (当前排名, 同类总数)"""
     m = re.search(r'var Data_rateInSimilarType = (\[.*?\]);', data, re.DOTALL)
@@ -466,66 +457,133 @@ def _parse_fund_rate(data: str) -> float | None:
 def _calc_score(d: dict, peer_returns: list[float] | None = None) -> float:
     """
     计算基金综合评分 (0-100)
-    加权维度：收益率、同类排名、选证能力、抗风险、稳定性、择时、费率
-    peer_returns: 同组基金的近1年收益率列表，用于相对评分
+
+    透明指标（所有数据均可追溯来源，无黑盒评分）：
+      - 同类排名百分位 (25%): 在同类基金中的排位
+      - 卡玛比率 (20%): 年化收益 ÷ 最大回撤，综合衡量收益-风险
+      - 最大回撤 (15%): 历史最大跌幅，越小越好
+      - 年化波动率 (15%): 收益波动幅度，越小越稳定
+      - 基金规模 (15%): 1~50亿最理想，过小有清盘风险，过大收益钝化
+      - 费率 (10%): 申购费越低越好
     """
     scores: list[float] = []
     total_weight = 0.0
 
-    # 1. 阶段收益评分 (相对组内排名，缓解各基金收益率差异大的问题)
-    y1 = d.get("y1")
-    if y1 is not None and peer_returns and len(peer_returns) > 1:
-        # 组内百分位评分: 最佳→100, 最差→0
-        sorted_ret = sorted(peer_returns)
-        rank_in_group = sum(1 for r in sorted_ret if r <= y1)
-        ret_score = (rank_in_group - 1) / (len(sorted_ret) - 1) * 100
-        scores.append(ret_score * 0.25)
-        total_weight += 0.25
-
-    # 2. 同类排名评分 (top 5% → 100, top 20% → 80, top 50% → 50)
+    # 1. 同类排名评分 (25%)
     rk = d.get("rank")
     rk_total = d.get("rank_total")
     if rk is not None and rk_total and rk_total > 0:
-        pct = rk / rk_total * 100  # 越小越好
-        if pct <= 1:
-            rank_score = 100
-        elif pct <= 5:
-            rank_score = 95
-        elif pct <= 10:
-            rank_score = 85
-        elif pct <= 20:
-            rank_score = 70
-        elif pct <= 30:
-            rank_score = 55
-        elif pct <= 50:
-            rank_score = 35
-        else:
-            rank_score = max(0, 25 - (pct - 50) * 0.5)
+        pct = rk / rk_total * 100
+        if pct <= 1:        rank_score = 100
+        elif pct <= 5:      rank_score = 95
+        elif pct <= 10:     rank_score = 85
+        elif pct <= 20:     rank_score = 70
+        elif pct <= 30:     rank_score = 55
+        elif pct <= 50:     rank_score = 35
+        else:               rank_score = max(0, 25 - (pct - 50) * 0.5)
         scores.append(rank_score * 0.25)
         total_weight += 0.25
 
-    # 3. 天天基金绩效评分（选证能力+抗风险+稳定性+择时）
-    pe = d.get("pe")
-    if pe and isinstance(pe, dict):
-        raw = pe.get("scores", {})
-        for key, w in [("选证能力", 0.15), ("抗风险", 0.15),
-                       ("稳定性", 0.10), ("择时能力", 0.10)]:
-            val = raw.get(key)
-            if val is not None:
-                scores.append(val * w)
-                total_weight += w
+    # 2. 卡玛比率 (20%) — 自己从净值算
+    calmar = d.get("calmar")
+    if calmar is not None:
+        # >3 → 100分, 2→80, 1→50, 0.5→25, 0→0
+        calmar_score = min(100, calmar * 25)
+        scores.append(calmar_score * 0.20)
+        total_weight += 0.20
 
-    # 4. 费率评分 (0%→100, 0.5%→70, 1.5%→40, 2%→20)
+    # 3. 最大回撤 (15%) — 自己从净值算
+    max_dd = d.get("max_dd")
+    if max_dd is not None:
+        # <10% → 90分, 20%→70, 30%→50, 40%→30, 50%→10
+        dd_score = max(0, min(90, 110 - max_dd * 2))
+        scores.append(dd_score * 0.15)
+        total_weight += 0.15
+
+    # 4. 年化波动率 (15%) — 自己从净值算
+    vol = d.get("volatility")
+    if vol is not None:
+        # <15% → 90分, 25%→70, 35%→50, 45%→30, 55%→10
+        vol_score = max(0, min(90, 120 - vol * 2))
+        scores.append(vol_score * 0.15)
+        total_weight += 0.15
+
+    # 5. 基金规模 (15%) — 1~50亿最理想
+    sc = d.get("sc")
+    if sc is not None:
+        if 1 <= sc <= 50:
+            scale_score = 90
+        elif 0.5 <= sc < 1:
+            scale_score = 60
+        elif 50 < sc <= 100:
+            scale_score = 70
+        elif sc > 100:
+            scale_score = 40
+        else:
+            scale_score = 30  # < 0.5亿，清盘风险
+        scores.append(scale_score * 0.15)
+        total_weight += 0.15
+
+    # 6. 费率 (10%)
     rate = d.get("rate")
     if rate is not None:
         rate_score = max(20, 100 - rate * 40)
-        scores.append(rate_score * 0.05)
-        total_weight += 0.05
+        scores.append(rate_score * 0.10)
+        total_weight += 0.10
 
     if not scores:
         return 0.0
 
     return round(min(100, sum(scores) / total_weight), 1)
+
+
+def _calc_nav_metrics(full_nav: list[dict]) -> dict:
+    """
+    从完整净值列表计算风险指标。
+
+    返回:
+      max_dd: 最大回撤(%)
+      volatility: 年化波动率(%)
+      calmar: 卡玛比率
+      annual_return: 年化收益率(%)
+    """
+    if not full_nav or len(full_nav) < 30:
+        return {}
+    prices = [n["v"] for n in full_nav]
+    days = len(prices)
+
+    # 日收益率
+    daily_returns = [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, days)]
+
+    # 年化收益率
+    total_return = (prices[-1] - prices[0]) / prices[0]
+    annual_return = ((1 + total_return) ** (250 / days) - 1) * 100
+
+    # 年化波动率
+    mean = sum(daily_returns) / len(daily_returns)
+    variance = sum((r - mean) ** 2 for r in daily_returns) / len(daily_returns)
+    import math
+    volatility = math.sqrt(variance * 250) * 100
+
+    # 最大回撤
+    peak = prices[0]
+    max_dd = 0.0
+    for p in prices:
+        if p > peak:
+            peak = p
+        dd = (peak - p) / peak * 100
+        if dd > max_dd:
+            max_dd = dd
+
+    # 卡玛比率
+    calmar = annual_return / max_dd if max_dd > 0 else 0
+
+    return {
+        "annual_return": round(annual_return, 2),
+        "volatility": round(volatility, 2),
+        "max_dd": round(max_dd, 2),
+        "calmar": round(calmar, 2),
+    }
 
 
 def _rank_percentile_str(d: dict) -> str:
@@ -561,12 +619,15 @@ def get(code: str) -> dict:
         d["inst"] = inst
     if nav := _parse_net_trend(data):
         d["nav"] = nav
+    # 完整净值（用于计算回撤/波动率/卡玛比率）
+    if full_nav := _parse_full_nav(data):
+        d["full_nav"] = full_nav
+        metrics = _calc_nav_metrics(full_nav)
+        d.update(metrics)
     if td := _parse_real_time(code):
         d["td"] = td
     if holds := _parse_holdings(code):
         d["holds"] = holds
-    if pe := _parse_performance_eval(data):
-        d["pe"] = pe
     if rp := _parse_rank_info(data):
         d["rank"], d["rank_total"] = rp
     if rate := _parse_fund_rate(data):
@@ -717,7 +778,10 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_y1_raw": d.get("y1"),
         "_rank": d.get("rank"),
         "_rank_total": d.get("rank_total"),
-        "_pe": d.get("pe"),
+        "_max_dd": d.get("max_dd"),
+        "_volatility": d.get("volatility"),
+        "_calmar": d.get("calmar"),
+        "_sc": d.get("sc"),
         "_rate": d.get("rate"),
     }
     return row, alerts
@@ -744,17 +808,18 @@ def main() -> None:
         except Exception as e:
             log.error("❌ %s: %s", f["code"], e)
 
-    # 第二遍：计算评分（需要全部基金数据才能做相对评分）
-    peer_y1 = [r["_y1_raw"] for r in raw_rows if r.get("_y1_raw") is not None]
+    # 第二遍：计算评分（不需要 peer_returns，全透明指标）
     for r in raw_rows:
         d = {
-            "y1": r.get("_y1_raw"),
             "rank": r.get("_rank"),
             "rank_total": r.get("_rank_total"),
-            "pe": r.get("_pe"),
+            "max_dd": r.get("_max_dd"),
+            "volatility": r.get("_volatility"),
+            "calmar": r.get("_calmar"),
+            "sc": r.get("_sc"),
             "rate": r.get("_rate"),
         }
-        r["score"] = _calc_score(d, peer_y1)
+        r["score"] = _calc_score(d)
         r["rank_pct"] = _rank_percentile_str(d)
 
     # 按综合评分排序

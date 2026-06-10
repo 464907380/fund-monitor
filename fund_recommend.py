@@ -25,10 +25,10 @@ except ImportError:
     sys.exit(1)
 
 # ── 配置 ──────────────────────────────────────
-TOP_N = 50          # 初筛条数
+TOP_N = 30          # 初筛条数（减少以加快速度）
 MIN_Y1 = 20.0       # 近 1 年收益率最低门槛（%）
-MAX_CANDIDATES = 20  # 拉取详细数据的候选数
-SHOW_TOP = 10       # 最终推荐数量
+MAX_CANDIDATES = 10  # 拉取详细数据的候选数
+SHOW_TOP = 5        # 最终推荐数量
 
 
 def _fetch_rank_list(pi: int = 1, pn: int = 50) -> list[list[str]]:
