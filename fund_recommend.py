@@ -26,7 +26,7 @@ except ImportError:
     sys.exit(1)
 
 # ── 配置 ──────────────────────────────────────
-_TOP = 500
+_TOP = 200
 SHOW_TOP = 10
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")

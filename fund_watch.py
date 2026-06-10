@@ -999,6 +999,23 @@ def main() -> None:
         except Exception as e:
             log.error("❌ %s: %s", f["code"], e)
 
+    # 计算评分（供持仓对比使用）
+    for r in raw_rows:
+        d = {
+            "annual_return": r.get("_annual_return"),
+            "sharpe": r.get("_sharpe"),
+            "sortino": r.get("_sortino"),
+            "max_dd": r.get("_max_dd"),
+            "win_rate": r.get("_win_rate"),
+            "inst": r.get("_inst"),
+            "sc": r.get("_sc"),
+            "rate": r.get("_rate"),
+            "profit_ratio": r.get("_profit_ratio"),
+            "recovery": r.get("_recovery"),
+            "sy6": r.get("_sy6"),
+        }
+        r["score"] = _calc_score(d)
+
     rows = raw_rows
 
     # 纯文本（终端用）
