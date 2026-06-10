@@ -27,7 +27,7 @@ except ImportError:
 _TOP_NORMAL = 200      # 快速模式初筛条数
 _TOP_DEEP = 500        # 深度模式初筛条数
 MIN_Y1 = 0.0           # 近 1 年收益率最低门槛（不设限，让评分自己判断）
-MAX_CANDIDATES = 20    # 拉取详细数据的候选数
+MAX_CANDIDATES = 100   # 拉取详细数据的候选数（200候选→100只深度评分，约2~3分钟）
 SHOW_TOP = 10          # 最终推荐数量
 
 
@@ -94,7 +94,7 @@ def main() -> None:
 
     candidates.sort(key=lambda x: x[0], reverse=True)
     print(f"   收益率 > {MIN_Y1}% 过滤后: {len(candidates)} 只")
-    print(f"   取前 {MAX_CANDIDATES} 只进入深度评分\n")
+    print(f"   取前 {MAX_CANDIDATES} 只进入深度评分（约需 {MAX_CANDIDATES * 2 // 60} 分钟）\n")
 
     # 拉取详细评分数据
     top_candidates = candidates[:MAX_CANDIDATES]
