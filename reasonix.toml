@@ -20,11 +20,11 @@ type = "socks5"   # http|https|socks5|socks5h
 
 [agent]
 # system_prompt = """..."""   # omit to use the built-in prompt for this version
-system_prompt_file = "prompts/system.md"   # 自动加载项目行为规范
+system_prompt_file = "prompts/system.md"
 max_steps         = 0   # executor tool-call rounds; 0 = no limit
 planner_max_steps = 12   # planner read-only tool-call rounds; 0 = no limit
 temperature       = 0.0
-auto_plan   = "on"   # 自动进入计划模式
+auto_plan   = "on"   # off|on; off keeps plan mode manual
 # auto_plan_classifier = "deepseek-flash"   # optional; only used for borderline tasks
 soft_compact_ratio  = 0.5   # notice only; keeps cache-first prefix intact
 compact_ratio       = 0.8   # try compacting when prompt reaches this fraction
@@ -34,7 +34,7 @@ compact_force_ratio = 0.9   # force compacting at this high-water mark
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }   # per-skill overrides
 # subagent_effort = "high"   # optional default effort for subagents
 # subagent_efforts = { review = "max", task = "high" }   # per-tool/skill effort overrides
-output_style = "explanatory"   # 教学式回复
+output_style = "explanatory"   # persona/tone folded into the prompt
 
 [[providers]]
 name        = "deepseek-flash"
@@ -68,9 +68,9 @@ auto_install = true   # fetch the runtime when CodeGraph is enabled but missing
 
 [lsp]
 enabled = true   # language server tools; servers launch lazily when used
+
 [lsp.servers.python]
 command = "pyright"
-args = []
 extensions = [".py"]
 
 [skills]
@@ -85,7 +85,7 @@ extensions = [".py"]
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
 mode  = "allow"
 deny = ["mcp__unity-mcp__*"]
-# allow = ["Bash(go test:*)", "Bash(git status:*)"]   # never prompted
+allow = ["task", "Edit(fund_watch.py)", "Bash(python -m mypy fund_utils.py fund_watch.py fund_monitor.py global_briefing.py fund_recommend.py config.py 2>&1)", "Bash(python -m pytest tests/ -q 2>&1)", "Bash(git add -A && git commit -m \"fix: sy3错误/str格式化/Docker崩溃/路径遍历/搜索范围\n\n- sy3 or sy6 → sy3 if is not None else sy6（修复0.0误回退）\n- m1/m3/y1 加 str() 包装避免 float 用 <7s 格式化抛 TypeError\n- 新增 _validate_fund_code() 白名单校验（仅允许6位数字）\n- load_hist/save_hist 调用校验防止路径遍历\n- _parse_full_nav 去掉500K搜索上限 + 加 end<0 提前返回\n- Dockerfile 删除不存在的 COPY tests/（被 .dockerignore 过滤）\n- Dockerfile 注释添加持久化数据卷说明\" 2>&1 | Select-Object -Last 4)"]
 # ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
 
 [sandbox]

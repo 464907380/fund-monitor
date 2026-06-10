@@ -275,8 +275,8 @@ def _parse_full_nav(data: str) -> list[dict] | None:
     as_ = data.find("[{", ts)
     if as_ < 0:
         return None
-    dep, end = 0, as_
-    for i in range(as_, min(as_ + 500000, len(data))):
+    dep, end = 0, -1
+    for i in range(as_, len(data)):
         if data[i] == "[":
             dep += 1
         elif data[i] == "]":
@@ -284,6 +284,8 @@ def _parse_full_nav(data: str) -> list[dict] | None:
             if dep == 0:
                 end = i
                 break
+    if end < 0:
+        return None
     try:
         full = json.loads(data[as_:end + 1])
         return [{"d": datetime.datetime.fromtimestamp(int(n["x"]) // 1000).strftime("%Y-%m-%d"),
@@ -672,7 +674,14 @@ def get(code: str) -> dict:
 
 # ── 历史快照 ──────────────────────────────────
 
+def _validate_fund_code(code: str) -> None:
+    """校验基金代码：仅允许 6 位数字，防止路径遍历"""
+    if not re.fullmatch(r"\d{6}", code):
+        raise ValueError(f"非法基金代码: {code}")
+
+
 def load_hist(code: str) -> dict:
+    _validate_fund_code(code)
     p = os.path.join(HISTORY_DIR, f".fw_{code}.json")
     if os.path.exists(p):
         try:
@@ -684,6 +693,7 @@ def load_hist(code: str) -> dict:
 
 
 def save_hist(code: str, h: dict) -> None:
+    _validate_fund_code(code)
     with open(os.path.join(HISTORY_DIR, f".fw_{code}.json"), "w", encoding="utf-8") as f:
         json.dump(h, f, ensure_ascii=False)
 
@@ -886,12 +896,12 @@ def _compare_with_recommendations(_held_rows: list[dict]) -> list[str]:
         badge = medals[i - 1] if i <= 3 else f" {i}."
         name = r.get("name", "")[:14]
         ar = r.get("annual_return", 0)
-        m1 = r.get("m1", "")
-        m3 = r.get("m3", "")
-        y1 = r.get("y1", "")
+        m1 = str(r.get("m1", ""))
+        m3 = str(r.get("m3", ""))
+        y1 = str(r.get("y1", ""))
         sharpe = r.get("sharpe", 0)
         dd = r.get("max_dd", 0)
-        sy3 = r.get("sy3") or r.get("sy6", 0)
+        sy3 = r.get("sy3") if r.get("sy3") is not None else r.get("sy6", 0)
         lines.append(f"|{badge:<4}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
     lines.append("")

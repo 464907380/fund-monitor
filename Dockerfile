@@ -8,6 +8,7 @@
 #     -v ./config.json:/app/config.json \
 #     -v ./fund_list.json:/app/fund_list.json \
 #     -v ./.env:/app/.env \
+#     -v ./data:/app/data \        # 持久化历史快照和节假日缓存
 #     fund-monitor python /app/fund_monitor.py
 #
 # 运行一次晚报/简报（可配合宿主机 cron）：
@@ -25,9 +26,6 @@ WORKDIR /app
 COPY config.py fund_watch.py fund_monitor.py global_briefing.py fund_utils.py ./
 COPY config.json fund_list.json ./
 COPY email_template.html ./
-
-# 创建测试目录（可选）
-COPY tests/ ./tests/
 
 # 权限
 RUN chown -R fundmon:fundmon /app
