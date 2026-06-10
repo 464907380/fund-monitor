@@ -13,7 +13,7 @@ import time
 import re
 from config import CFG
 from fund_utils import fetch, log, clear_cache, send_wechat, send_mail
-from fund_watch import FUND_LIST, _parse_holdings, WECHAT_WEBHOOK, QQ_EMAIL, QQ_AUTH_CODE
+from fund_watch import FUND_LIST, _parse_holdings, WECHAT_WEBHOOK, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
 ALERT_DROP_ONCE = CFG.get("fund_monitor", {}).get("alert_drop_once", -3)
@@ -545,6 +545,7 @@ def push_summary(states: dict[str, dict], stock_info: dict[str, dict] | None = N
 
 def monitor() -> None:
     """盘中监控主循环"""
+    _ensure_fund_list_loaded()
     log.info("====== 盘中监控启动 ======")
     log.info("推送方式: %s", "企业微信" if WECHAT_WEBHOOK else "邮件")
     log.info("监控基金: %d 只", len(FUND_LIST))

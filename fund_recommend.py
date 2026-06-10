@@ -20,7 +20,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
-    from fund_watch import get, log, _calc_score, SCORE_DIMS
+    from fund_watch import get, log, _calc_score, SCORE_DIMS, fetch
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
     sys.exit(1)
@@ -41,11 +41,9 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
         f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
         f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1"
     )
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://fund.eastmoney.com/data/fundranking.html",
-    })
-    data = urllib.request.urlopen(req, timeout=15).read().decode("utf-8")
+    data = fetch(url)
+    if not data:
+        return []
     raw = data.replace("var rankData = ", "", 1).rstrip(";")
     raw_clean = re.sub(r'(\{|,)\s*(\w+)\s*:', lambda m: m.group(1) + '"' + m.group(2) + '":', raw)
     result = json.loads(raw_clean)

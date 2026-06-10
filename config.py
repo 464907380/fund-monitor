@@ -42,12 +42,17 @@ def _load_env(path: str) -> None:
         pass  # .env 文件不存在是正常的
 
 
+def get_secret(name: str, default: str = "") -> str:
+    """统一获取密钥配置（唯一 os.getenv 入口）"""
+    return os.getenv(name, default)
+
+
 def _warn_missing_secrets() -> None:
     """启动时检查密钥配置，缺失时输出警告"""
     missing = []
-    webhook = os.getenv("WECHAT_WEBHOOK", "")
-    qq_email = os.getenv("QQ_EMAIL", "")
-    qq_auth = os.getenv("QQ_MAIL_AUTH", "")
+    webhook = get_secret("WECHAT_WEBHOOK")
+    qq_email = get_secret("QQ_EMAIL")
+    qq_auth = get_secret("QQ_MAIL_AUTH")
     if not webhook and not (qq_email and qq_auth):
         missing.append("推送不可用：WECHAT_WEBHOOK 和 QQ_EMAIL+QQ_MAIL_AUTH 均未配置")
     elif not webhook:

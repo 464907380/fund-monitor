@@ -13,7 +13,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 import smtplib
 from logging.handlers import RotatingFileHandler
-from config import CFG
+from config import CFG, get_secret
 
 # ── 路径 ──────────────────────────────────────
 HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -136,8 +136,8 @@ def _strip_html(text: str) -> str:
 
 def _send_smtp(msg: MIMEText) -> None:
     """发送 SMTP 邮件（QQ 邮箱）"""
-    qq_email = os.getenv("QQ_EMAIL", "")
-    qq_auth = os.getenv("QQ_MAIL_AUTH", "")
+    qq_email = get_secret("QQ_EMAIL")
+    qq_auth = get_secret("QQ_MAIL_AUTH")
     try:
         s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
         s.login(qq_email, qq_auth)
@@ -150,7 +150,7 @@ def _send_smtp(msg: MIMEText) -> None:
 
 def send_wechat(content: str, markdown: bool = True) -> bool:
     """发送企业微信消息"""
-    webhook = os.getenv("WECHAT_WEBHOOK", "")
+    webhook = get_secret("WECHAT_WEBHOOK")
     if not webhook:
         return False
     msgtype = "markdown" if markdown else "text"
@@ -170,8 +170,8 @@ def send_wechat(content: str, markdown: bool = True) -> bool:
 
 def send_mail(subject: str, text: str) -> None:
     """通过 QQ 邮箱发送纯文本邮件"""
-    qq_email = os.getenv("QQ_EMAIL", "")
-    qq_auth = os.getenv("QQ_MAIL_AUTH", "")
+    qq_email = get_secret("QQ_EMAIL")
+    qq_auth = get_secret("QQ_MAIL_AUTH")
     if not qq_email or not qq_auth:
         log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return

@@ -35,8 +35,10 @@ def test_parse_period_returns():
     assert result["m3"] == 5.10
     assert result["y1"] == 12.80
 
-    # 部分缺失
-    assert _parse_period_returns("var syl_1y = '1.0'") == {}
+    # 部分缺失（单引号也应支持）
+    result2 = _parse_period_returns("var syl_1y = '1.0'")
+    assert result2["m1"] == 1.0
+    assert "m3" not in result2
     # 注意：此处正则使用双引号，单引号不匹配——正确行为
 
 

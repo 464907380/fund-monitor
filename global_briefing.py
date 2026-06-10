@@ -10,6 +10,7 @@ import re
 import datetime
 import os
 from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail
+from config import get_secret as _get_secret
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
 _VOLUME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".volume_history.json")
@@ -34,7 +35,7 @@ GLOBAL_INDICES = [
     ("gb_$gdaxi", "德国DAX"),
 ]
 
-WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK", "")
+WECHAT_WEBHOOK = _get_secret("WECHAT_WEBHOOK")
 
 
 def fetch_sina(code: str) -> dict | None:

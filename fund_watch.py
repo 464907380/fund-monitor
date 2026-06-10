@@ -14,6 +14,7 @@ from typing import Callable
 from email.header import Header
 from email.mime.text import MIMEText
 from config import CFG
+from config import get_secret as _get_secret
 from fund_utils import fetch, clear_cache, fetch_bytes, log, HISTORY_DIR, \
     _color_cls, _color_inline, _strip_html, _send_smtp, send_wechat, send_mail
 
@@ -23,11 +24,29 @@ _FUND_LIST_FALLBACK = [
     {"code": "000979"}, {"code": "320007"}, {"code": "161725"},
     {"code": "001480"}, {"code": "001753"}, {"code": "001170"},
 ]
-FUND_LIST: list[dict] = []  # 占位，稍后由 _load_fund_list() 填充
+FUND_LIST: list[dict] = []  # 占位，稍后由 _load_fund_list() 或 _ensure_fund_list_loaded() 填充
 
-WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK", "")
-QQ_EMAIL = os.getenv("QQ_EMAIL", "")
-QQ_AUTH_CODE = os.getenv("QQ_MAIL_AUTH", "")
+
+def _ensure_fund_list_loaded() -> None:
+    """惰性加载基金列表（替代模块级副作用）"""
+    if FUND_LIST:
+        return  # 已加载
+    _fund_list_path = os.path.join(HISTORY_DIR, "fund_list.json")
+    if os.path.exists(_fund_list_path):
+        try:
+            with open(_fund_list_path, encoding="utf-8") as _f:
+                loaded = json.load(_f)
+            FUND_LIST[:] = loaded
+            log.info("已从 fund_list.json 加载 %d 只基金", len(FUND_LIST))
+        except Exception as _e:
+            log.warning("读取 fund_list.json 失败 (%s)，使用内置默认列表", _e)
+            FUND_LIST[:] = _FUND_LIST_FALLBACK
+    else:
+        FUND_LIST[:] = _FUND_LIST_FALLBACK
+
+WECHAT_WEBHOOK = _get_secret("WECHAT_WEBHOOK")
+QQ_EMAIL = _get_secret("QQ_EMAIL")
+QQ_AUTH_CODE = _get_secret("QQ_MAIL_AUTH")
 
 ALERT_DROP_1M = CFG.get("fund_watch", {}).get("alert_drop_1m", -10)
 ALERT_DROP_1M_RED = CFG.get("fund_watch", {}).get("alert_drop_1m_red", -15)
@@ -37,20 +56,6 @@ ALERT_SCALE_1_5X = CFG.get("fund_watch", {}).get("alert_scale_1_5x", 1.5)
 
 # ── 推荐结果文件（需要 HISTORY_DIR 定义后）──
 _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json")
-
-
-# 在日志就绪后加载基金列表
-_fund_list_path = os.path.join(HISTORY_DIR, "fund_list.json")
-if os.path.exists(_fund_list_path):
-    try:
-        with open(_fund_list_path, encoding="utf-8") as _f:
-            FUND_LIST[:] = json.load(_f)
-        log.info("已从 fund_list.json 加载 %d 只基金", len(FUND_LIST))
-    except Exception as _e:
-        log.warning("读取 fund_list.json 失败 (%s)，使用内置默认列表", _e)
-        FUND_LIST[:] = _FUND_LIST_FALLBACK
-elif not FUND_LIST:
-    FUND_LIST[:] = _FUND_LIST_FALLBACK
 
 
 # ── 推送 ──────────────────────────────────────
@@ -202,7 +207,7 @@ def _parse_period_returns(data: str) -> dict:
     """提取阶段收益：近1月/近3月/近1年"""
     result = {}
     for key, js_var in [("m1", "syl_1y"), ("m3", "syl_3y"), ("y1", "syl_1n")]:
-        m = re.search(rf'var {js_var}\s*=\s*"([-\d.]+)"', data)
+        m = re.search(rf'var {js_var}\s*=\s*["\']([-\d.]+)["\']', data)
         if m:
             result[key] = float(m.group(1))
     return result
@@ -820,16 +825,23 @@ def check(code: str) -> tuple[dict, list[str]]:
 
 # ── 持仓 vs 推荐对比 ──────────────────────────
 
-def _load_recommend_results() -> list[dict] | None:
-    """加载基金推荐结果"""
+def _load_recommend_data() -> dict | None:
+    """加载推荐结果完整数据（含日期和结果列表），合并文件读取"""
     if not os.path.exists(_RECOMMEND_RESULT_FILE):
         return None
     try:
         with open(_RECOMMEND_RESULT_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-        return data.get("results", [])  # type: ignore[no-any-return]
+            return json.load(f)  # type: ignore[no-any-return]
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def _load_recommend_results() -> list[dict] | None:
+    """加载基金推荐结果列表"""
+    data = _load_recommend_data()
+    if data is None:
+        return None
+    return data.get("results", [])  # type: ignore[no-any-return]
 
 
 def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
@@ -845,19 +857,20 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         lines.append("   之后晚报自动展示推荐排行")
         return lines
 
-    try:
-        with open(_RECOMMEND_RESULT_FILE, encoding="utf-8") as f:
-            meta = json.load(f)
-        rec_date = meta.get("date", "")
-        if rec_date:
-            rec_dt = datetime.date.fromisoformat(rec_date)
-            days_old = (datetime.date.today() - rec_dt).days
-            if days_old > 14:
-                lines.append("")
-                lines.append(f"⚠️ 推荐结果已是 {days_old} 天前的，建议重新运行")
-                lines.append(f"   python fund_recommend.py")
-    except Exception:
-        pass
+    # 检查推荐结果是否过旧（复用已加载的数据）
+    data = _load_recommend_data()
+    if data:
+        try:
+            rec_date = data.get("date", "")
+            if rec_date:
+                rec_dt = datetime.date.fromisoformat(rec_date)
+                days_old = (datetime.date.today() - rec_dt).days
+                if days_old > 14:
+                    lines.append("")
+                    lines.append(f"⚠️ 推荐结果已是 {days_old} 天前的，建议重新运行")
+                    lines.append(f"   python fund_recommend.py")
+        except Exception:
+            pass
 
     lines.append("")
     lines.append("🏆 **市场优选基金 TOP 10**  （11 维评分）")
@@ -898,6 +911,7 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
 # ── 主程序 ────────────────────────────────────
 
 def main() -> None:
+    _ensure_fund_list_loaded()
     today = datetime.date.today().isoformat()
     log.info("====== 基金晚报 %s 开始 ======", today)
 
