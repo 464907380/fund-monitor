@@ -430,6 +430,9 @@ def test_calc_nav_metrics():
     assert "sharpe" in result
     assert "sortino" in result
     assert "win_rate" in result
+    assert "profit_ratio" in result
+    assert "recovery" in result
+    assert "max_loss_days" in result
     # 稳步上涨应该有正的年化收益
     assert result["annual_return"] > 0
 
@@ -457,6 +460,10 @@ def test_calc_score_transparent():
         "inst": 40.0,                           # 机构认可
         "sc": 20.0,                             # 规模适中
         "rate": 0.0,                            # 0费率
+        "profit_ratio": 1.8,                    # 盈亏比好
+        "recovery": 25.0,                       # 修复能力强
+        "sy6": 80.0,                            # 长期表现好
+        "internal": 0.5,                        # 基金经理买了挺多
     }
     score = _calc_score(d)
     assert 70 <= score <= 100  # 应该高分
@@ -471,6 +478,10 @@ def test_calc_score_transparent():
         "inst": 0.5,                            # 机构不认可
         "sc": 0.3,                              # 规模太小
         "rate": 1.5,                            # 费率高
+        "profit_ratio": 0.6,                    # 亏的时候比赚的时候多
+        "recovery": 0.5,                        # 修复能力差
+        "sy6": -10.0,                           # 长期亏损
+        "internal": 0.0,                        # 经理自己都不买
     }
     score2 = _calc_score(d2)
     assert 0 <= score2 <= 30  # 应该低分

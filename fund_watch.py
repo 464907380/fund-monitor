@@ -357,6 +357,21 @@ def _parse_institutional_ratio(data: str) -> float | None:
     return float(vs[-1].strip()) if vs else None
 
 
+def _parse_internal_ratio(data: str) -> float | None:
+    """提取内部持有比例（基金经理自己买了多少）"""
+    m = re.search(r'"内部持有比例","data":\[([^\]]+)\]', data)
+    if not m:
+        return None
+    vs = m.group(1).split(",")
+    return float(vs[-1].strip()) if vs else None
+
+
+def _parse_syl_6y(data: str) -> float | None:
+    """提取近6年收益率"""
+    m = re.search(r'syl_6y="([-\d.]+)"', data)
+    return float(m.group(1)) if m else None
+
+
 def _parse_net_trend(data: str) -> list[dict] | None:
     """提取净值趋势（最近6条，供日报表使用）"""
     nav = _parse_full_nav(data)
@@ -463,23 +478,26 @@ def _calc_score(d: dict) -> float:
     """
     计算基金综合评分 (0-100)
 
-    8 维全透明评分（不分基金类型，只看绝对表现）：
-      - 年化收益率 (20%): 长期年化回报，赚钱才是硬道理
-      - 夏普比率 (20%): 每单位总波动的超额收益
-      - 索提诺比率 (15%): 每单位下行波动的超额收益（只惩罚下跌）
-      - 最大回撤 (10%): 历史最大跌幅，越小越好
-      - 上行胜率 (10%): 日收益率 > 0 的天数占比
-      - 机构持有比例 (10%): 机构资金认可度
+    12 维全透明评分：
+      - 年化收益率 (15%): 长期年化回报
+      - 夏普比率 (15%): 每单位总波动的超额收益
+      - 索提诺比率 (10%): 每单位下行波动的超额收益
+      - 盈亏比 (10%): 平均盈利 / 平均亏损，赚比亏多才算好
+      - 修复系数 (10%): 总收益 / 最大回撤，跌下去能涨回来
+      - 近6年收益 (10%): 穿越牛熊的长期表现
+      - 最大回撤 (5%): 历史最大跌幅
+      - 上行胜率 (5%): 日收益率 > 0 的天数占比
+      - 机构持有比例 (5%): 机构资金认可度
+      - 内部持有比例 (5%): 基金经理自己的钱
       - 基金规模 (5%): 1~50亿最理想
       - 费率 (5%): 申购费越低越好
     """
     scores: list[float] = []
     total_weight = 0.0
 
-    # 1. 年化收益率评分 (20%) — 不看类型，赚钱就行
+    # 1. 年化收益率评分 (15%)
     ann_ret = d.get("annual_return")
     if ann_ret is not None:
-        # >50% → 100, 30%→80, 20%→65, 10%→45, 5%→30, 0%→10, 负→0
         if ann_ret >= 50:       ret_score = 100
         elif ann_ret >= 30:     ret_score = 80 + (ann_ret - 30) / 20 * 20
         elif ann_ret >= 20:     ret_score = 65 + (ann_ret - 20) / 10 * 15
@@ -487,66 +505,91 @@ def _calc_score(d: dict) -> float:
         elif ann_ret >= 5:      ret_score = 30 + (ann_ret - 5) / 5 * 15
         elif ann_ret >= 0:      ret_score = 10 + ann_ret / 5 * 20
         else:                   ret_score = 0
-        scores.append(min(100, ret_score) * 0.20)
-        total_weight += 0.20
+        scores.append(min(100, ret_score) * 0.15)
+        total_weight += 0.15
 
-    # 2. 夏普比率 (20%) — 每单位总波动的超额收益
+    # 2. 夏普比率 (15%)
     sharpe = d.get("sharpe")
     if sharpe is not None:
-        # >3 → 100, 2→80, 1.5→65, 1→50, 0.5→30, 0→10, <0→0
         s = max(0, min(100, sharpe * 25 + 10))
-        scores.append(s * 0.20)
-        total_weight += 0.20
-
-    # 3. 索提诺比率 (15%) — 每单位下行波动的超额收益
-    sortino = d.get("sortino")
-    if sortino is not None:
-        # >4 → 100, 3→80, 2→60, 1→35, 0→10, <0→0
-        s = max(0, min(100, sortino * 17 + 10))
         scores.append(s * 0.15)
         total_weight += 0.15
 
-    # 4. 最大回撤 (10%)
+    # 3. 索提诺比率 (10%)
+    sortino = d.get("sortino")
+    if sortino is not None:
+        s = max(0, min(100, sortino * 17 + 10))
+        scores.append(s * 0.10)
+        total_weight += 0.10
+
+    # 4. 盈亏比 (10%) — 赚的时候比亏的时候多多少
+    pr = d.get("profit_ratio")
+    if pr is not None:
+        # >2 → 100, 1.5→75, 1.2→55, 1→30, 0.8→10, <0.5→0
+        pr_score = max(0, min(100, (pr - 0.5) * 70))
+        scores.append(pr_score * 0.10)
+        total_weight += 0.10
+
+    # 5. 修复系数 (10%) — 总收益 / 回撤，越高越好
+    rec = d.get("recovery")
+    if rec is not None:
+        # >20 → 100, 10→70, 5→45, 3→30, 1→10
+        rec_score = max(0, min(100, rec * 4 + 5))
+        scores.append(rec_score * 0.10)
+        total_weight += 0.10
+
+    # 6. 近6年收益 (10%) — 穿越牛熊
+    sy6 = d.get("sy6")
+    if sy6 is not None:
+        if sy6 >= 100:   sy6_score = 100
+        elif sy6 >= 50:  sy6_score = 80 + (sy6 - 50) / 50 * 20
+        elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 20
+        elif sy6 >= 0:   sy6_score = 20 + sy6 / 20 * 40
+        else:            sy6_score = 0
+        scores.append(sy6_score * 0.10)
+        total_weight += 0.10
+
+    # 7. 最大回撤 (5%)
     max_dd = d.get("max_dd")
     if max_dd is not None:
-        # <10% → 90分, 20%→70, 30%→50, 40%→30, 50%→10
         dd_score = max(0, min(90, 110 - max_dd * 2))
-        scores.append(dd_score * 0.10)
-        total_weight += 0.10
+        scores.append(dd_score * 0.05)
+        total_weight += 0.05
 
-    # 5. 上行胜率 (10%)
+    # 8. 上行胜率 (5%)
     win_rate = d.get("win_rate")
     if win_rate is not None:
-        # >55% → 90, 50%→70, 45%→50, 40%→30, <35%→10
         wr_score = max(0, min(90, (win_rate - 30) * 3))
-        scores.append(wr_score * 0.10)
-        total_weight += 0.10
+        scores.append(wr_score * 0.05)
+        total_weight += 0.05
 
-    # 6. 机构持有比例 (10%)
+    # 9. 机构持有比例 (5%)
     inst = d.get("inst")
     if inst is not None:
-        # >50% → 90, 30%→70, 10%→50, 5%→30, <1%→10
         inst_score = max(10, min(90, inst * 1.5 + 20))
-        scores.append(inst_score * 0.10)
-        total_weight += 0.10
+        scores.append(inst_score * 0.05)
+        total_weight += 0.05
 
-    # 7. 基金规模 (5%)
+    # 10. 内部持有比例 (5%) — 基金经理买了多少
+    internal = d.get("internal")
+    if internal is not None:
+        # >0.5% → 90, 0.1%→60, 0.05%→40, 0.01%→20, 0→0
+        internal_score = max(0, min(90, internal * 150))
+        scores.append(internal_score * 0.05)
+        total_weight += 0.05
+
+    # 11. 基金规模 (5%)
     sc = d.get("sc")
     if sc is not None:
-        if 1 <= sc <= 50:
-            scale_score = 90
-        elif 0.5 <= sc < 1:
-            scale_score = 60
-        elif 50 < sc <= 100:
-            scale_score = 70
-        elif sc > 100:
-            scale_score = 40
-        else:
-            scale_score = 30  # < 0.5亿
+        if 1 <= sc <= 50:       scale_score = 90
+        elif 0.5 <= sc < 1:     scale_score = 60
+        elif 50 < sc <= 100:    scale_score = 70
+        elif sc > 100:          scale_score = 40
+        else:                   scale_score = 30
         scores.append(scale_score * 0.05)
         total_weight += 0.05
 
-    # 8. 费率 (5%)
+    # 12. 费率 (5%)
     rate = d.get("rate")
     if rate is not None:
         rate_score = max(20, 100 - rate * 40)
@@ -568,9 +611,12 @@ def _calc_nav_metrics(full_nav: list[dict]) -> dict:
       volatility: 年化波动率(%)
       max_dd: 最大回撤(%)
       calmar: 卡玛比率
-      sharpe: 夏普比率 — (年化收益 - 无风险) / 年化波动率
-      sortino: 索提诺比率 — (年化收益 - 无风险) / 下行波动率
-      win_rate: 上行胜率(%) — 日收益率 > 0 的天数占比
+      sharpe: 夏普比率
+      sortino: 索提诺比率
+      win_rate: 上行胜率(%)
+      profit_ratio: 盈亏比 — 平均盈利 / 平均亏损
+      recovery: 修复系数 — 总收益 / 最大回撤
+      max_loss_days: 最长连续下跌天数
     """
     if not full_nav or len(full_nav) < 30:
         return {}
@@ -620,6 +666,25 @@ def _calc_nav_metrics(full_nav: list[dict]) -> dict:
     # 上行胜率
     win_rate = sum(1 for r in daily_r if r > 0) / n * 100
 
+    # 盈亏比
+    avg_win = sum(r for r in daily_r if r > 0) / max(sum(1 for r in daily_r if r > 0), 1)
+    avg_loss = abs(sum(r for r in daily_r if r < 0) / max(sum(1 for r in daily_r if r < 0), 1))
+    profit_ratio = avg_win / avg_loss if avg_loss > 0 else 0
+
+    # 修复系数 = 总收益 / 最大回撤
+    total_return_pct = total_return * 100
+    recovery = abs(total_return_pct / max_dd) if max_dd > 0 else 0
+
+    # 最长连续下跌天数
+    max_loss_days = 0
+    cur = 0
+    for r in daily_r:
+        if r < 0:
+            cur += 1
+            max_loss_days = max(max_loss_days, cur)
+        else:
+            cur = 0
+
     return {
         "annual_return": round(annual_return, 2),
         "volatility": round(volatility, 2),
@@ -628,6 +693,9 @@ def _calc_nav_metrics(full_nav: list[dict]) -> dict:
         "sharpe": round(sharpe, 2),
         "sortino": round(sortino, 2),
         "win_rate": round(win_rate, 1),
+        "profit_ratio": round(profit_ratio, 2),
+        "recovery": round(recovery, 2),
+        "max_loss_days": max_loss_days,
     }
 
 
@@ -677,6 +745,10 @@ def get(code: str) -> dict:
         d["rank"], d["rank_total"] = rp
     if rate := _parse_fund_rate(data):
         d["rate"] = rate
+    if ir := _parse_internal_ratio(data):
+        d["internal"] = ir
+    if sy6 := _parse_syl_6y(data):
+        d["sy6"] = sy6
 
     return d
 
@@ -831,6 +903,10 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_sc": d.get("sc"),
         "_rate": d.get("rate"),
         "_annual_return": d.get("annual_return"),
+        "_profit_ratio": d.get("profit_ratio"),
+        "_recovery": d.get("recovery"),
+        "_sy6": d.get("sy6"),
+        "_internal": d.get("internal"),
     }
     return row, alerts
 
@@ -867,6 +943,10 @@ def main() -> None:
             "inst": r.get("_inst"),
             "sc": r.get("_sc"),
             "rate": r.get("_rate"),
+            "profit_ratio": r.get("_profit_ratio"),
+            "recovery": r.get("_recovery"),
+            "sy6": r.get("_sy6"),
+            "internal": r.get("_internal"),
         }
         r["score"] = _calc_score(d)
 
