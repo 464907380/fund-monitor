@@ -42,7 +42,7 @@ def _load_env(path: str) -> None:
                         val = val[1:-1]
                     os.environ[key] = val
     except OSError:
-        pass
+        pass  # .env 文件不存在是正常的
 
 
 # 在加载任何配置前，先加载 .env 到环境变量（这样 fund_watch.py 的 os.getenv() 能读到）

@@ -17,6 +17,7 @@ import re
 import urllib.request
 import datetime
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from fund_watch import get, log, _calc_score
@@ -177,31 +178,44 @@ def main() -> None:
     print(f"   剔除负收益后: {len(candidates)} 只全部进入深度评分")
     print(f"   ⏱ 预计耗时约 {est_min} 分钟\n")
 
-    # ── 逐个拉取数据，12 维评分 ──
+    # ── 并行拉取数据，12 维评分 ──
     scored: list[tuple] = []
+    futures = {}
 
     print(f"{'进度':<8} {'代码':<7} {'基金名':<20} {'年化':<8} {'评分':<6}")
     print("-" * 55)
 
-    for i, row in enumerate(candidates, 1):
-        code = row[0]
-        name = row[1]
-
+    def _score_one(code: str, name: str) -> tuple | None:
+        """单只基金评分（供并行使用）"""
         try:
             d = get(code)
             score = _calc_score(d)
             ar = d.get("annual_return", 0)
-            scored.append((score, code, name, ar,
-                          d.get("sharpe", 0), d.get("sortino", 0),
-                          d.get("max_dd", 0), d.get("win_rate", 0),
-                          d.get("inst", 0), d.get("sc", 0), d.get("rate", 0),
-                          d.get("profit_ratio", 0), d.get("recovery", 0),
-                          d.get("sy6", 0), d.get("internal", 0)))
-            ar_str = f"{ar:.1f}%" if isinstance(ar, (int, float)) else "?"
-            print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {ar_str:<8} {score:<6.1f}")
+            return (score, code, name, ar,
+                    d.get("sharpe", 0), d.get("sortino", 0),
+                    d.get("max_dd", 0), d.get("win_rate", 0),
+                    d.get("inst", 0), d.get("sc", 0), d.get("rate", 0),
+                    d.get("profit_ratio", 0), d.get("recovery", 0),
+                    d.get("sy6", 0), d.get("internal", 0))
         except Exception as e:
             log.debug("跳过 %s: %s", code, e)
-            continue
+            return None
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        for row in candidates:
+            code = row[0]
+            name = row[1]
+            futures[executor.submit(_score_one, code, name)] = (code, name)
+
+        for i, future in enumerate(as_completed(futures), 1):
+            code, name = futures[future]
+            result = future.result()
+            if result:
+                scored.append(result)
+                ar_str = f"{result[3]:.1f}%" if isinstance(result[3], (int, float)) else "?"
+                print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {ar_str:<8} {result[0]:<6.1f}")
+            else:
+                print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {'跳过':<8}")
 
     scored.sort(key=lambda x: x[0], reverse=True)
 

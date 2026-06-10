@@ -16,27 +16,27 @@ from fund_watch import fetch, send_wechat, log, clear_cache, FUND_LIST, \
     send_mail, _parse_holdings, WECHAT_WEBHOOK, QQ_EMAIL, QQ_AUTH_CODE
 
 # ── 基金急涨急跌阈值 ──────────────────────────
-ALERT_DROP_ONCE = CFG["fund_monitor"]["alert_drop_once"]
-ALERT_DROP_ONCE_YELLOW = CFG["fund_monitor"]["alert_drop_once_yellow"]
-ALERT_JUMP_ONCE = CFG["fund_monitor"]["alert_jump_once"]
-ALERT_JUMP_ONCE_YELLOW = CFG["fund_monitor"]["alert_jump_once_yellow"]
-ALERT_ACCUM_DROP = CFG["fund_monitor"]["alert_accum_drop"]
-ALERT_ACCUM_DROP_YELLOW = CFG["fund_monitor"]["alert_accum_drop_yellow"]
-ALERT_ACCUM_JUMP = CFG["fund_monitor"]["accum_jump"]
-ALERT_ACCUM_JUMP_YELLOW = CFG["fund_monitor"]["accum_jump_yellow"]
+ALERT_DROP_ONCE = CFG.get("fund_monitor", {}).get("alert_drop_once", -3)
+ALERT_DROP_ONCE_YELLOW = CFG.get("fund_monitor", {}).get("alert_drop_once_yellow", -2)
+ALERT_JUMP_ONCE = CFG.get("fund_monitor", {}).get("alert_jump_once", 3)
+ALERT_JUMP_ONCE_YELLOW = CFG.get("fund_monitor", {}).get("alert_jump_once_yellow", 2)
+ALERT_ACCUM_DROP = CFG.get("fund_monitor", {}).get("alert_accum_drop", -7)
+ALERT_ACCUM_DROP_YELLOW = CFG.get("fund_monitor", {}).get("alert_accum_drop_yellow", -5)
+ALERT_ACCUM_JUMP = CFG.get("fund_monitor", {}).get("accum_jump", 7)
+ALERT_ACCUM_JUMP_YELLOW = CFG.get("fund_monitor", {}).get("accum_jump_yellow", 5)
 
 # ── 个股急涨急跌阈值（持仓监控） ──────────────
-STOCK_DROP_RED = CFG["fund_monitor"]["stock_alert_drop_red"]
-STOCK_DROP_YELLOW = CFG["fund_monitor"]["stock_alert_drop_yellow"]
-STOCK_JUMP_RED = CFG["fund_monitor"]["stock_alert_jump_red"]
-STOCK_JUMP_YELLOW = CFG["fund_monitor"]["stock_alert_jump_yellow"]
-STOCK_ACCUM_DROP_RED = CFG["fund_monitor"]["stock_alert_accum_drop_red"]
-STOCK_ACCUM_DROP_YELLOW = CFG["fund_monitor"]["stock_alert_accum_drop_yellow"]
-STOCK_ACCUM_JUMP_RED = CFG["fund_monitor"]["stock_alert_accum_jump_red"]
-STOCK_ACCUM_JUMP_YELLOW = CFG["fund_monitor"]["stock_alert_accum_jump_yellow"]
+STOCK_DROP_RED = CFG.get("fund_monitor", {}).get("stock_alert_drop_red", -5)
+STOCK_DROP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_drop_yellow", -3)
+STOCK_JUMP_RED = CFG.get("fund_monitor", {}).get("stock_alert_jump_red", 5)
+STOCK_JUMP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_jump_yellow", 3)
+STOCK_ACCUM_DROP_RED = CFG.get("fund_monitor", {}).get("stock_alert_accum_drop_red", -10)
+STOCK_ACCUM_DROP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_accum_drop_yellow", -7)
+STOCK_ACCUM_JUMP_RED = CFG.get("fund_monitor", {}).get("stock_alert_accum_jump_red", 10)
+STOCK_ACCUM_JUMP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_accum_jump_yellow", 7)
 
 # ── 轮询间隔（秒） ────────────────────────────
-POLL_INTERVAL = CFG["fund_monitor"]["poll_interval_seconds"]
+POLL_INTERVAL = CFG.get("fund_monitor", {}).get("poll_interval_seconds", 600)
 
 # ── 节假日检测 ────────────────────────────────
 # 固定日期节假日（公历）
@@ -47,10 +47,10 @@ FIXED_HOLIDAYS = {
 }
 
 _HOLIDAY_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".holiday_cache.json")
-_HOLIDAY_CACHE_TTL = CFG["fund_monitor"]["holiday_cache_ttl"]
+_HOLIDAY_CACHE_TTL = CFG.get("fund_monitor", {}).get("holiday_cache_ttl", 86400)
 
 # 连续几次无数据则判定为节假日
-MAX_EMPTY_ROUNDS = CFG["fund_monitor"]["max_empty_rounds"]
+MAX_EMPTY_ROUNDS = CFG.get("fund_monitor", {}).get("max_empty_rounds", 2)
 
 # ── 个股监控缓存（持仓一日内不变） ────────────
 _holdings_cache: dict[str, list[dict]] = {}
@@ -67,7 +67,7 @@ def _load_holiday_cache() -> dict:
             with open(_HOLIDAY_CACHE_FILE, encoding="utf-8") as f:
                 return json.load(f)  # type: ignore[no-any-return]
         except Exception:
-            pass
+            pass  # 缓存文件损坏或格式不对，重新获取
     return {}
 
 
@@ -202,6 +202,7 @@ def _load_snapshot(today: str) -> tuple[dict, dict, int, bool] | None:
         with open(_STATE_SNAPSHOT, encoding="utf-8") as f:
             snap = json.load(f)
         if snap.get("today") != today:
+            _clear_snapshot()  # 旧日期快照，清理掉
             return None
         log.info("已从快照恢复监控状态（%d 只基金 + %d 只个股）",
                  len(snap.get("states", {})), len(snap.get("stock_states", {})))
@@ -228,8 +229,8 @@ def _clear_snapshot() -> None:
 # ── 持仓个股监控 ──────────────────────────────
 
 def _sina_stock_code(code: str) -> str:
-    """将基金持仓股票代码转为新浪格式：sh600519 / sz000333 / hk00700"""
-    if code.startswith("6"):
+    """将基金持仓股票代码转为新浪格式：sh600519 / sz000333 / hk00700 / sh688981"""
+    if code.startswith("6") or code.startswith("8"):
         return f"sh{code}"
     # 港股：5 位纯数字（如 00700）或带 hk 前缀
     if code.startswith("hk") or code.startswith("HK"):

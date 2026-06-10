@@ -31,10 +31,10 @@ WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK", "")
 QQ_EMAIL = os.getenv("QQ_EMAIL", "")
 QQ_AUTH_CODE = os.getenv("QQ_MAIL_AUTH", "")
 
-ALERT_DROP_1M = CFG["fund_watch"]["alert_drop_1m"]
-ALERT_DROP_1M_RED = CFG["fund_watch"]["alert_drop_1m_red"]
-ALERT_SCALE_2X = CFG["fund_watch"]["alert_scale_2x"]
-ALERT_SCALE_1_5X = CFG["fund_watch"]["alert_scale_1_5x"]
+ALERT_DROP_1M = CFG.get("fund_watch", {}).get("alert_drop_1m", -10)
+ALERT_DROP_1M_RED = CFG.get("fund_watch", {}).get("alert_drop_1m_red", -15)
+ALERT_SCALE_2X = CFG.get("fund_watch", {}).get("alert_scale_2x", 2.0)
+ALERT_SCALE_1_5X = CFG.get("fund_watch", {}).get("alert_scale_1_5x", 1.5)
 
 HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -68,12 +68,12 @@ elif not FUND_LIST:
     FUND_LIST[:] = _FUND_LIST_FALLBACK
 
 _cache: dict[str, tuple[float, str]] = {}       # url -> (timestamp, data)
-_CACHE_TTL = CFG["network"]["cache_ttl_seconds"]
-_CACHE_MAX = CFG["network"]["cache_max_entries"]
+_CACHE_TTL = CFG.get("network", {}).get("cache_ttl_seconds", 300)
+_CACHE_MAX = CFG.get("network", {}).get("cache_max_entries", 100)
 
 # ── 重试配置 ──────────────────────────────────
-_RETRY_MAX = CFG["network"]["retry_max"]
-_RETRY_BACKOFF = CFG["network"]["retry_backoff_seconds"]
+_RETRY_MAX = CFG.get("network", {}).get("retry_max", 3)
+_RETRY_BACKOFF = CFG.get("network", {}).get("retry_backoff_seconds", [1, 3, 8])
 
 
 def _cache_evict() -> None:
@@ -206,7 +206,8 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     if not os.path.exists(tpl_path):
         log.warning("email_template.html 不存在，跳过邮件")
         return
-    html = open(tpl_path, encoding="utf-8").read()
+    with open(tpl_path, encoding="utf-8") as f:
+        html = f.read()
     html = html.replace("{{DATE}}", today)
 
     # 按评分排序
@@ -773,11 +774,11 @@ def save_hist(code: str, h: dict) -> None:
 
 # ── 主检查逻辑 ────────────────────────────────
 
-STAGNATION_THRESHOLD = CFG["fund_watch"]["stagnation_threshold"]
-STAGNATION_DAYS = CFG["fund_watch"]["stagnation_days"]
-CONSECUTIVE_DROP_DAYS = CFG["fund_watch"]["consecutive_drop_days"]
-CONSECUTIVE_DROP_TOTAL = CFG["fund_watch"]["consecutive_drop_total"]
-DIVIDEND_DROP = CFG["fund_watch"]["dividend_drop"]
+STAGNATION_THRESHOLD = CFG.get("fund_watch", {}).get("stagnation_threshold", 0.05)
+STAGNATION_DAYS = CFG.get("fund_watch", {}).get("stagnation_days", 3)
+CONSECUTIVE_DROP_DAYS = CFG.get("fund_watch", {}).get("consecutive_drop_days", 3)
+CONSECUTIVE_DROP_TOTAL = CFG.get("fund_watch", {}).get("consecutive_drop_total", -3)
+DIVIDEND_DROP = CFG.get("fund_watch", {}).get("dividend_drop", -4)
 
 
 def check_stagnation(navs: list[dict]) -> str | None:
