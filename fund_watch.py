@@ -239,12 +239,13 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     rank_items = []
     for i, r in enumerate(rows_sorted[:5], 1):
         badge = medals[i - 1] if i <= 3 else f"{i}."
-        rp = r.get("rank_pct", "")
+        ann_ret = r.get("_annual_return", 0)
+        ar_str = f"年化{ann_ret:.1f}%" if isinstance(ann_ret, (int, float)) else ""
         rank_items.append(
             f'<div style="font-size:13px;margin:4px 0;padding:4px 0;'
             f'border-bottom:1px solid #eee;">'
             f'{badge} <b>{r["name_short"]}</b> — {r.get("score", 0):.1f}分 '
-            f'{rp} {r["y1"]}</div>'
+            f'{ar_str} {r["y1"]}</div>'
         )
     if rank_items:
         extra_parts.append(
@@ -297,8 +298,12 @@ def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
     rank_lines = ["", "**🏆 基金综合评分排名**"]
     for i, r in enumerate(rows_sorted[:5], 1):
         badge = medals[i - 1] if i <= 3 else f"{i}."
-        rp = r.get("rank_pct", "")
-        rank_lines.append(f"{badge} **{r['name_short']}** — {r.get('score', 0):.1f}分  {rp}  {r['y1']}")
+        ann_ret = r.get("_annual_return", 0)
+        if isinstance(ann_ret, (int, float)):
+            ar_str = f"年化{ann_ret:.1f}%"
+        else:
+            ar_str = ""
+        rank_lines.append(f"{badge} **{r['name_short']}** — {r.get('score', 0):.1f}分  {ar_str}  {r['y1']}")
     md_lines.append("\n".join(rank_lines))
     if alerts:
         md_lines.append("")
@@ -458,9 +463,9 @@ def _calc_score(d: dict) -> float:
     """
     计算基金综合评分 (0-100)
 
-    8 维透明评分（所有数据均可追溯）：
-      - 同类排名百分位 (20%): 在同类基金中的排位
-      - 夏普比率 (20%): 每单位总波动的超额收益（经典风险调整指标）
+    8 维全透明评分（不分基金类型，只看绝对表现）：
+      - 年化收益率 (20%): 长期年化回报，赚钱才是硬道理
+      - 夏普比率 (20%): 每单位总波动的超额收益
       - 索提诺比率 (15%): 每单位下行波动的超额收益（只惩罚下跌）
       - 最大回撤 (10%): 历史最大跌幅，越小越好
       - 上行胜率 (10%): 日收益率 > 0 的天数占比
@@ -471,19 +476,18 @@ def _calc_score(d: dict) -> float:
     scores: list[float] = []
     total_weight = 0.0
 
-    # 1. 同类排名评分 (20%)
-    rk = d.get("rank")
-    rk_total = d.get("rank_total")
-    if rk is not None and rk_total and rk_total > 0:
-        pct = rk / rk_total * 100
-        if pct <= 1:        rank_score = 100
-        elif pct <= 5:      rank_score = 95
-        elif pct <= 10:     rank_score = 85
-        elif pct <= 20:     rank_score = 70
-        elif pct <= 30:     rank_score = 55
-        elif pct <= 50:     rank_score = 35
-        else:               rank_score = max(0, 25 - (pct - 50) * 0.5)
-        scores.append(rank_score * 0.20)
+    # 1. 年化收益率评分 (20%) — 不看类型，赚钱就行
+    ann_ret = d.get("annual_return")
+    if ann_ret is not None:
+        # >50% → 100, 30%→80, 20%→65, 10%→45, 5%→30, 0%→10, 负→0
+        if ann_ret >= 50:       ret_score = 100
+        elif ann_ret >= 30:     ret_score = 80 + (ann_ret - 30) / 20 * 20
+        elif ann_ret >= 20:     ret_score = 65 + (ann_ret - 20) / 10 * 15
+        elif ann_ret >= 10:     ret_score = 45 + (ann_ret - 10) / 10 * 20
+        elif ann_ret >= 5:      ret_score = 30 + (ann_ret - 5) / 5 * 15
+        elif ann_ret >= 0:      ret_score = 10 + ann_ret / 5 * 20
+        else:                   ret_score = 0
+        scores.append(min(100, ret_score) * 0.20)
         total_weight += 0.20
 
     # 2. 夏普比率 (20%) — 每单位总波动的超额收益
@@ -826,6 +830,7 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_inst": d.get("inst"),
         "_sc": d.get("sc"),
         "_rate": d.get("rate"),
+        "_annual_return": d.get("annual_return"),
     }
     return row, alerts
 
@@ -851,11 +856,10 @@ def main() -> None:
         except Exception as e:
             log.error("❌ %s: %s", f["code"], e)
 
-    # 第二遍：计算评分（不需要 peer_returns，全透明指标）
+    # 第二遍：计算评分（全透明指标，不分类型）
     for r in raw_rows:
         d = {
-            "rank": r.get("_rank"),
-            "rank_total": r.get("_rank_total"),
+            "annual_return": r.get("_annual_return"),
             "sharpe": r.get("_sharpe"),
             "sortino": r.get("_sortino"),
             "max_dd": r.get("_max_dd"),
@@ -865,7 +869,6 @@ def main() -> None:
             "rate": r.get("_rate"),
         }
         r["score"] = _calc_score(d)
-        r["rank_pct"] = _rank_percentile_str(d)
 
     # 按综合评分排序
     rows = sorted(raw_rows, key=lambda r: r.get("score", 0), reverse=True)
@@ -890,13 +893,14 @@ def main() -> None:
     if rows:
         lines.append("")
         lines.append("🏆 基金综合评分排名")
-        lines.append(f"{'排名':<4} {'基金名':<14} {'评分':<6} {'同类排名':<12} {'近1年':<8} {'经理':<6}")
+        lines.append(f"{'排名':<4} {'基金名':<14} {'评分':<6} {'年化收益':<10} {'近1年':<8} {'经理':<6}")
         lines.append("-" * 56)
         medals = ["🥇", "🥈", "🥉"]
         for i, r in enumerate(rows[:5], 1):
             badge = medals[i - 1] if i <= 3 else f"{i:>2d}."
-            rp = r.get("rank_pct", "")
-            lines.append(f"{badge:<4} {r['name_short']:<14} {r.get('score', 0):<6.1f} {rp:<12} {r['y1']:<8} {r['mgr']:<6}")
+            ann_ret = r.get("_annual_return", 0)
+            ar_str = f"{ann_ret:.1f}%" if isinstance(ann_ret, (int, float)) else ""
+            lines.append(f"{badge:<4} {r['name_short']:<14} {r.get('score', 0):<6.1f} {ar_str:<10} {r['y1']:<8} {r['mgr']:<6}")
     full_text = "\n".join(lines)
 
     print(full_text)

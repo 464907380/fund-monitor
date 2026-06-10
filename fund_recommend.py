@@ -19,7 +19,7 @@ import urllib.request
 import datetime
 
 try:
-    from fund_watch import get, log, _calc_score, _rank_percentile_str
+    from fund_watch import get, log, _calc_score
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
     sys.exit(1)
@@ -99,7 +99,7 @@ def main() -> None:
 
     # 拉取详细评分数据
     top_candidates = candidates[:MAX_CANDIDATES]
-    scored: list[tuple] = []  # (score, code, name, rank_pct, sharpe, max_dd, win_rate, inst)
+    scored: list[tuple] = []  # (score, code, name, sharpe, sortino, max_dd, win_rate, inst, sc, rate)
 
     print(f"{'进度':<6} {'代码':<7} {'基金名':<20} {'近1年':<8} {'评分':<6}")
     print("-" * 55)
@@ -112,8 +112,7 @@ def main() -> None:
         try:
             d = get(code)
             score = _calc_score(d)
-            rp = _rank_percentile_str(d)
-            scored.append((score, code, name, rp,
+            scored.append((score, code, name,
                           d.get("sharpe", 0), d.get("sortino", 0),
                           d.get("max_dd", 0), d.get("win_rate", 0),
                           d.get("inst", 0), d.get("sc", 0), d.get("rate", 0)))
@@ -131,9 +130,9 @@ def main() -> None:
     print("=" * 80)
     medals = ["🥇", "🥈", "🥉"]
     for i, item in enumerate(scored[:SHOW_TOP], 1):
-        score, code, name, rp = item[0], item[1], item[2], item[3]
+        score, code, name = item[0], item[1], item[2]
         badge = medals[i - 1] if i <= 3 else f" {i}."
-        print(f"{badge} {name} ({code}) — {score:.1f}分 同类{rp}")
+        print(f"{badge} {name} ({code}) — {score:.1f}分")
 
     # 详细对比表
     print()

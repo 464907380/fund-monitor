@@ -449,7 +449,7 @@ def test_calc_score_transparent():
 
     # 一只各项指标都比较优秀的基金
     d = {
-        "rank": 10, "rank_total": 1000,       # top 1%
+        "annual_return": 35.0,                  # 年化 35%
         "sharpe": 2.5,                          # 优秀
         "sortino": 3.5,                         # 优秀
         "max_dd": 15.0,                         # 回撤控制好
@@ -463,9 +463,9 @@ def test_calc_score_transparent():
 
     # 一只各项指标都差的基金
     d2 = {
-        "rank": 900, "rank_total": 1000,        # 垫底
-        "sharpe": -0.1,                         # 负收益
-        "sortino": -0.1,
+        "annual_return": -5.0,                  # 亏钱
+        "sharpe": -0.5,                         # 负收益
+        "sortino": -0.5,
         "max_dd": 55.0,                         # 回撤巨大
         "win_rate": 35.0,                       # 胜率低
         "inst": 0.5,                            # 机构不认可
@@ -473,7 +473,7 @@ def test_calc_score_transparent():
         "rate": 1.5,                            # 费率高
     }
     score2 = _calc_score(d2)
-    assert 0 <= score2 <= 40  # 应该低分
+    assert 0 <= score2 <= 30  # 应该低分
 
     # 空数据返回 0
     assert _calc_score({}) == 0.0
