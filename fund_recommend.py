@@ -58,10 +58,12 @@ def _save_result(scored: list[tuple]) -> None:
         "date": datetime.date.today().isoformat(),
         "results": [
             {"code": item[1], "name": item[2], "score": item[0],
-             "annual_return": item[3], "sharpe": item[4], "sortino": item[5],
-             "max_dd": item[6], "win_rate": item[7], "inst": item[8],
-             "sc": item[9], "rate": item[10], "profit_ratio": item[11],
-             "recovery": item[12], "sy6": item[13], "internal": item[14]}
+             "annual_return": item[3],
+             "m1": item[4], "m3": item[5], "y1": item[6],
+             "sharpe": item[7], "sortino": item[8],
+             "max_dd": item[9], "win_rate": item[10], "inst": item[11],
+             "sc": item[12], "rate": item[13], "profit_ratio": item[14],
+             "recovery": item[15], "sy6": item[16], "internal": item[17]}
             for item in scored
         ]
     }
@@ -192,6 +194,7 @@ def main() -> None:
             score = _calc_score(d)
             ar = d.get("annual_return", 0)
             return (score, code, name, ar,
+                    d.get("m1", ""), d.get("m3", ""), d.get("y1", ""),
                     d.get("sharpe", 0), d.get("sortino", 0),
                     d.get("max_dd", 0), d.get("win_rate", 0),
                     d.get("inst", 0), d.get("sc", 0), d.get("rate", 0),
@@ -235,13 +238,13 @@ def main() -> None:
 
     # 详细对比表
     print()
-    h = f"{'排名':<4} {'代码':<7} {'评分':<6} {'年化%':<7} {'夏普':<6} {'索提诺':<7} {'回撤':<6} {'胜率':<6} {'盈亏比':<7} {'修复':<7} {'近6年':<7} {'内部%':<6}"
+    h = f"{'排名':<4} {'代码':<7} {'评分':<6} {'年化%':<7} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'夏普':<6} {'回撤':<6}"
     print(h)
-    print("-" * 82)
+    print("-" * 62)
     medals2 = ["🥇", "🥈", "🥉"]
     for i, item in enumerate(scored[:SHOW_TOP], 1):
         b = medals2[i-1] if i <= 3 else f" {i}."
-        print(f"{b:<4} {item[1]:<7} {item[0]:<6.1f} {item[3]:<7.1f} {item[4]:<6.2f} {item[5]:<7.2f} {item[6]:<6.1f} {item[7]:<6.1f} {item[11]:<7.2f} {item[12]:<7.1f} {item[13]:<7.1f} {item[14]:<6.3f}")
+        print(f"{b:<4} {item[1]:<7} {item[0]:<6.1f} {item[3]:<7.1f} {item[4]:<8s} {item[5]:<8s} {item[6]:<8s} {item[7]:<6.2f} {item[9]:<6.1f}")
 
     print()
     print("💡 一键加入监控: python fund_recommend.py --add 基金代码")

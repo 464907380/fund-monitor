@@ -951,10 +951,14 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         badge = medals[i - 1] if i <= 3 else f" {i}."
         name = r.get("name", "")[:16]
         ar = r.get("annual_return", 0)
+        m1 = r.get("m1", "")
+        m3 = r.get("m3", "")
+        y1 = r.get("y1", "")
         sharpe = r.get("sharpe", 0)
         dd = r.get("max_dd", 0)
-        wr = r.get("win_rate", 0)
-        lines.append(f"  {badge} {name} — 年化{ar:.1f}%  夏普{sharpe:.2f}  回撤{dd:.1f}%  胜率{wr:.1f}%")
+        lines.append(f"  {badge} {name}")
+        lines.append(f"     年化{ar:.1f}%  近1月{m1}  近3月{m3}  近1年{y1}")
+        lines.append(f"     夏普{sharpe:.2f}  回撤{dd:.1f}%")
 
     lines.append("")
     lines.append(f"💡 加入监控: python fund_recommend.py --add 基金代码")
