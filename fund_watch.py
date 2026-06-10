@@ -245,11 +245,44 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     # 持仓对比
     compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
-        cp = '<tr><td style="padding:12px 14px;margin:0 10px;background:#fffbe6;border:1px solid #e8c300;border-radius:6px;"><p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#b8860b;">🏆 市场优选基金 TOP 5 （11 维评分）</p>'
+        cp = '<tr><td style="padding:12px 14px;background:#f0f8ff;border:1px solid #bcd;border-radius:6px;">'
+        cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#1a1a2e;">🏆 市场优选基金 TOP 5 （11 维评分）</p>'
+        in_table = False
+        header_done = False
         for line in compare_lines:
-            clean = line.strip().replace("**", "")
-            if clean:
+            clean = line.strip()
+            if not clean:
+                if in_table:
+                    cp += '</tbody></table>'
+                    in_table = False
+                cp += '<br>'
+                continue
+            # 管道表分隔行 (|:---|:---|...)
+            if clean.startswith("|:---"):
+                continue
+            # 管道表行
+            if clean.startswith("|"):
+                if not in_table:
+                    in_table = True
+                    header_done = False
+                    cp += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
+                if not header_done:
+                    cp += '<thead><tr>'
+                    for c in clean.strip("|").split("|"):
+                        cp += f'<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #ccc;color:#555;white-space:nowrap;">{c.strip()}</th>'
+                    cp += '</tr></thead><tbody>'
+                    header_done = True
+                else:
+                    cp += '<tr>'
+                    for c in clean.strip("|").split("|"):
+                        cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #eee;color:#444;white-space:nowrap;">{c.strip()}</td>'
+                    cp += '</tr>'
+                continue
+            # 非表行
+            if not in_table:
                 cp += f'<p style="margin:2px 0;font-size:12px;color:#666;">{clean}</p>'
+        if in_table:
+            cp += '</tbody></table>'
         cp += '</td></tr>'
         extra_parts.append(cp)
 
@@ -959,21 +992,21 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
 
     lines.append("")
     lines.append("🏆 **市场优选基金 TOP 5**  （11 维评分）")
+    lines.append("")
+    lines.append(f"|{'排名':<4}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
+    lines.append(f"|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
     medals = ["🥇", "🥈", "🥉"]
     for i, r in enumerate(recs[:5], 1):
         badge = medals[i - 1] if i <= 3 else f" {i}."
-        name = r.get("name", "")[:16]
+        name = r.get("name", "")[:14]
         ar = r.get("annual_return", 0)
         m1 = r.get("m1", "")
         m3 = r.get("m3", "")
         y1 = r.get("y1", "")
         sharpe = r.get("sharpe", 0)
         dd = r.get("max_dd", 0)
-        wr = r.get("win_rate", 0)
         sy3 = r.get("sy3") or r.get("sy6", 0)
-        lines.append(f"  {badge} {name}  —  评分{r.get('score',0):.0f}分  年化{ar:.1f}%")
-        lines.append(f"     近1月{m1}  近3月{m3}  近1年{y1}")
-        lines.append(f"     夏普{sharpe:.2f}  回撤{dd:.1f}%  胜率{wr:.0f}%  近3年{sy3:.1f}%")
+        lines.append(f"|{badge:<4}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
     lines.append("")
     lines.append(f"💡 加入监控: python fund_recommend.py --add 基金代码")
