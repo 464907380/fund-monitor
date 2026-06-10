@@ -24,7 +24,7 @@ system_prompt_file = "prompts/system.md"   # 自动加载项目行为规范
 max_steps         = 0   # executor tool-call rounds; 0 = no limit
 planner_max_steps = 12   # planner read-only tool-call rounds; 0 = no limit
 temperature       = 0.0
-auto_plan   = "off"   # off|on; off keeps plan mode manual
+auto_plan   = "on"   # 自动进入计划模式
 # auto_plan_classifier = "deepseek-flash"   # optional; only used for borderline tasks
 soft_compact_ratio  = 0.5   # notice only; keeps cache-first prefix intact
 compact_ratio       = 0.8   # try compacting when prompt reaches this fraction
@@ -34,7 +34,7 @@ compact_force_ratio = 0.9   # force compacting at this high-water mark
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }   # per-skill overrides
 # subagent_effort = "high"   # optional default effort for subagents
 # subagent_efforts = { review = "max", task = "high" }   # per-tool/skill effort overrides
-# output_style = "explanatory"   # explanatory | learning | concise | custom; empty = default
+output_style = "explanatory"   # 教学式回复
 
 [[providers]]
 name        = "deepseek-flash"
