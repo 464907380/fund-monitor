@@ -245,7 +245,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     # 持仓对比
     compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
-        cp = '<tr><td style="padding:12px 14px;margin:0 10px;background:#fffbe6;border:1px solid #e8c300;border-radius:6px;"><p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#b8860b;">🏆 市场优选基金 TOP 5</p>'
+        cp = '<tr><td style="padding:12px 14px;margin:0 10px;background:#fffbe6;border:1px solid #e8c300;border-radius:6px;"><p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#b8860b;">🏆 市场优选基金 TOP 5 （11 维评分）</p>'
         for line in compare_lines:
             clean = line.strip().replace("**", "")
             if clean:
@@ -945,7 +945,7 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         pass
 
     lines.append("")
-    lines.append("🏆 **市场优选基金 TOP 5**")
+    lines.append("🏆 **市场优选基金 TOP 5**  （11 维评分）")
     medals = ["🥇", "🥈", "🥉"]
     for i, r in enumerate(recs[:5], 1):
         badge = medals[i - 1] if i <= 3 else f" {i}."
@@ -956,9 +956,11 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         y1 = r.get("y1", "")
         sharpe = r.get("sharpe", 0)
         dd = r.get("max_dd", 0)
-        lines.append(f"  {badge} {name}")
-        lines.append(f"     年化{ar:.1f}%  近1月{m1}  近3月{m3}  近1年{y1}")
-        lines.append(f"     夏普{sharpe:.2f}  回撤{dd:.1f}%")
+        wr = r.get("win_rate", 0)
+        sy6 = r.get("sy6", 0)
+        lines.append(f"  {badge} {name}  —  评分{r.get('score',0):.0f}分  年化{ar:.1f}%")
+        lines.append(f"     近1月{m1}  近3月{m3}  近1年{y1}")
+        lines.append(f"     夏普{sharpe:.2f}  回撤{dd:.1f}%  胜率{wr:.0f}%  近6年{sy6:.1f}%")
 
     lines.append("")
     lines.append(f"💡 加入监控: python fund_recommend.py --add 基金代码")

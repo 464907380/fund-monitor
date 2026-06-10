@@ -4,7 +4,19 @@
 
 config_version = 2   # schema marker for diagnostics; old versions may ignore it
 default_model = "deepseek-flash"
-# language      = "zh"   # ui/model language; empty = auto-detect from $LANG / $REASONIX_LANG
+language      = "zh"   # ui/model language; empty = auto-detect from $LANG / $REASONIX_LANG
+
+[network]
+proxy_mode = "auto"   # auto|env|custom|off; auto currently uses env proxy
+# proxy_url  = "socks5://127.0.0.1:7890"   # optional custom override
+# no_proxy   = "localhost,127.0.0.1,.local"   # honored for proxy_mode = "custom"
+
+[network.proxy]
+type = "socks5"   # http|https|socks5|socks5h
+# server = "127.0.0.1"
+# port = 7890
+# username = ""
+# password = "${REASONIX_PROXY_PASSWORD}"   # optional; supports ${VAR} expansion
 
 [agent]
 # system_prompt = """..."""   # omit to use the built-in prompt for this version
@@ -24,12 +36,33 @@ compact_force_ratio = 0.9   # force compacting at this high-water mark
 # subagent_efforts = { review = "max", task = "high" }   # per-tool/skill effort overrides
 # output_style = "explanatory"   # explanatory | learning | concise | custom; empty = default
 
+[[providers]]
+name        = "deepseek-flash"
+kind        = "openai"
+base_url    = "https://api.deepseek.com"
+models      = ["deepseek-v4-flash"]
+default     = "deepseek-v4-flash"
+api_key_env = "DEEPSEEK_API_KEY"
+balance_url = "https://api.deepseek.com/user/balance"   # optional; wallet-balance endpoint shown in the status bar
+context_window = 1000000   # tokens; compaction triggers near this limit
+price       = { cache_hit = 0.02, input = 1, output = 2, currency = "¥" }   # per 1M tokens
+
+[[providers]]
+name        = "deepseek-pro"
+kind        = "openai"
+base_url    = "https://api.deepseek.com"
+model       = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+balance_url = "https://api.deepseek.com/user/balance"   # optional; wallet-balance endpoint shown in the status bar
+context_window = 1000000   # tokens; compaction triggers near this limit
+price       = { cache_hit = 0.025, input = 3, output = 6, currency = "¥" }   # per 1M tokens
+
 [tools]
 enabled = []   # empty = all built-in tools
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
 
 [codegraph]
-enabled      = false   # built-in MCP server; off by default for first-run sessions
+enabled      = true   # built-in MCP server; off by default for first-run sessions
 auto_install = true   # fetch the runtime when CodeGraph is enabled but missing
 # path       = ""   # empty = cache, then PATH, then a bundle beside reasonix
 
@@ -51,8 +84,8 @@ enabled = true   # language server tools; servers launch lazily when used
 # Readers always default to allow. Precedence: deny > ask > allow > fallback.
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
 mode  = "allow"
-# deny = ["Bash(rm -rf*)", "Bash(git push*)"]   # hard-blocked in every mode
-# allow = []   # mode = allow 时 allow 列表无意义，留空
+deny = ["mcp__unity-mcp__*"]
+# allow = ["Bash(go test:*)", "Bash(git status:*)"]   # never prompted
 # ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
 
 [sandbox]
