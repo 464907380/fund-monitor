@@ -2,15 +2,14 @@
 基金推荐工具 — 从全市场筛选优质基金
 
 策略：
-  1. 从天天基金排行拉取混合型基金近 1 年收益排行
-  2. 初步过滤（收益率 >= 20%、基金规模合理）
-  3. 逐个拉取详细评分数据（同类排名、回撤、波动率、卡玛比率等）
-  4. 用 fund_watch._calc_score 计算综合评分
-  5. 输出推荐排行榜
+  1. 从天天基金拉取全市场近 1 年收益排行 TOP 200/500（不限类型）
+  2. 快速评分初筛 → 取前 20 名
+  3. 逐个拉取详细数据，8 维加权综合评分
+  4. 输出 TOP 10 推荐
 
 用法：
-  python fund_recommend.py          # 快速推荐（TOP 30）
-  python fund_recommend.py --deep   # 深度推荐（TOP 60，更全面）
+  python fund_recommend.py          # 快速推荐（TOP 200）
+  python fund_recommend.py --deep   # 深度推荐（TOP 500）
 """
 import sys
 import json
@@ -25,11 +24,11 @@ except ImportError:
     sys.exit(1)
 
 # ── 配置 ──────────────────────────────────────
-_TOP_NORMAL = 30      # 快速模式初筛条数
-_TOP_DEEP = 60        # 深度模式初筛条数
-MIN_Y1 = 20.0         # 近 1 年收益率最低门槛（%）
-MAX_CANDIDATES = 10   # 拉取详细数据的候选数
-SHOW_TOP = 5          # 最终推荐数量
+_TOP_NORMAL = 200      # 快速模式初筛条数
+_TOP_DEEP = 500        # 深度模式初筛条数
+MIN_Y1 = 0.0           # 近 1 年收益率最低门槛（不设限，让评分自己判断）
+MAX_CANDIDATES = 20    # 拉取详细数据的候选数
+SHOW_TOP = 10          # 最终推荐数量
 
 
 def _fetch_rank_list(pi: int = 1, pn: int = 50) -> list[list[str]]:
@@ -38,7 +37,7 @@ def _fetch_rank_list(pi: int = 1, pn: int = 50) -> list[list[str]]:
     ed = datetime.date.today().isoformat()
     url = (
         f"https://fund.eastmoney.com/data/rankhandler.aspx"
-        f"?op=ph&dt=kf&ft=hh&rs=&gs=0&sc=1yz&st=desc"
+        f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
         f"&sd={sd}&ed={ed}&pi={pi}&pn={pn}&dx=1"
     )
     req = urllib.request.Request(url, headers={
@@ -77,7 +76,7 @@ def main() -> None:
     n = _TOP_DEEP if deep else _TOP_NORMAL
     mode_label = "深度" if deep else "快速"
 
-    print(f"\n📥 获取混合型基金排行 ({mode_label}模式, TOP {n})...")
+    print(f"\n📥 获取全市场基金排行 ({mode_label}模式, TOP {n})...")
     rows = _fetch_rank_list(1, n)
     print(f"   获取到 {len(rows)} 只基金")
 
