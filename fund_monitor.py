@@ -557,7 +557,6 @@ def monitor() -> None:
     stock_states: dict[str, dict] = {}
     empty_rounds = 0  # 连续无数据轮次，用于判定休市日
     hold_loaded = False  # 当日是否已加载持仓
-    fund_failures: dict[str, int] = {}  # 基金连续失败计数
 
     # 尝试从快照恢复（进程重启时保留当日累计数据）
     recovered = _load_snapshot(today)
@@ -577,7 +576,6 @@ def monitor() -> None:
             stock_states.clear()
             _holdings_cache.clear()
             hold_loaded = False
-            fund_failures.clear()
             _clear_snapshot()
             wait_until_next_trading()
             today = datetime.date.today().isoformat()
@@ -604,16 +602,8 @@ def monitor() -> None:
                 states[code] = {}
             alerts = check_intraday(code, states[code])
             all_alerts.extend(alerts)
-            has_data = states[code].get("last_td") is not None
-            if has_data:
+            if states[code].get("last_td") is not None:
                 got_data = True
-                fund_failures[code] = 0  # 成功则清零
-            else:
-                fund_failures[code] = fund_failures.get(code, 0) + 1
-                if fund_failures[code] == 3:
-                    log.warning("%s 连续 3 次检查无数据", code)
-                elif fund_failures[code] == 10:
-                    log.warning("%s 连续 10 次检查无数据，可能该基金数据源异常", code)
 
             # 检查该基金的持仓个股
             fund_name = states[code].get("name", code)

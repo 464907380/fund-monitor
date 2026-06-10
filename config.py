@@ -6,9 +6,6 @@
 
 用法：
     from config import CFG
-    poll_interval = CFG["fund_monitor"]["poll_interval_seconds"]
-
-    # 密钥通过 os.getenv 读取（fund_watch.py 已自动使用）
     webhook = os.getenv("WECHAT_WEBHOOK", "")
 """
 

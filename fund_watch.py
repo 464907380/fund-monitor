@@ -18,7 +18,6 @@ from config import CFG
 
 # ── 文件路径 ──────────────────────────────────
 _HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
-_SCORE_HISTORY_FILE = os.path.join(_HISTORY_DIR, ".score_history.json")
 _RECOMMEND_RESULT_FILE = os.path.join(_HISTORY_DIR, ".fund_recommend_result.json")
 
 # ── 配置 ──────────────────────────────────────
@@ -307,45 +306,7 @@ def _parse_name(data: str) -> str | None:
     return m.group(1) if m else None
 
 
-_FUND_TYPE_KEYWORDS: dict[str, str] = {
-    "货币": "货币型",
-    "债券": "债券型",
-    "纯债": "债券型",
-    "指数": "指数型",
-    "ETF": "ETF",
-    "股票": "股票型",
-    "混合": "混合型",
-    "FOF": "FOF",
-    "QDII": "QDII",
-    "联接": "联接型",
-}
 
-
-def _parse_fund_type(data: str) -> str:
-    """从 pingzhongdata JS 中提取基金类型。
-
-    优先级：
-      1. JS 中形如 "基金类型"、"投资类型" 等注释/变量
-      2. 基金名称中的类型关键词（混合、股票、债券、指数……）
-      3. 默认 "混合型"
-    """
-    # 1) 搜索 JS 中的类型关键词
-    for pat in (r'基金类型["\']?\s*[:=]\s*["\']([^"\']+)',
-                r'投资类型["\']?\s*[:=]\s*["\']([^"\']+)',
-                r'fund_type["\']?\s*[:=]\s*["\']([^"\']+)',
-                r'fS_type["\']?\s*[:=]\s*["\']([^"\']+)'):
-        m = re.search(pat, data)
-        if m:
-            return m.group(1).strip()
-
-    # 2) 从基金名称中提取
-    name = _parse_name(data)
-    if name:
-        for kw, ftype in _FUND_TYPE_KEYWORDS.items():
-            if kw in name:
-                return ftype
-
-    return "混合型"
 
 
 def _parse_scale(data: str) -> float | None:
@@ -379,15 +340,6 @@ def _parse_manager(data: str) -> str | None:
 def _parse_institutional_ratio(data: str) -> float | None:
     """提取机构持有比例"""
     m = re.search(r'"机构持有比例","data":\[([^\]]+)\]', data)
-    if not m:
-        return None
-    vs = m.group(1).split(",")
-    return float(vs[-1].strip()) if vs else None
-
-
-def _parse_internal_ratio(data: str) -> float | None:
-    """提取内部持有比例（基金经理自己买了多少）"""
-    m = re.search(r'"内部持有比例","data":\[([^\]]+)\]', data)
     if not m:
         return None
     vs = m.group(1).split(",")
@@ -502,69 +454,110 @@ def _parse_fund_rate(data: str) -> float | None:
     return None
 
 
-# ── 评分历史（趋势跟踪） ──────────────────────
-
-_SCORE_HISTORY: dict | None = None  # lazy load cache
-
-
-def _load_score_history() -> dict:
-    """加载评分历史"""
-    global _SCORE_HISTORY
-    if _SCORE_HISTORY is not None:
-        return _SCORE_HISTORY
-    if os.path.exists(_SCORE_HISTORY_FILE):
-        try:
-            with open(_SCORE_HISTORY_FILE, encoding="utf-8") as f:
-                _SCORE_HISTORY = json.load(f)
-                return _SCORE_HISTORY
-        except Exception:
-            pass
-    _SCORE_HISTORY = {}
-    return _SCORE_HISTORY
+def _score_rank(d: dict) -> tuple[float, float]:
+    """同类排名维度 — 年化收益率评分 (权重10%)"""
+    ann_ret = d.get("annual_return")
+    if ann_ret is None:
+        return (0.0, 0.0)
+    if ann_ret >= 50:       ret_score = 100
+    elif ann_ret >= 30:     ret_score = 80 + (ann_ret - 30) / 20 * 20
+    elif ann_ret >= 20:     ret_score = 65 + (ann_ret - 20) / 10 * 15
+    elif ann_ret >= 10:     ret_score = 45 + (ann_ret - 10) / 10 * 20
+    elif ann_ret >= 5:      ret_score = 30 + (ann_ret - 5) / 5 * 15
+    elif ann_ret >= 0:      ret_score = 10 + ann_ret / 5 * 20
+    else:                   ret_score = 0
+    return (min(100, ret_score), 0.10)
 
 
-def _save_score_history(history: dict) -> None:
-    """保存评分历史"""
-    global _SCORE_HISTORY
-    _SCORE_HISTORY = history
-    try:
-        with open(_SCORE_HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False)
-    except Exception as e:
-        log.debug("保存评分历史失败: %s", e)
+def _score_sharpe(d: dict) -> tuple[float, float]:
+    """夏普比率评分 (权重15%)"""
+    sharpe = d.get("sharpe")
+    if sharpe is None:
+        return (0.0, 0.0)
+    return (max(0, min(100, sharpe * 25 + 10)), 0.15)
 
 
-def _record_scores(rows: list[dict], today: str) -> None:
-    """记录当日评分/排名到历史，并在 row 中标注排名趋势"""
-    history = _load_score_history()
-    history[today] = {r["code"]: {"score": r.get("score", 0), "rank": i + 1}
-                      for i, r in enumerate(rows)}
-    # 只保留最近 60 天
-    dates = sorted(history.keys())
-    if len(dates) > 60:
-        for d in dates[:-60]:
-            del history[d]
-    _save_score_history(history)
+def _score_sortino(d: dict) -> tuple[float, float]:
+    """索提诺比率评分 (权重10%)"""
+    sortino = d.get("sortino")
+    if sortino is None:
+        return (0.0, 0.0)
+    return (max(0, min(100, sortino * 17 + 10)), 0.10)
 
-    # 为每只基金标注排名趋势（排名变化比分数变化更有意义）
-    for r in rows:
-        code = r["code"]
-        rank_history = []
-        for d in sorted(history.keys()):
-            if code in history[d]:
-                rank_history.append(history[d][code].get("rank", 50))
-        if len(rank_history) >= 3:
-            recent = rank_history[-1]
-            prev = rank_history[-2]
-            diff = prev - recent  # rank提升=正数, 下降=负数
-            if diff >= 2:
-                r["_trend"] = "↑"  # 排名上升
-            elif diff <= -2:
-                r["_trend"] = "↓"  # 排名下降
-            else:
-                r["_trend"] = "→"
-        else:
-            r["_trend"] = ""
+
+def _score_profit_ratio(d: dict) -> tuple[float, float]:
+    """盈亏比评分 (权重5%)"""
+    pr = d.get("profit_ratio")
+    if pr is None:
+        return (0.0, 0.0)
+    return (max(0, min(100, (pr - 0.5) * 70)), 0.05)
+
+
+def _score_recovery(d: dict) -> tuple[float, float]:
+    """修复系数评分 (权重10%)"""
+    rec = d.get("recovery")
+    if rec is None:
+        return (0.0, 0.0)
+    return (max(0, min(100, rec * 4 + 5)), 0.10)
+
+
+def _score_sy6(d: dict) -> tuple[float, float]:
+    """近6年收益评分 (权重20%)"""
+    sy6 = d.get("sy6")
+    if sy6 is None:
+        return (0.0, 0.0)
+    if sy6 >= 100:   sy6_score = 100
+    elif sy6 >= 50:  sy6_score = 80 + (sy6 - 50) / 50 * 20
+    elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 20
+    elif sy6 >= 0:   sy6_score = 20 + sy6 / 20 * 40
+    else:            sy6_score = 0
+    return (sy6_score, 0.20)
+
+
+def _score_max_dd(d: dict) -> tuple[float, float]:
+    """最大回撤评分 (权重10%)"""
+    max_dd = d.get("max_dd")
+    if max_dd is None:
+        return (0.0, 0.0)
+    return (max(0, min(90, 110 - max_dd * 2)), 0.10)
+
+
+def _score_win_rate(d: dict) -> tuple[float, float]:
+    """上行胜率评分 (权重5%)"""
+    win_rate = d.get("win_rate")
+    if win_rate is None:
+        return (0.0, 0.0)
+    return (max(0, min(90, (win_rate - 30) * 3)), 0.05)
+
+
+def _score_institutional(d: dict) -> tuple[float, float]:
+    """机构持有比例评分 (权重5%)"""
+    inst = d.get("inst")
+    if inst is None:
+        return (0.0, 0.0)
+    return (max(10, min(90, inst * 1.5 + 20)), 0.05)
+
+
+def _score_scale(d: dict) -> tuple[float, float]:
+    """基金规模评分 (权重5%)"""
+    sc = d.get("sc")
+    if sc is None:
+        return (0.0, 0.0)
+    if 1 <= sc <= 50:       scale_score = 90
+    elif 0.5 <= sc < 1:     scale_score = 60
+    elif 50 < sc <= 100:    scale_score = 70
+    elif sc > 100:          scale_score = 40
+    else:                   scale_score = 30
+    return (scale_score, 0.05)
+
+
+def _score_rate(d: dict) -> tuple[float, float]:
+    """费率评分 (权重10%)"""
+    rate = d.get("rate")
+    if rate is None:
+        return (0.0, 0.0)
+    return (max(20, 100 - rate * 40), 0.10)
+
 
 def _calc_score(d: dict) -> float:
     """
@@ -583,106 +576,22 @@ def _calc_score(d: dict) -> float:
       - 基金规模 (5%): 1~50亿最理想
       - 费率 (10%): 申购费越低越好
     """
-    scores: list[float] = []
+    sub_scores = [
+        _score_rank(d), _score_sharpe(d), _score_sortino(d),
+        _score_profit_ratio(d), _score_recovery(d), _score_sy6(d),
+        _score_max_dd(d), _score_win_rate(d), _score_institutional(d),
+        _score_scale(d), _score_rate(d),
+    ]
+    total = 0.0
     total_weight = 0.0
+    for score, weight in sub_scores:
+        if weight > 0:
+            total += score * weight
+            total_weight += weight
 
-    # 1. 年化收益率评分 (10%)
-    ann_ret = d.get("annual_return")
-    if ann_ret is not None:
-        if ann_ret >= 50:       ret_score = 100
-        elif ann_ret >= 30:     ret_score = 80 + (ann_ret - 30) / 20 * 20
-        elif ann_ret >= 20:     ret_score = 65 + (ann_ret - 20) / 10 * 15
-        elif ann_ret >= 10:     ret_score = 45 + (ann_ret - 10) / 10 * 20
-        elif ann_ret >= 5:      ret_score = 30 + (ann_ret - 5) / 5 * 15
-        elif ann_ret >= 0:      ret_score = 10 + ann_ret / 5 * 20
-        else:                   ret_score = 0
-        scores.append(min(100, ret_score) * 0.10)
-        total_weight += 0.10
-
-    # 2. 夏普比率 (15%)
-    sharpe = d.get("sharpe")
-    if sharpe is not None:
-        s = max(0, min(100, sharpe * 25 + 10))
-        scores.append(s * 0.15)
-        total_weight += 0.15
-
-    # 3. 索提诺比率 (10%)
-    sortino = d.get("sortino")
-    if sortino is not None:
-        s = max(0, min(100, sortino * 17 + 10))
-        scores.append(s * 0.10)
-        total_weight += 0.10
-
-    # 4. 盈亏比 (5%) — 赚的时候比亏的时候多多少
-    pr = d.get("profit_ratio")
-    if pr is not None:
-        # >2 → 100, 1.5→75, 1.2→55, 1→30, 0.8→10, <0.5→0
-        pr_score = max(0, min(100, (pr - 0.5) * 70))
-        scores.append(pr_score * 0.05)
-        total_weight += 0.05
-
-    # 5. 修复系数 (10%) — 总收益 / 回撤，越高越好
-    rec = d.get("recovery")
-    if rec is not None:
-        # >20 → 100, 10→70, 5→45, 3→30, 1→10
-        rec_score = max(0, min(100, rec * 4 + 5))
-        scores.append(rec_score * 0.10)
-        total_weight += 0.10
-
-    # 6. 近6年收益 (20%) — 穿越牛熊
-    sy6 = d.get("sy6")
-    if sy6 is not None:
-        if sy6 >= 100:   sy6_score = 100
-        elif sy6 >= 50:  sy6_score = 80 + (sy6 - 50) / 50 * 20
-        elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 20
-        elif sy6 >= 0:   sy6_score = 20 + sy6 / 20 * 40
-        else:            sy6_score = 0
-        scores.append(sy6_score * 0.20)
-        total_weight += 0.20
-
-    # 7. 最大回撤 (10%)
-    max_dd = d.get("max_dd")
-    if max_dd is not None:
-        dd_score = max(0, min(90, 110 - max_dd * 2))
-        scores.append(dd_score * 0.10)
-        total_weight += 0.10
-
-    # 8. 上行胜率 (5%)
-    win_rate = d.get("win_rate")
-    if win_rate is not None:
-        wr_score = max(0, min(90, (win_rate - 30) * 3))
-        scores.append(wr_score * 0.05)
-        total_weight += 0.05
-
-    # 9. 机构持有比例 (5%)
-    inst = d.get("inst")
-    if inst is not None:
-        inst_score = max(10, min(90, inst * 1.5 + 20))
-        scores.append(inst_score * 0.05)
-        total_weight += 0.05
-
-    # 10. 基金规模 (5%)
-    sc = d.get("sc")
-    if sc is not None:
-        if 1 <= sc <= 50:       scale_score = 90
-        elif 0.5 <= sc < 1:     scale_score = 60
-        elif 50 < sc <= 100:    scale_score = 70
-        elif sc > 100:          scale_score = 40
-        else:                   scale_score = 30
-        scores.append(scale_score * 0.05)
-        total_weight += 0.05
-
-    # 11. 费率 (10%)
-    rate = d.get("rate")
-    if rate is not None:
-        rate_score = max(20, 100 - rate * 40)
-        scores.append(rate_score * 0.10)
-        total_weight += 0.10
-
-    if not scores:
+    if total_weight == 0:
         return 0.0
-
-    return round(min(100, sum(scores) / total_weight), 1)
+    return round(min(100, total / total_weight), 1)
 
 
 def _calc_nav_metrics(full_nav: list[dict]) -> dict:
@@ -804,7 +713,6 @@ def get(code: str) -> dict:
 
     if name := _parse_name(data):
         d["n"] = name
-    d["type"] = _parse_fund_type(data)
     if sc := _parse_scale(data):
         d["sc"] = sc
     d.update(_parse_period_returns(data))
@@ -829,8 +737,6 @@ def get(code: str) -> dict:
         d["rank"], d["rank_total"] = rp
     if rate := _parse_fund_rate(data):
         d["rate"] = rate
-    if ir := _parse_internal_ratio(data):
-        d["internal"] = ir
     if sy6 := _parse_syl_6y(data):
         d["sy6"] = sy6
 
@@ -976,7 +882,6 @@ def check(code: str) -> tuple[dict, list[str]]:
         "y1": f"{d['y1']:+.1f}%" if d.get("y1") is not None else "",
         "mgr": d.get("mgr", "")[:6],
         "holds": d.get("holds", []),
-        "_type": d.get("type", "混合型"),
         "_y1_raw": d.get("y1"),
         "_rank": d.get("rank"),
         "_rank_total": d.get("rank_total"),
@@ -991,7 +896,6 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_profit_ratio": d.get("profit_ratio"),
         "_recovery": d.get("recovery"),
         "_sy6": d.get("sy6"),
-        "_internal": d.get("internal"),
     }
     return row, alerts
 
