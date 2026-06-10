@@ -1016,7 +1016,6 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
     lines.append("  📊 评分维度: 年化10% | 夏普15% | 索提诺10% | 回撤10% |")
     lines.append("            胜率5% | 盈亏比5% | 修复10% | 近3年20% |")
     lines.append("            机构5% | 规模5% | 费率5%")
-    lines.append("  💡 加入监控: python fund_recommend.py --add 基金代码")
 
     return lines
 
