@@ -171,7 +171,11 @@ def wait_until_next_trading() -> None:
             target = datetime.datetime.combine(next_day, datetime.time(9, 30))
             wait = (target - now).total_seconds()
             log.info("距下一个交易日还有 %.1f 小时，等待中...", wait / 3600)
-            time.sleep(min(wait, 3600))  # 最多等 1 小时再重新判断
+            # 长假期间（>3小时）直接睡到目标时间，避免频繁唤醒
+            if wait > 10800:
+                time.sleep(wait)
+            else:
+                time.sleep(min(wait, 3600))  # 短等待最多 1 小时再重新判断
 
 
 # ── 状态快照持久化（进程崩溃恢复用） ──────────

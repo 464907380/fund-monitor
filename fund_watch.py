@@ -403,9 +403,12 @@ def _parse_syl_6y(data: str) -> float | None:
     m = re.search(r'syl_6y="([-\d.]+)"', data)
     return float(m.group(1)) if m else None
 
-def _parse_net_trend(data: str) -> list[dict] | None:
-    """提取净值趋势（最近6条，供日报表使用）"""
-    nav = _parse_full_nav(data)
+def _parse_net_trend(data: str, full_nav: list[dict] | None = None) -> list[dict] | None:
+    """提取净值趋势（最近6条，供日报表使用）
+
+    可传入已解析的 full_nav 复用，避免重复解析大 JSON。
+    """
+    nav = full_nav if full_nav is not None else _parse_full_nav(data)
     if not nav:
         return None
     return nav[-6:]
@@ -791,15 +794,17 @@ def get(code: str) -> dict:
         d["mgr"] = mgr
     if inst := _parse_institutional_ratio(data):
         d["inst"] = inst
-    if nav := _parse_net_trend(data):
-        d["nav"] = nav
     # 完整净值（用于计算回撤/波动率/卡玛比率）
     if full_nav := _parse_full_nav(data):
         d["full_nav"] = full_nav
+        d["nav"] = _parse_net_trend(data, full_nav)
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
         # 从净值数据计算近3年收益
         d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3年（约250个交易日/年 × 3）
+    else:
+        if nav := _parse_net_trend(data):
+            d["nav"] = nav
     if td := _parse_real_time(code):
         d["td"] = td
     if holds := _parse_holdings(code):

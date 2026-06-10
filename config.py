@@ -42,8 +42,27 @@ def _load_env(path: str) -> None:
         pass  # .env 文件不存在是正常的
 
 
+def _warn_missing_secrets() -> None:
+    """启动时检查密钥配置，缺失时输出警告"""
+    missing = []
+    webhook = os.getenv("WECHAT_WEBHOOK", "")
+    qq_email = os.getenv("QQ_EMAIL", "")
+    qq_auth = os.getenv("QQ_MAIL_AUTH", "")
+    if not webhook and not (qq_email and qq_auth):
+        missing.append("推送不可用：WECHAT_WEBHOOK 和 QQ_EMAIL+QQ_MAIL_AUTH 均未配置")
+    elif not webhook:
+        missing.append("企业微信推送不可用：WECHAT_WEBHOOK 未配置，将走邮件推送")
+    if qq_email and not qq_auth:
+        missing.append("邮件推送不可用：QQ_MAIL_AUTH 未配置")
+    if missing:
+        import logging
+        for msg in missing:
+            logging.warning("⚠️ %s", msg)
+
+
 # 在加载任何配置前，先加载 .env 到环境变量（这样 fund_watch.py 的 os.getenv() 能读到）
 _load_env(_ENV_PATH)
+_warn_missing_secrets()
 
 # 内置默认值（config.json 不存在或字段缺失时使用）
 _DEFAULTS = {
