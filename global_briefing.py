@@ -161,11 +161,17 @@ def build_briefing() -> str:
 
     # 市场情绪指标
     senti = _fetch_sentiment()
-    if senti:
+    breadth = _fetch_market_breadth()
+    if senti or breadth:
         if a_shares:
             lines.append("")
         lines.append("**📊 市场情绪**")
-        lines.append(f"成交额 {senti['amount']:.0f}亿 | {senti['mood']}")
+        parts = []
+        if senti:
+            parts.append(f"成交额 {senti['amount']:.0f}亿 | {senti['mood']}")
+        if breadth:
+            parts.append(f"涨跌方向 {breadth}")
+        lines.append("  ".join(parts))
 
     if globals_:
         if a_shares or senti:
@@ -207,18 +213,68 @@ def _fetch_sentiment() -> dict | None:
                     total_amount += float(parts[9])
 
         amount_yi = total_amount / 1e8
-        if amount_yi > 15000:
-            mood = "🔥 成交超15000亿，异常放量"
+        if amount_yi > 20000:
+            mood = "🔥🔥 极端放量（>20000亿）"
+        elif amount_yi > 14000:
+            mood = "🔥 成交火爆（14000-20000亿）"
         elif amount_yi > 10000:
-            mood = "🟡 成交活跃（10000亿+）"
-        elif amount_yi > 6000:
-            mood = "🟢 成交正常"
+            mood = "🟡 成交活跃（10000-14000亿）"
+        elif amount_yi > 7000:
+            mood = "🟢 成交正常（7000-10000亿）"
         else:
-            mood = "🔵 成交低迷（<6000亿，观望浓）"
+            mood = "🔵 成交低迷（<7000亿）"
 
         return {"amount": round(amount_yi, 0), "mood": mood}
     except Exception as e:
         log.debug("获取情绪指标失败: %s", e)
+        return None
+
+
+def _fetch_market_breadth() -> str | None:
+    """获取涨跌家数（沪深两市合计）
+
+    尝试从 sh000001 字段[28][29]获取涨跌家数；
+    若数据不可用，则根据上证指数涨跌方向做简单判断。
+    """
+    try:
+        url = "https://hq.sinajs.cn/list=sh000001"
+        data = fetch_bytes(url, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://finance.sina.com.cn",
+        })
+        if data is None:
+            return None
+        text = data.decode("gbk")
+        m = re.search(r'"(.*?)"', text)
+        if not m:
+            return None
+        parts = m.group(1).split(",")
+
+        # 尝试获取精确涨跌家数（字段28=涨家数，29=跌家数）
+        up = parts[28] if len(parts) > 28 and parts[28] else None
+        down = parts[29] if len(parts) > 29 and parts[29] else None
+        if up and down and up != "0" and down != "0":
+            up_int = int(float(up))
+            down_int = int(float(down))
+            if up_int > down_int:
+                emoji = "📈"
+            elif up_int < down_int:
+                emoji = "📉"
+            else:
+                emoji = "➖"
+            return f"{emoji} 涨{up_int}家 / 跌{down_int}家"
+
+        # 备选：根据上证指数涨跌方向判断
+        prev_close = float(parts[2]) if parts[2] else 0
+        current = float(parts[3]) if parts[3] else 0
+        if current > prev_close:
+            return "📈 涨多跌少"
+        elif current < prev_close:
+            return "📉 跌多涨少"
+        else:
+            return "➖ 涨跌持平"
+    except Exception as e:
+        log.debug("获取涨跌家数失败: %s", e)
         return None
 
 

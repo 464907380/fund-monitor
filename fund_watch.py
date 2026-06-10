@@ -348,6 +348,47 @@ def _parse_name(data: str) -> str | None:
     return m.group(1) if m else None
 
 
+_FUND_TYPE_KEYWORDS: dict[str, str] = {
+    "货币": "货币型",
+    "债券": "债券型",
+    "纯债": "债券型",
+    "指数": "指数型",
+    "ETF": "ETF",
+    "股票": "股票型",
+    "混合": "混合型",
+    "FOF": "FOF",
+    "QDII": "QDII",
+    "联接": "联接型",
+}
+
+
+def _parse_fund_type(data: str) -> str:
+    """从 pingzhongdata JS 中提取基金类型。
+
+    优先级：
+      1. JS 中形如 "基金类型"、"投资类型" 等注释/变量
+      2. 基金名称中的类型关键词（混合、股票、债券、指数……）
+      3. 默认 "混合型"
+    """
+    # 1) 搜索 JS 中的类型关键词
+    for pat in (r'基金类型["\']?\s*[:=]\s*["\']([^"\']+)',
+                r'投资类型["\']?\s*[:=]\s*["\']([^"\']+)',
+                r'fund_type["\']?\s*[:=]\s*["\']([^"\']+)',
+                r'fS_type["\']?\s*[:=]\s*["\']([^"\']+)'):
+        m = re.search(pat, data)
+        if m:
+            return m.group(1).strip()
+
+    # 2) 从基金名称中提取
+    name = _parse_name(data)
+    if name:
+        for kw, ftype in _FUND_TYPE_KEYWORDS.items():
+            if kw in name:
+                return ftype
+
+    return "混合型"
+
+
 def _parse_scale(data: str) -> float | None:
     """提取基金规模（亿元）"""
     m = re.findall(r'"y":([\d.]+),"mom":"[\d.-]+%"', data)
@@ -570,24 +611,23 @@ def _calc_score(d: dict) -> float:
     """
     计算基金综合评分 (0-100)
 
-    12 维全透明评分：
-      - 年化收益率 (15%): 长期年化回报
+    11 维全透明评分：
+      - 年化收益率 (10%): 长期年化回报
       - 夏普比率 (15%): 每单位总波动的超额收益
       - 索提诺比率 (10%): 每单位下行波动的超额收益
-      - 盈亏比 (10%): 平均盈利 / 平均亏损，赚比亏多才算好
+      - 盈亏比 (5%): 平均盈利 / 平均亏损，赚比亏多才算好
       - 修复系数 (10%): 总收益 / 最大回撤，跌下去能涨回来
-      - 近6年收益 (10%): 穿越牛熊的长期表现
-      - 最大回撤 (5%): 历史最大跌幅
+      - 近6年收益 (20%): 穿越牛熊的长期表现
+      - 最大回撤 (10%): 历史最大跌幅
       - 上行胜率 (5%): 日收益率 > 0 的天数占比
       - 机构持有比例 (5%): 机构资金认可度
-      - 内部持有比例 (5%): 基金经理自己的钱
       - 基金规模 (5%): 1~50亿最理想
-      - 费率 (5%): 申购费越低越好
+      - 费率 (10%): 申购费越低越好
     """
     scores: list[float] = []
     total_weight = 0.0
 
-    # 1. 年化收益率评分 (15%)
+    # 1. 年化收益率评分 (10%)
     ann_ret = d.get("annual_return")
     if ann_ret is not None:
         if ann_ret >= 50:       ret_score = 100
@@ -597,8 +637,8 @@ def _calc_score(d: dict) -> float:
         elif ann_ret >= 5:      ret_score = 30 + (ann_ret - 5) / 5 * 15
         elif ann_ret >= 0:      ret_score = 10 + ann_ret / 5 * 20
         else:                   ret_score = 0
-        scores.append(min(100, ret_score) * 0.15)
-        total_weight += 0.15
+        scores.append(min(100, ret_score) * 0.10)
+        total_weight += 0.10
 
     # 2. 夏普比率 (15%)
     sharpe = d.get("sharpe")
@@ -614,13 +654,13 @@ def _calc_score(d: dict) -> float:
         scores.append(s * 0.10)
         total_weight += 0.10
 
-    # 4. 盈亏比 (10%) — 赚的时候比亏的时候多多少
+    # 4. 盈亏比 (5%) — 赚的时候比亏的时候多多少
     pr = d.get("profit_ratio")
     if pr is not None:
         # >2 → 100, 1.5→75, 1.2→55, 1→30, 0.8→10, <0.5→0
         pr_score = max(0, min(100, (pr - 0.5) * 70))
-        scores.append(pr_score * 0.10)
-        total_weight += 0.10
+        scores.append(pr_score * 0.05)
+        total_weight += 0.05
 
     # 5. 修复系数 (10%) — 总收益 / 回撤，越高越好
     rec = d.get("recovery")
@@ -630,7 +670,7 @@ def _calc_score(d: dict) -> float:
         scores.append(rec_score * 0.10)
         total_weight += 0.10
 
-    # 6. 近6年收益 (10%) — 穿越牛熊
+    # 6. 近6年收益 (20%) — 穿越牛熊
     sy6 = d.get("sy6")
     if sy6 is not None:
         if sy6 >= 100:   sy6_score = 100
@@ -638,15 +678,15 @@ def _calc_score(d: dict) -> float:
         elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 20
         elif sy6 >= 0:   sy6_score = 20 + sy6 / 20 * 40
         else:            sy6_score = 0
-        scores.append(sy6_score * 0.10)
-        total_weight += 0.10
+        scores.append(sy6_score * 0.20)
+        total_weight += 0.20
 
-    # 7. 最大回撤 (5%)
+    # 7. 最大回撤 (10%)
     max_dd = d.get("max_dd")
     if max_dd is not None:
         dd_score = max(0, min(90, 110 - max_dd * 2))
-        scores.append(dd_score * 0.05)
-        total_weight += 0.05
+        scores.append(dd_score * 0.10)
+        total_weight += 0.10
 
     # 8. 上行胜率 (5%)
     win_rate = d.get("win_rate")
@@ -662,15 +702,7 @@ def _calc_score(d: dict) -> float:
         scores.append(inst_score * 0.05)
         total_weight += 0.05
 
-    # 10. 内部持有比例 (5%) — 基金经理买了多少
-    internal = d.get("internal")
-    if internal is not None:
-        # >0.5% → 90, 0.1%→60, 0.05%→40, 0.01%→20, 0→0
-        internal_score = max(0, min(90, internal * 150))
-        scores.append(internal_score * 0.05)
-        total_weight += 0.05
-
-    # 11. 基金规模 (5%)
+    # 10. 基金规模 (5%)
     sc = d.get("sc")
     if sc is not None:
         if 1 <= sc <= 50:       scale_score = 90
@@ -681,17 +713,63 @@ def _calc_score(d: dict) -> float:
         scores.append(scale_score * 0.05)
         total_weight += 0.05
 
-    # 12. 费率 (5%)
+    # 11. 费率 (10%)
     rate = d.get("rate")
     if rate is not None:
         rate_score = max(20, 100 - rate * 40)
-        scores.append(rate_score * 0.05)
-        total_weight += 0.05
+        scores.append(rate_score * 0.10)
+        total_weight += 0.10
 
     if not scores:
         return 0.0
 
     return round(min(100, sum(scores) / total_weight), 1)
+
+
+def _generate_signal(d: dict) -> str:
+    """
+    基于回撤和均线生成买卖信号。
+
+    规则:
+      🔴 强烈卖出: 当前价 < MA60（跌破）
+      🟡 谨慎卖出: 反弹 ≥ 10%（从低点）
+      🔵 强烈买入: 回撤 ≥ 20%（从高点）
+      🟢 可以买入: 回撤 ≥ 15%
+      ⚪ 持有观望: 其他
+
+    参数:
+        d: get() 返回的全量数据字典，需包含 "full_nav"
+    返回:
+        带 emoji 的信号字符串
+    """
+    full_nav = d.get("full_nav")
+    if not full_nav or len(full_nav) < 60:
+        return "⚪ 持有观望"
+
+    vals = [n["v"] for n in full_nav]
+    current = vals[-1]
+
+    # 从高点的最大回撤百分比
+    peak = max(vals)
+    drawdown_pct = (peak - current) / peak * 100
+
+    # 从低点的反弹百分比
+    low = min(vals)
+    bounce_pct = (current - low) / low * 100
+
+    # 简单移动平均 60 日
+    ma60 = sum(vals[-60:]) / 60
+
+    # 信号规则（高优先级优先）
+    if current < ma60:
+        return "🔴 强烈卖出"
+    if bounce_pct >= 10:
+        return "🟡 谨慎卖出"
+    if drawdown_pct >= 20:
+        return "🔵 强烈买入"
+    if drawdown_pct >= 15:
+        return "🟢 可以买入"
+    return "⚪ 持有观望"
 
 
 def _calc_nav_metrics(full_nav: list[dict]) -> dict:
@@ -813,6 +891,7 @@ def get(code: str) -> dict:
 
     if name := _parse_name(data):
         d["n"] = name
+    d["type"] = _parse_fund_type(data)
     if sc := _parse_scale(data):
         d["sc"] = sc
     d.update(_parse_period_returns(data))
@@ -984,6 +1063,7 @@ def check(code: str) -> tuple[dict, list[str]]:
         "y1": f"{d['y1']:+.1f}%" if d.get("y1") is not None else "",
         "mgr": d.get("mgr", "")[:6],
         "holds": d.get("holds", []),
+        "_type": d.get("type", "混合型"),
         "_y1_raw": d.get("y1"),
         "_rank": d.get("rank"),
         "_rank_total": d.get("rank_total"),
@@ -999,6 +1079,7 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_recovery": d.get("recovery"),
         "_sy6": d.get("sy6"),
         "_internal": d.get("internal"),
+        "_signal": _generate_signal(d),
     }
     return row, alerts
 
@@ -1113,7 +1194,6 @@ def main() -> None:
             "profit_ratio": r.get("_profit_ratio"),
             "recovery": r.get("_recovery"),
             "sy6": r.get("_sy6"),
-            "internal": r.get("_internal"),
         }
         r["score"] = _calc_score(d)
 
@@ -1127,13 +1207,14 @@ def main() -> None:
     lines = [
         f"📊 基金晚报 {today}",
         "",
-        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6} {'趋势':<4}",
-        "-" * 80,
+        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6} {'趋势':<4} {'信号':<12}",
+        "-" * 92,
     ]
     for i, r in enumerate(rows, 1):
         score_str = f"{r.get('score', 0):.1f}"
         trend = r.get("_trend", "")
-        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6} {trend:<4}")
+        signal = r.get("_signal", "")
+        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6} {trend:<4} {signal:<12}")
     if all_alerts:
         lines.append("")
         lines.append("🚨 警报:")
