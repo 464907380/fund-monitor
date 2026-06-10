@@ -20,7 +20,7 @@ type = "socks5"   # http|https|socks5|socks5h
 
 [agent]
 # system_prompt = """..."""   # omit to use the built-in prompt for this version
-# system_prompt_file = "prompts/system.md"   # overrides system_prompt when set
+system_prompt_file = "prompts/system.md"   # 自动加载项目行为规范
 max_steps         = 0   # executor tool-call rounds; 0 = no limit
 planner_max_steps = 12   # planner read-only tool-call rounds; 0 = no limit
 temperature       = 0.0
