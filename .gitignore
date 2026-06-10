@@ -17,6 +17,9 @@ fund_watch.log
 # 监控状态快照（自动生成）
 .monitor_state.json
 
+# 基金推荐结果缓存（自动生成）
+.fund_recommend_result.json
+
 # 临时测试文件（根目录）
 /test_*.py
 /preview_*.py
