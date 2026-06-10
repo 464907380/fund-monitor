@@ -16,9 +16,6 @@ import smtplib
 from logging.handlers import RotatingFileHandler
 from config import CFG
 
-# ── 文件路径 ──────────────────────────────────
-_HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
-_RECOMMEND_RESULT_FILE = os.path.join(_HISTORY_DIR, ".fund_recommend_result.json")
 
 # ── 配置 ──────────────────────────────────────
 
@@ -41,6 +38,9 @@ ALERT_SCALE_2X = CFG.get("fund_watch", {}).get("alert_scale_2x", 2.0)
 ALERT_SCALE_1_5X = CFG.get("fund_watch", {}).get("alert_scale_1_5x", 1.5)
 
 HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ── 推荐结果文件（需要 HISTORY_DIR 定义后）──
+_RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json")
 
 # ── 日志 ──────────────────────────────────────
 logging.basicConfig(
@@ -505,8 +505,8 @@ def _parse_fund_rate(data: str) -> float | None:
     return None
 
 
-def _score_rank(d: dict) -> tuple[float, float]:
-    """同类排名维度 — 年化收益率评分 (权重10%)"""
+def _score_annual_return(d: dict) -> tuple[float, float]:
+    """年化收益率评分 (权重5%)"""
     ann_ret = d.get("annual_return")
     if ann_ret is None:
         return (0.0, 0.0)
@@ -517,7 +517,7 @@ def _score_rank(d: dict) -> tuple[float, float]:
     elif ann_ret >= 5:      ret_score = 30 + (ann_ret - 5) / 5 * 15
     elif ann_ret >= 0:      ret_score = 10 + ann_ret / 5 * 20
     else:                   ret_score = 0
-    return (min(100, ret_score), 0.10)
+    return (min(100, ret_score), 0.05)
 
 
 def _score_y1(d: dict) -> tuple[float, float]:
@@ -630,7 +630,7 @@ def _calc_score(d: dict) -> float:
 
     11 维全透明评分：
       - 近1年收益 (10%): 最近一年的表现，反映近期赚钱能力
-      - 年化收益率 (10%): 成立以来年化回报
+      - 年化收益率 (5%): 成立以来年化回报
       - 夏普比率 (15%): 每单位总波动的超额收益
       - 索提诺比率 (10%): 每单位下行波动的超额收益
       - 盈亏比 (5%): 平均盈利 / 平均亏损，赚比亏多才算好
@@ -641,9 +641,12 @@ def _calc_score(d: dict) -> float:
       - 机构持有比例 (2%): 机构资金认可度
       - 基金规模 (3%): 1~50亿最理想
       - 费率 (10%): 申购费越低越好
+
+    ⚠️ 说明：实际子评分权重之和为 1.00（100%），
+       通过 ∑(score×weight)/∑weight 归一化到 0-100 分。
     """
     sub_scores = [
-        _score_y1(d), _score_rank(d), _score_sharpe(d), _score_sortino(d),
+        _score_y1(d), _score_annual_return(d), _score_sharpe(d), _score_sortino(d),
         _score_profit_ratio(d), _score_recovery(d), _score_sy3(d),
         _score_max_dd(d), _score_win_rate(d), _score_institutional(d),
         _score_scale(d), _score_rate(d),
@@ -796,7 +799,7 @@ def get(code: str) -> dict:
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
         # 从净值数据计算近3年收益
-        d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3个交易日
+        d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3年（约250个交易日/年 × 3）
     if td := _parse_real_time(code):
         d["td"] = td
     if holds := _parse_holdings(code):
@@ -805,8 +808,7 @@ def get(code: str) -> dict:
         d["rank"], d["rank_total"] = rp
     if rate := _parse_fund_rate(data):
         d["rate"] = rate
-    if sy6 := _parse_syl_6y(data):
-        d["sy6"] = sy6
+    d["sy6"] = _parse_syl_6y(data)
 
     return d
 

@@ -63,7 +63,7 @@ def _save_result(scored: list[tuple]) -> None:
              "sharpe": item[7], "sortino": item[8],
              "max_dd": item[9], "win_rate": item[10], "inst": item[11],
              "sc": item[12], "rate": item[13], "profit_ratio": item[14],
-             "recovery": item[15], "sy3": item[16], "internal": item[17]}
+             "recovery": item[15], "sy3": item[16]}
             for item in scored
         ]
     }
@@ -204,7 +204,7 @@ def main() -> None:
                     d.get("max_dd", 0), d.get("win_rate", 0),
                     d.get("inst", 0), d.get("sc", 0), d.get("rate", 0),
                     d.get("profit_ratio", 0), d.get("recovery", 0),
-                    d.get("sy3", 0), d.get("internal", 0))
+                    d.get("sy3", 0))
         except Exception as e:
             log.debug("跳过 %s: %s", code, e)
             return None
