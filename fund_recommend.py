@@ -2,15 +2,15 @@
 基金推荐工具 — 从全市场筛选优质基金
 
 策略：
-  1. 从天天基金排行拉取混合型基金近 1 年收益 TOP 100
-  2. 初步过滤（收益率>50%、基金规模>1亿）
-  3. 逐个拉取详细评分数据（绩效评分、同类排名、费率）
+  1. 从天天基金排行拉取混合型基金近 1 年收益排行
+  2. 初步过滤（收益率 >= 20%、基金规模合理）
+  3. 逐个拉取详细评分数据（同类排名、回撤、波动率、卡玛比率等）
   4. 用 fund_watch._calc_score 计算综合评分
-  5. 输出 TOP 10 推荐
+  5. 输出推荐排行榜
 
 用法：
-  python fund_recommend.py         # 快速推荐（只看 TOP 50）
-  python fund_recommend.py --deep  # 深度推荐（TOP 100，较慢）
+  python fund_recommend.py          # 快速推荐（TOP 30）
+  python fund_recommend.py --deep   # 深度推荐（TOP 60，更全面）
 """
 import sys
 import json
@@ -25,10 +25,11 @@ except ImportError:
     sys.exit(1)
 
 # ── 配置 ──────────────────────────────────────
-TOP_N = 30          # 初筛条数（减少以加快速度）
-MIN_Y1 = 20.0       # 近 1 年收益率最低门槛（%）
-MAX_CANDIDATES = 10  # 拉取详细数据的候选数
-SHOW_TOP = 5        # 最终推荐数量
+_TOP_NORMAL = 30      # 快速模式初筛条数
+_TOP_DEEP = 60        # 深度模式初筛条数
+MIN_Y1 = 20.0         # 近 1 年收益率最低门槛（%）
+MAX_CANDIDATES = 10   # 拉取详细数据的候选数
+SHOW_TOP = 5          # 最终推荐数量
 
 
 def _fetch_rank_list(pi: int = 1, pn: int = 50) -> list[list[str]]:
@@ -73,9 +74,10 @@ def main() -> None:
     print("=" * 60)
 
     deep = "--deep" in sys.argv
-    n = TOP_N * 2 if deep else TOP_N
+    n = _TOP_DEEP if deep else _TOP_NORMAL
+    mode_label = "深度" if deep else "快速"
 
-    print(f"\n📥 获取混合型基金排行 (TOP {n})...")
+    print(f"\n📥 获取混合型基金排行 ({mode_label}模式, TOP {n})...")
     rows = _fetch_rank_list(1, n)
     print(f"   获取到 {len(rows)} 只基金")
 
@@ -121,7 +123,7 @@ def main() -> None:
 
     # 输出推荐
     print("\n" + "=" * 60)
-    print("🏆 基金推荐 TOP 10")
+    print(f"🏆 基金推荐 TOP {SHOW_TOP}")
     print("=" * 60)
     print(f"{'排名':<4} {'代码':<7} {'基金名':<20} {'评分':<6} {'同类排名':<12}")
     print("-" * 55)
