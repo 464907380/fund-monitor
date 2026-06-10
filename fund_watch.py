@@ -157,6 +157,17 @@ def _color_cls(val: str) -> str:
     return ""
 
 
+def _color_inline(val: str) -> str:
+    """数值颜色内联样式：涨红跌绿"""
+    if not val:
+        return ""
+    if val.startswith("+"):
+        return "color:#d32f2f;"
+    if val.startswith("-"):
+        return "color:#2e7d32;"
+    return ""
+
+
 def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
@@ -214,47 +225,45 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         html = f.read()
     html = html.replace("{{DATE}}", today)
 
-    # 表格行
+    # 表格行（匹配6列：代码/基金名/涨跌/近1月/近3月/近1年）
     row_htmls = []
     for r in rows:
         row_htmls.append(
             f'<tr>'
-            f'<td>{r["code"]}</td>'
-            f'<td>{r["name_short"]}</td>'
-            f'<td class="num"{_color_cls(r["day"])}>{r["day"]}</td>'
-            f'<td class="num"{_color_cls(r["f5"])}>{r["f5"]}</td>'
-            f'<td class="num"{_color_cls(r["m1"])}>{r["m1"]}</td>'
-            f'<td class="num"{_color_cls(r["m3"])}>{r["m3"]}</td>'
-            f'<td class="num"{_color_cls(r["y1"])}>{r["y1"]}</td>'
-            f'<td>{r["mgr"]}</td>'
+            f'<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;font-family:Consolas,monospace;font-size:11px;color:#888;">{r["code"]}</td>'
+            f'<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;font-size:13px;">{r["name_short"]}</td>'
+            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["day"])}">{r["day"]}</td>'
+            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["m1"])}">{r["m1"]}</td>'
+            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["m3"])}">{r["m3"]}</td>'
+            f'<td class="num" style="padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas,monospace;font-size:13px;{_color_inline(r["y1"])}">{r["y1"]}</td>'
             f'</tr>'
         )
     html = html.replace("{{ROWS}}", "\n".join(row_htmls))
 
-    # 构造警报 HTML
+    # 构造警报区块
     extra_parts = []
 
     # 持仓 vs 推荐对比
     compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
-        compare_html = '<div class="compare"><div class="compare-content">'
-        compare_html += '<div class="compare-title">⚔️ 持仓 vs 市场优选</div>'
+        compare_html = '<tr><td style="background-color:#ffffff;border-radius:6px;padding:16px 20px;border:1px solid #e8c300;">'
+        compare_html += '<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#b8860b;">⚔️ 持仓 vs 市场优选</p>'
         for line in compare_lines:
             clean = line.strip()
             if not clean:
                 continue
             clean = clean.replace("**", "")
-            compare_html += f'<div class="compare-item">{clean}</div>'
-        compare_html += '</div></div>'
+            compare_html += f'<p style="margin:2px 0;font-size:13px;color:#666;">{clean}</p>'
+        compare_html += '</td></tr><tr><td style="height:12px;">&nbsp;</td></tr>'
         extra_parts.append(compare_html)
 
     # 警报
     if alerts:
-        al = '<div class="alerts"><div class="alerts-content">'
-        al += '<div class="alerts-title">🚨 警报</div>'
+        al = '<tr><td style="background-color:#ffffff;border-radius:6px;padding:16px 20px;border:1px solid #f0d0d0;">'
+        al += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#c62828;">🚨 警报</p>'
         for a in alerts:
-            al += f'<div class="alerts-item">{_strip_html(a)}</div>'
-        al += '</div></div>'
+            al += f'<p style="margin:4px 0;padding:6px 0;font-size:13px;color:#555;">{_strip_html(a)}</p>'
+        al += '</td></tr>'
         extra_parts.append(al)
 
     html = html.replace("{{ALERTS}}", "\n".join(extra_parts) if extra_parts else "")

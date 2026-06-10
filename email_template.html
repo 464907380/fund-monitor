@@ -4,99 +4,66 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
-  /* ── 基础重置 ── */
-  body { margin:0; padding:0; background:#f0f2f5; font-family:-apple-system,'PingFang SC','Microsoft YaHei','Helvetica Neue',Arial,sans-serif; font-size:14px; color:#1a1a2e; line-height:1.5; }
-
-  /* ── 容器 ── */
-  .wrapper { max-width:600px; margin:0 auto; padding:0; }
-
-  /* ── 头部 ── */
-  .header { background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460); padding:28px 24px 22px; text-align:center; }
-  .header h1 { margin:0; color:#fff; font-size:20px; font-weight:700; letter-spacing:0.5px; }
-  .header .date { display:block; color:#8899bb; font-size:12px; margin-top:4px; }
-
-  /* ── 卡片内容区 ── */
-  .card { background:#fff; margin:12px; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-
-  /* ── 表格 ── */
-  .data-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .data-table th { background:#f8f9fc; padding:10px 8px; font-size:11px; color:#666; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; border-bottom:2px solid #e8ecf2; }
-  .data-table th:first-child { padding-left:14px; }
-  .data-table th:last-child { padding-right:14px; }
-  .data-table td { padding:10px 8px; border-bottom:1px solid #f0f2f5; font-size:13px; }
-  .data-table td:first-child { padding-left:14px; font-family:Consolas,monospace; color:#666; font-size:11px; }
-  .data-table td:last-child { padding-right:14px; }
-  .data-table tr:last-child td { border-bottom:none; }
-  .data-table tr:active { background:#f8f9fc; }
-  td.num { text-align:right; font-weight:700; font-family:Consolas,monospace; font-size:13px; }
-  .red { color:#e53935; }
-  .green { color:#43a047; }
-
-  /* ── 警报区块 ── */
-  .alerts { margin:12px; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-  .alerts-content { background:#fff; padding:16px; }
-  .alerts-title { font-weight:700; font-size:15px; color:#c62828; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
-  .alerts-item { font-size:13px; padding:8px 0; border-bottom:1px solid #fff0f0; color:#333; }
-  .alerts-item:last-child { border-bottom:none; }
-
-  /* ── 对比区块 ── */
-  .compare { margin:12px; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-  .compare-content { background:#fffbe6; padding:16px; }
-  .compare-title { font-weight:700; font-size:15px; color:#b8860b; margin-bottom:8px; }
-  .compare-item { font-size:13px; padding:4px 0; color:#555; }
-
-  /* ── 底部 ── */
-  .footer { text-align:center; padding:16px 12px 24px; font-size:11px; color:#999; }
-
-  /* ── 移动端适配 ── */
-  @media screen and (max-width:480px) {
-    .header { padding:20px 16px 18px; }
-    .header h1 { font-size:17px; }
-    .card, .alerts, .compare { margin:8px; border-radius:8px; }
-    .data-table { font-size:12px; }
-    .data-table th { padding:8px 4px; font-size:10px; }
-    .data-table td { padding:8px 4px; font-size:12px; }
-    .data-table td:first-child { padding-left:8px; font-size:10px; }
-    .data-table td:last-child { padding-right:8px; }
-    td.num { font-size:12px; }
-  }
+  td.num { text-align:right; font-weight:600; font-family:Consolas,monospace; font-size:13px; }
+  .red { color:#d32f2f; }
+  .green { color:#2e7d32; }
 </style>
 </head>
-<body>
-<div class="wrapper">
+<body style="margin:0;padding:0;background-color:#fafafa;font-family:'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;font-size:14px;line-height:1.6;color:#333;">
 
-<!-- ── 头部 ── -->
-<div class="header">
-  <h1>📊 基金晚报</h1>
-  <span class="date">{{DATE}}</span>
-</div>
+<!-- 外层 -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#fafafa;">
+<tr><td align="center" style="padding:30px 10px;">
 
-<!-- ── 基金列表 ── -->
-<div class="card">
-<table class="data-table">
-  <thead>
-  <tr>
-    <th>代码</th>
-    <th>基金名</th>
-    <th class="num">涨跌</th>
-    <th class="num">近5日</th>
-    <th class="num">近1月</th>
-    <th class="num">近3月</th>
-    <th class="num">近1年</th>
-    <th>经理</th>
-  </tr>
-</thead>
-<tbody>
+  <!-- 邮件容器 600px -->
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;">
+
+    <!-- 头部 -->
+    <tr>
+      <td align="center" style="padding:0 0 20px;">
+        <h1 style="margin:0;color:#1a1a2e;font-size:22px;font-weight:700;">📊 基金晚报</h1>
+        <p style="margin:4px 0 0;color:#888;font-size:12px;">{{DATE}}</p>
+      </td>
+    </tr>
+
+    <!-- 基金表格卡片 -->
+    <tr>
+      <td style="background-color:#ffffff;border-radius:6px;padding:0;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="padding:10px 8px;font-size:11px;color:#888;font-weight:600;text-align:left;border-bottom:1px solid #eee;white-space:nowrap;">代码</th>
+              <th style="padding:10px 8px;font-size:11px;color:#888;font-weight:600;text-align:left;border-bottom:1px solid #eee;">基金名</th>
+              <th style="padding:10px 8px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #eee;">涨跌</th>
+              <th style="padding:10px 8px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #eee;">近1月</th>
+              <th style="padding:10px 8px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #eee;">近3月</th>
+              <th style="padding:10px 8px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #eee;">近1年</th>
+            </tr>
+          </thead>
+          <tbody>
 {{ROWS}}
-</tbody>
-</table>
-</div>
+          </tbody>
+        </table>
+      </td>
+    </tr>
 
-<!-- ── 警报 ── -->
+    <!-- 间距 -->
+    <tr><td style="height:12px;">&nbsp;</td></tr>
+
+    <!-- 警报区块 -->
 {{ALERTS}}
 
-<!-- ── 底部 ── -->
-<div class="footer">Fund Monitor · 数据来源：天天基金</div>
-</div>
+    <!-- 底部 -->
+    <tr>
+      <td align="center" style="padding:24px 0 0;font-size:11px;color:#aaa;">
+        Fund Monitor · 数据来源：天天基金
+      </td>
+    </tr>
+
+  </table>
+
+</td></tr>
+</table>
+
 </body>
 </html>
