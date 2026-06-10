@@ -207,16 +207,14 @@ def _fetch_sentiment() -> dict | None:
                     total_amount += float(parts[9])
 
         amount_yi = total_amount / 1e8
-        if amount_yi > 12000:
-            mood = "🔥 极端活跃（警惕过热）"
-        elif amount_yi > 8000:
-            mood = "🔴 非常活跃"
-        elif amount_yi > 5000:
-            mood = "🟡 中等活跃"
-        elif amount_yi > 3000:
-            mood = "🟢 正常"
+        if amount_yi > 15000:
+            mood = "🔥 成交超15000亿，异常放量"
+        elif amount_yi > 10000:
+            mood = "🟡 成交活跃（10000亿+）"
+        elif amount_yi > 6000:
+            mood = "🟢 成交正常"
         else:
-            mood = "🔵 低迷"
+            mood = "🔵 成交低迷（<6000亿，观望浓）"
 
         return {"amount": round(amount_yi, 0), "mood": mood}
     except Exception as e:

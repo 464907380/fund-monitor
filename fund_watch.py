@@ -535,9 +535,10 @@ def _save_score_history(history: dict) -> None:
 
 
 def _record_scores(rows: list[dict], today: str) -> None:
-    """记录当日评分到历史，并在 row 中标注趋势"""
+    """记录当日评分/排名到历史，并在 row 中标注排名趋势"""
     history = _load_score_history()
-    history[today] = {r["code"]: r.get("score", 0) for r in rows}
+    history[today] = {r["code"]: {"score": r.get("score", 0), "rank": i + 1}
+                      for i, r in enumerate(rows)}
     # 只保留最近 60 天
     dates = sorted(history.keys())
     if len(dates) > 60:
@@ -545,21 +546,21 @@ def _record_scores(rows: list[dict], today: str) -> None:
             del history[d]
     _save_score_history(history)
 
-    # 为每只基金标注趋势
+    # 为每只基金标注排名趋势（排名变化比分数变化更有意义）
     for r in rows:
         code = r["code"]
-        scores = []
+        rank_history = []
         for d in sorted(history.keys()):
             if code in history[d]:
-                scores.append(history[d][code])
-        if len(scores) >= 3:
-            recent = scores[-1]
-            prev = scores[-2]
-            diff = recent - prev
-            if diff >= 3:
-                r["_trend"] = "↑"
-            elif diff <= -3:
-                r["_trend"] = "↓"
+                rank_history.append(history[d][code].get("rank", 50))
+        if len(rank_history) >= 3:
+            recent = rank_history[-1]
+            prev = rank_history[-2]
+            diff = prev - recent  # rank提升=正数, 下降=负数
+            if diff >= 2:
+                r["_trend"] = "↑"  # 排名上升
+            elif diff <= -2:
+                r["_trend"] = "↓"  # 排名下降
             else:
                 r["_trend"] = "→"
         else:
@@ -1023,8 +1024,27 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
     """
     lines: list[str] = []
     recs = _load_recommend_results()
-    if not recs:
+    if recs is None:
+        lines.append("")
+        lines.append("💡 **想看看你的持仓 vs 市场优选？**")
+        lines.append("   运行 python fund_recommend.py（约15分钟）")
+        lines.append("   之后晚报自动展示对比分析")
         return lines
+
+    # 检查推荐结果是否过旧
+    try:
+        with open(_RECOMMEND_RESULT_FILE, encoding="utf-8") as f:
+            meta = json.load(f)
+        rec_date = meta.get("date", "")
+        if rec_date:
+            rec_dt = datetime.date.fromisoformat(rec_date)
+            days_old = (datetime.date.today() - rec_dt).days
+            if days_old > 14:
+                lines.append("")
+                lines.append(f"⚠️ 推荐结果已是 {days_old} 天前的，建议重新运行")
+                lines.append(f"   python fund_recommend.py")
+    except Exception:
+        pass
 
     # 计算持仓平均分
     held_scores = [r.get("score", 0) for r in held_rows]
