@@ -12,8 +12,8 @@ import os
 import time
 import re
 from config import CFG
-from fund_watch import fetch, send_wechat, log, clear_cache, FUND_LIST, \
-    send_mail, _parse_holdings, WECHAT_WEBHOOK, QQ_EMAIL, QQ_AUTH_CODE
+from fund_utils import fetch, log, clear_cache, send_wechat, send_mail
+from fund_watch import FUND_LIST, _parse_holdings, WECHAT_WEBHOOK, QQ_EMAIL, QQ_AUTH_CODE
 
 # ── 基金急涨急跌阈值 ──────────────────────────
 ALERT_DROP_ONCE = CFG.get("fund_monitor", {}).get("alert_drop_once", -3)

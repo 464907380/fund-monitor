@@ -9,7 +9,7 @@ import json
 import re
 import datetime
 import os
-from fund_watch import send_wechat, send_mail, log, HISTORY_DIR, fetch_bytes
+from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
 _VOLUME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".volume_history.json")
