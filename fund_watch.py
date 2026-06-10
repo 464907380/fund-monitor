@@ -246,7 +246,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     compare_lines = _compare_with_recommendations(rows)
     if compare_lines:
         cp = '<tr><td style="padding:12px 14px;background:#f0f8ff;border:1px solid #bcd;border-radius:6px;">'
-        cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#1a1a2e;">🏆 市场优选基金 TOP 5 （11 维评分）</p>'
+        cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#1a1a2e;">🏆 市场优选基金 TOP 10 （11 维评分）</p>'
         in_table = False
         header_done = False
         for line in compare_lines:
@@ -995,12 +995,12 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         pass
 
     lines.append("")
-    lines.append("🏆 **市场优选基金 TOP 5**  （11 维评分）")
+    lines.append("🏆 **市场优选基金 TOP 10**  （11 维评分）")
     lines.append("")
     lines.append(f"|{'排名':<4}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
     lines.append(f"|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
     medals = ["🥇", "🥈", "🥉"]
-    for i, r in enumerate(recs[:5], 1):
+    for i, r in enumerate(recs[:10], 1):
         badge = medals[i - 1] if i <= 3 else f" {i}."
         name = r.get("name", "")[:14]
         ar = r.get("annual_return", 0)
@@ -1013,7 +1013,7 @@ def _compare_with_recommendations(held_rows: list[dict]) -> list[str]:
         lines.append(f"|{badge:<4}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
     lines.append("")
-    lines.append("  ── 排名依据：从全市场 200 只基金中精选 TOP 5 ──")
+    lines.append("  ── 排名依据：从全市场 200 只基金中精选 TOP 10 ──")
     lines.append("  📡 数据源：天天基金排行 API（https://fund.eastmoney.com）")
     lines.append("     拉取全市场近 1 年收益排行前 200 名（不限类型），")
     lines.append("     再剔除近 1 年收益为负的基金，其余全部进入深度评分。")
