@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 import csv
+import html as _html
 from typing import Callable
 from email.header import Header
 from email.mime.text import MIMEText
@@ -70,22 +71,28 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         log.warning("email_template.html 不存在，跳过邮件")
         return
     with open(tpl_path, encoding="utf-8") as f:
-        html = f.read()
-    html = html.replace("{{DATE}}", today)
+        tpl_html = f.read()
+    tpl_html = tpl_html.replace("{{DATE}}", today)
 
     # 表格行（white-space:nowrap 自动撑宽）
     row_htmls = []
     for r in rows:
+        _code = _html.escape(str(r.get("code", "")))
+        _name = _html.escape(str(r.get("name_short", "")))
+        _day = _html.escape(str(r.get("day", "")))
+        _m1 = _html.escape(str(r.get("m1", "")))
+        _m3 = _html.escape(str(r.get("m3", "")))
+        _y1 = _html.escape(str(r.get("y1", "")))
         row_htmls.append("<tr>"
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-family:Consolas;font-size:11px;color:#888;white-space:nowrap;">{r["code"]}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-size:13px;white-space:nowrap;">{r["name_short"]}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["day"])}">{r["day"]}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m1"])}">{r["m1"]}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m3"])}">{r["m3"]}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["y1"])}">{r["y1"]}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-family:Consolas;font-size:11px;color:#888;white-space:nowrap;">{_code}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-size:13px;white-space:nowrap;">{_name}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["day"])}">{_day}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m1"])}">{_m1}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m3"])}">{_m3}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["y1"])}">{_y1}</td>'
             + "</tr>"
         )
-    html = html.replace("{{ROWS}}", "\n".join(row_htmls))
+    html = tpl_html.replace("{{ROWS}}", "\n".join(row_htmls))
 
     # 警报区块
     extra_parts = []
