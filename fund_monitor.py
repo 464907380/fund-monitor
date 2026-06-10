@@ -493,8 +493,8 @@ def push_alert(alerts: list[str]) -> None:
 
 def push_summary(states: dict[str, dict], stock_info: dict[str, dict] | None = None) -> None:
     """
-    收盘后发送盘中汇总
-    stock_info: 个股汇总文本（可选）
+    收盘后发送盘中汇总（含当日波动 vs 历史波动对比）
+    stock_info: 个股汇总（可选）
     """
     if not states and not stock_info:
         return
@@ -509,10 +509,12 @@ def push_summary(states: dict[str, dict], stock_info: dict[str, dict] | None = N
             last = s.get("last_td", 0)
             low = s.get("min_td", 0)
             high = s.get("max_td", 0)
+            day_range = high - low  # 当日波动幅度
             lines.append(
                 f"**{name}({code})** "
                 f"波动 {high:+.1f}%~{low:+.1f}% "
-                f"| 收盘估算 {last:+.2f}%"
+                f"| 振幅 {day_range:.1f}%"
+                f" | 收盘估算 {last:+.2f}%"
             )
 
     if stock_info:
@@ -520,9 +522,12 @@ def push_summary(states: dict[str, dict], stock_info: dict[str, dict] | None = N
             lines.append("")
         lines.append("**📋 个股监控**")
         for key, s in sorted(stock_info.items()):
-            lines.append(f"**{s['name']}({key.split(':')[1]})** "
+            stock_code = key.split(":")[1]
+            day_range = s.get("max_chg", 0) - s.get("min_chg", 0)
+            lines.append(f"**{s['name']}({stock_code})** "
                          f"涨跌 {s['chg']:+.2f}% "
-                         f"| 最大涨 {s['max_chg']:+.2f}% 最大跌 {s['min_chg']:+.2f}%")
+                         f"| 振幅 {day_range:.1f}%"
+                         f" | 最大涨 {s['max_chg']:+.2f}% 最大跌 {s['min_chg']:+.2f}%")
 
     content = "\n".join(lines)
     if WECHAT_WEBHOOK:

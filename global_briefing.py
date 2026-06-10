@@ -143,7 +143,7 @@ def get_global() -> list[dict]:
 
 
 def build_briefing() -> str:
-    """构造简报 Markdown"""
+    """构造简报 Markdown（含市场情绪指标）"""
     today = datetime.date.today().isoformat()
     a_shares = get_a_share()
     globals_ = get_global()
@@ -159,8 +159,16 @@ def build_briefing() -> str:
             emoji = "🔴" if c > 0 else ("🟢" if c < 0 else "⚪")
             lines.append(f"|{s['code']}|{s['current']:.2f}|{emoji}{c:+.2f}%|")
 
-    if globals_:
+    # 市场情绪指标
+    senti = _fetch_sentiment()
+    if senti:
         if a_shares:
+            lines.append("")
+        lines.append("**📊 市场情绪**")
+        lines.append(f"成交额 {senti['amount']:.0f}亿 | {senti['mood']}")
+
+    if globals_:
+        if a_shares or senti:
             lines.append("")
         lines.append("**🌍 全球**")
         lines.append("|指数|最新|涨跌幅|")
@@ -177,6 +185,43 @@ def build_briefing() -> str:
     lines.append("⏰ 美股/欧股为上一交易日收盘")
 
     return "\n".join(lines)
+
+
+def _fetch_sentiment() -> dict | None:
+    """获取市场情绪指标：成交额、涨跌家数"""
+    try:
+        url = "https://hq.sinajs.cn/list=sh000001,sz399001"
+        data = fetch_bytes(url, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://finance.sina.com.cn",
+        })
+        if data is None:
+            return None
+        text = data.decode("gbk")
+        total_amount = 0.0
+        for line in text.strip().split("\n"):
+            m = re.search(r'"(.*?)"', line)
+            if m:
+                parts = m.group(1).split(",")
+                if len(parts) >= 10 and parts[9]:
+                    total_amount += float(parts[9])
+
+        amount_yi = total_amount / 1e8
+        if amount_yi > 12000:
+            mood = "🔥 极端活跃（警惕过热）"
+        elif amount_yi > 8000:
+            mood = "🔴 非常活跃"
+        elif amount_yi > 5000:
+            mood = "🟡 中等活跃"
+        elif amount_yi > 3000:
+            mood = "🟢 正常"
+        else:
+            mood = "🔵 低迷"
+
+        return {"amount": round(amount_yi, 0), "mood": mood}
+    except Exception as e:
+        log.debug("获取情绪指标失败: %s", e)
+        return None
 
 
 def main() -> None:

@@ -20,6 +20,9 @@ fund_watch.log
 # 基金推荐结果缓存（自动生成）
 .fund_recommend_result.json
 
+# 评分历史（自动生成）
+.score_history.json
+
 # 临时测试文件（根目录）
 /test_*.py
 /preview_*.py

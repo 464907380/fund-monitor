@@ -16,6 +16,9 @@ import smtplib
 from logging.handlers import RotatingFileHandler
 from config import CFG
 
+# ── 评分历史文件 ──────────────────────────────
+_SCORE_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".score_history.json")
+
 # ── 配置 ──────────────────────────────────────
 
 # 基金列表：优先从 fund_list.json 加载（可编辑），不存在时使用内置默认列表
@@ -473,6 +476,70 @@ def _parse_fund_rate(data: str) -> float | None:
         except ValueError:
             pass
     return None
+
+
+# ── 评分历史（趋势跟踪） ──────────────────────
+
+_SCORE_HISTORY: dict | None = None  # lazy load cache
+
+
+def _load_score_history() -> dict:
+    """加载评分历史"""
+    global _SCORE_HISTORY
+    if _SCORE_HISTORY is not None:
+        return _SCORE_HISTORY
+    if os.path.exists(_SCORE_HISTORY_FILE):
+        try:
+            with open(_SCORE_HISTORY_FILE, encoding="utf-8") as f:
+                _SCORE_HISTORY = json.load(f)
+                return _SCORE_HISTORY
+        except Exception:
+            pass
+    _SCORE_HISTORY = {}
+    return _SCORE_HISTORY
+
+
+def _save_score_history(history: dict) -> None:
+    """保存评分历史"""
+    global _SCORE_HISTORY
+    _SCORE_HISTORY = history
+    try:
+        with open(_SCORE_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False)
+    except Exception as e:
+        log.debug("保存评分历史失败: %s", e)
+
+
+def _record_scores(rows: list[dict], today: str) -> None:
+    """记录当日评分到历史，并在 row 中标注趋势"""
+    history = _load_score_history()
+    history[today] = {r["code"]: r.get("score", 0) for r in rows}
+    # 只保留最近 60 天
+    dates = sorted(history.keys())
+    if len(dates) > 60:
+        for d in dates[:-60]:
+            del history[d]
+    _save_score_history(history)
+
+    # 为每只基金标注趋势
+    for r in rows:
+        code = r["code"]
+        scores = []
+        for d in sorted(history.keys()):
+            if code in history[d]:
+                scores.append(history[d][code])
+        if len(scores) >= 3:
+            recent = scores[-1]
+            prev = scores[-2]
+            diff = recent - prev
+            if diff >= 3:
+                r["_trend"] = "↑"
+            elif diff <= -3:
+                r["_trend"] = "↓"
+            else:
+                r["_trend"] = "→"
+        else:
+            r["_trend"] = ""
 
 
 def _calc_score(d: dict) -> float:
@@ -951,6 +1018,9 @@ def main() -> None:
         }
         r["score"] = _calc_score(d)
 
+    # 记录评分历史并标注趋势
+    _record_scores(raw_rows, today)
+
     # 按综合评分排序
     rows = sorted(raw_rows, key=lambda r: r.get("score", 0), reverse=True)
 
@@ -958,12 +1028,13 @@ def main() -> None:
     lines = [
         f"📊 基金晚报 {today}",
         "",
-        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6}",
+        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6} {'评分':<6} {'趋势':<4}",
         "-" * 80,
     ]
     for i, r in enumerate(rows, 1):
         score_str = f"{r.get('score', 0):.1f}"
-        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6}")
+        trend = r.get("_trend", "")
+        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6} {score_str:<6} {trend:<4}")
     if all_alerts:
         lines.append("")
         lines.append("🚨 警报:")
