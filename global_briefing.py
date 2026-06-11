@@ -168,19 +168,36 @@ def build_briefing() -> str:
         if a_shares:
             lines.append("")
         lines.append("**📊 市场情绪**")
-        parts = []
+
+        # 成交额趋势
         if senti:
-            vol_parts = [f"今日 {senti['amount']:.0f}亿"]
-            if senti.get("prev_amount") is not None:
-                diff = senti["amount"] - senti["prev_amount"]
-                direction = "↑" if diff > 0 else "↓"
-                vol_parts.append(f"前日 {senti['prev_amount']:.0f}亿（{direction}{abs(diff):.0f}亿）")
+            recent = sorted(senti["recent"].items())  # [(date, amount), ...]
+            lines.append("**成交额（近几日）**")
+            vol_rows = []
+            for i, (d, v) in enumerate(recent):
+                if i == 0:
+                    vol_rows.append(f"|{d[-5:]}|{v:.0f}亿|—|")
+                else:
+                    prev_v = recent[i-1][1]
+                    diff = v - prev_v
+                    vol_rows.append(f"|{d[-5:]}|{v:.0f}亿|{'↑' if diff>=0 else '↓'}{abs(diff):.0f}亿|")
+            lines.append("|日期|成交额|较前一日|")
+            lines.append("|---|---|---:|")
+            lines.extend(vol_rows)
             if senti.get("pct") is not None:
-                vol_parts.append(f"高于{senti['pct']:.0f}%的交易日（近{senti['history_days']}天）")
-            parts.append("成交额 " + " | ".join(vol_parts))
+                lines.append(f"> 今日量高于{senti['pct']:.0f}%的交易日（近{senti['history_days']}天）")
+
+        # 涨跌家数
         if breadth:
-            parts.append(f"涨跌方向 {breadth}")
-        lines.append("  ".join(parts))
+            if breadth.get("up") is not None and breadth.get("down") is not None and breadth["up"] > 0:
+                up, down = breadth["up"], breadth["down"]
+                emoji = "📈" if up > down else ("📉" if up < down else "➖")
+                lines.append(f"**涨跌家数** {emoji} 涨{up}家 / 跌{down}家")
+            elif breadth.get("direction"):
+                dir_text = "涨多跌少" if breadth["direction"] == "涨" else "涨少跌多"
+                emoji_map = {"涨": "📈", "跌": "📉", "平": "➖"}
+                emoji = emoji_map.get(breadth["direction"], "➖")
+                lines.append(f"**涨跌** {emoji} {dir_text}（收盘后数据更新中）")
 
     if globals_:
         if a_shares or senti:
@@ -233,11 +250,10 @@ def _fetch_sentiment() -> dict | None:
                 del history[d]
         _save_volume_history(history)
 
-        # 前一日成交额（如果有）
-        prev_amount = None
-        if len(dates) >= 2:
-            prev_date = dates[-2]
-            prev_amount = history.get(prev_date)
+        # 最近几天成交额（用于显示趋势）
+        recent = {}
+        for d in dates[-7:]:
+            recent[d] = history[d]
 
         # 历史百分位
         pct = None
@@ -248,9 +264,9 @@ def _fetch_sentiment() -> dict | None:
 
         return {
             "amount": round(amount_yi, 0),
-            "prev_amount": prev_amount,
-            "pct": round(pct, 0) if pct is not None else None,
+            "recent": recent,
             "history_days": len(dates),
+            "pct": round(pct, 0) if pct is not None else None,
         }
     except Exception as e:
         log.debug("获取成交额失败: %s", e)
@@ -277,12 +293,8 @@ def _save_volume_history(history: dict) -> None:
         log.debug("保存成交额历史失败: %s", e)
 
 
-def _fetch_market_breadth() -> str | None:
-    """获取涨跌家数（沪深两市合计）
-
-    尝试从 sh000001 字段[28][29]获取涨跌家数；
-    若数据不可用，则根据上证指数涨跌方向做简单判断。
-    """
+def _fetch_market_breadth() -> dict | None:
+    """获取涨跌家数（沪深两市合计）"""
     try:
         url = "https://hq.sinajs.cn/list=sh000001"
         data = fetch_bytes(url, headers={
@@ -297,29 +309,23 @@ def _fetch_market_breadth() -> str | None:
             return None
         parts = m.group(1).split(",")
 
-        # 尝试获取精确涨跌家数（字段28=涨家数，29=跌家数）
-        up = parts[28] if len(parts) > 28 and parts[28] else None
-        down = parts[29] if len(parts) > 29 and parts[29] else None
-        if up and down and up != "0" and down != "0":
-            up_int = int(float(up))
-            down_int = int(float(down))
-            if up_int > down_int:
-                emoji = "📈"
-            elif up_int < down_int:
-                emoji = "📉"
-            else:
-                emoji = "➖"
-            return f"{emoji} 涨{up_int}家 / 跌{down_int}家"
+        up = int(float(parts[28])) if len(parts) > 28 and parts[28] else None
+        down = int(float(parts[29])) if len(parts) > 29 and parts[29] else None
 
-        # 备选：根据上证指数涨跌方向判断
-        prev_close = float(parts[2]) if parts[2] else 0
-        current = float(parts[3]) if parts[3] else 0
-        if current > prev_close:
-            return "📈 涨多跌少"
-        elif current < prev_close:
-            return "📉 跌多涨少"
+        # 如果涨跌家数为0（收盘后数据滞后），用方向估算
+        if (up is None or down is None or up == 0) and len(parts) > 3:
+            prev_close = float(parts[2]) if parts[2] else 0
+            current = float(parts[3]) if parts[3] else 0
+            if current > prev_close:
+                direction = "涨"
+            elif current < prev_close:
+                direction = "跌"
+            else:
+                direction = "平"
         else:
-            return "➖ 涨跌持平"
+            direction = None
+
+        return {"up": up, "down": down, "direction": direction}
     except Exception as e:
         log.debug("获取涨跌家数失败: %s", e)
         return None
