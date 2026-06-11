@@ -128,35 +128,40 @@ def get_a_share() -> list[dict]:
 
 
 def _parse_global_data(text: str, raw_code: str) -> dict | None:
-    """解析新浪全球指数数据（支持多种格式）"""
+    """解析新浪全球指数数据（支持多种格式），返回 {current, change, date}"""
     try:
-        # gb_$ 格式: "名称,最新价,涨跌幅%,日期,时间,..."
+        # gb_$ 格式: "名称,最新价,涨跌幅%,日期时间,涨跌额,..."
         if raw_code.startswith("gb_"):
-            # parts: [0]=名称 [1]=最新价 [2]=涨跌幅% [3]=日期
-            current = float(text.split(",")[1]) if text.split(",")[1] else 0
-            change_pct = float(text.split(",")[2]) if len(text.split(",")) > 2 and text.split(",")[2] else 0
-            if current:
-                return {"current": current, "change": round(change_pct, 2)}
+            parts = text.split(",")
+            if len(parts) >= 4 and parts[1]:
+                current = float(parts[1])
+                change_pct = float(parts[2]) if parts[2] else 0
+                date_raw = parts[3].strip() if len(parts) > 3 else ""
+                date = date_raw[:10] if date_raw else ""
+                if current:
+                    return {"current": current, "change": round(change_pct, 2), "date": date}
             return None
 
-        # int_ 格式: "名称,最新价,涨跌额,涨跌幅%"
+        # int_ 格式: "名称,最新价,涨跌额,涨跌幅%" — 无日期字段
         if raw_code.startswith("int_"):
             parts = text.split(",")
             if len(parts) >= 4 and parts[1]:
                 current = float(parts[1])
                 change_pct = float(parts[3])
                 if current:
-                    return {"current": current, "change": round(change_pct, 2)}
+                    return {"current": current, "change": round(change_pct, 2), "date": ""}
             return None
 
-        # rt_ 格式: "代码,名称,最新价,开盘,最高,最低,昨收,涨跌额,涨跌幅%,..."
+        # rt_ 格式: "代码,名称,最新价,开盘,最高,最低,昨收,涨跌额,涨跌幅%,...,日期,..."
         if raw_code.startswith("rt_"):
             parts = text.split(",")
-            if len(parts) >= 9 and parts[2]:
+            if len(parts) >= 18 and parts[2]:
                 current = float(parts[2])
                 change_pct = float(parts[8]) if parts[8] else 0
+                date_raw = parts[17].strip() if len(parts) > 17 and parts[17] else ""
+                date = date_raw[:10].replace("/", "-") if date_raw else ""
                 if current:
-                    return {"current": current, "change": round(change_pct, 2)}
+                    return {"current": current, "change": round(change_pct, 2), "date": date}
             return None
 
         return None
@@ -229,15 +234,19 @@ def fetch_all_global() -> list[dict]:
                 break
 
         if found:
-            # 有实时数据
+            # 用API返回的日期（无日期时用 today_str）
+            data_date = found.get("date", "")
+            if not data_date:
+                data_date = today_str
+            date_label = data_date[-5:]
             results.append({
-                "code": f"{display_name}（{today_str[-5:]}）",
+                "code": f"{display_name}（{date_label}）",
                 "current": found["current"],
                 "change": found["change"],
             })
             # 更新缓存
             raw_key = key.replace("gb_$", "").replace("rt_", "").replace("int_", "")
-            cache[raw_key] = {**found, "date": today_str}
+            cache[raw_key] = {"current": found["current"], "change": found["change"], "date": data_date}
         elif cache:
             # 无实时数据，走缓存
             raw_key = key.replace("gb_$", "").replace("rt_", "").replace("int_", "")
