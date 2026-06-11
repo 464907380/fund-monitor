@@ -730,9 +730,7 @@ def main() -> None:
     senti = _fetch_sentiment()
     breadth = _fetch_market_breadth()
     brief_md = build_briefing_md(a_shares, globals_, senti, breadth)
-    brief_text = build_briefing_text(a_shares, globals_, senti, breadth)
     brief_html = build_briefing_html(a_shares, globals_, senti, breadth)
-    print(brief_text)
 
     webhook = _get_secret("WECHAT_WEBHOOK")
     if webhook:

@@ -982,29 +982,8 @@ def main() -> None:
 
     rows = raw_rows
 
-    # 纯文本（终端用）
-    lines = [
-        f"📊 基金晚报 {today}",
-        "",
-        f"{'代码':<6} {'基金名':<14} {'涨跌':<8} {'近5日':<8} {'近1月':<8} {'近3月':<8} {'近1年':<8} {'经理':<6}",
-        "-" * 68,
-    ]
-    for r in rows:
-        lines.append(f"{r['code']:<6} {r['name_short']:<14} {r['day']:<8} {r['f5']:<8} {r['m1']:<8} {r['m3']:<8} {r['y1']:<8} {r['mgr']:<6}")
-    if all_alerts:
-        lines.append("")
-        lines.append("🚨 警报:")
-        for a in all_alerts:  # type: ignore[assignment]
-            lines.append(f"  {a}")
-
-    # 持仓 vs 推荐对比（终端和推送共用，只读一次文件）
+    # 推送（两条通道共用推荐对比数据）
     compare_lines = _compare_with_recommendations() if rows else None
-    if compare_lines:
-        lines.extend(compare_lines)
-
-    full_text = "\n".join(lines)
-
-    print(full_text)
     push("📊 基金晚报", rows, all_alerts, today, compare_lines)
     log.info("====== 基金晚报 %s 完成 ======", today)
 
