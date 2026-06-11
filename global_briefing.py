@@ -144,8 +144,8 @@ def get_global() -> list[dict]:
     return fetch_sina_global()
 
 
-def build_briefing() -> str:
-    """构造简报 Markdown（含市场情绪指标）"""
+def build_briefing_md() -> str:
+    """构造简报 Markdown（企业微信推送用）"""
     today = datetime.date.today().isoformat()
     a_shares = get_a_share()
     globals_ = get_global()
@@ -169,25 +169,21 @@ def build_briefing() -> str:
             lines.append("")
         lines.append("**📊 市场情绪**")
 
-        # 成交额趋势
         if senti:
             recent = sorted(senti["recent"].items())
             lines.append("**成交额**")
-            vol_rows = []
+            lines.append("|日期|成交额|较前一日|")
+            lines.append("|---|---|---:|")
             for i, (d, v) in enumerate(recent):
                 if i == 0:
-                    vol_rows.append(f"|{d[-5:]}|{v:.0f}亿|—|")
+                    lines.append(f"|{d[-5:]}|{v:.0f}亿|—|")
                 else:
                     prev_v = recent[i-1][1]
                     diff = v - prev_v
-                    vol_rows.append(f"|{d[-5:]}|{v:.0f}亿|{'↑' if diff>=0 else '↓'}{abs(diff):.0f}亿|")
-            lines.append("|日期|成交额|较前一日|")
-            lines.append("|---|---|---:|")
-            lines.extend(vol_rows)
+                    lines.append(f"|{d[-5:]}|{v:.0f}亿|{'↑' if diff>=0 else '↓'}{abs(diff):.0f}亿|")
             if senti.get("pct") is not None:
                 lines.append(f"> 高于{senti['pct']:.0f}%的交易日（近{senti['history_days']}天）")
 
-        # 涨跌家数
         if breadth:
             up, down = breadth["up"], breadth["down"]
             lines.append(f"**涨跌** 📈涨{up}家 📉跌{down}家")
@@ -210,6 +206,73 @@ def build_briefing() -> str:
     lines.append("⏰ 美股/欧股为上一交易日收盘")
 
     return "\n".join(lines)
+
+
+def build_briefing_text() -> str:
+    """构造简报文本版（终端/邮件用，对齐格式参考晚报）"""
+    today = datetime.date.today().isoformat()
+    a_shares = get_a_share()
+    globals_ = get_global()
+
+    lines = [f"🌏 全球股市简报 {today}", ""]
+
+    if a_shares:
+        lines.append("🇨🇳 A股")
+        lines.append(f"{'指数':<12} {'最新':<10} {'涨跌幅':<10}")
+        lines.append("-" * 36)
+        for s in a_shares:
+            c = s["change"]
+            emoji = "🔴" if c > 0 else ("🟢" if c < 0 else "⚪")
+            lines.append(f"{s['code']:<12} {s['current']:<10.2f} {emoji}{c:+.2f}%")
+
+    # 成交额及对比
+    senti = _fetch_sentiment()
+    breadth = _fetch_market_breadth()
+    if senti or breadth:
+        lines.append("")
+        lines.append("📊 市场情绪")
+
+        if senti:
+            lines.append("成交额")
+            lines.append(f"{'日期':<12} {'成交额':<12} {'较前一日':<12}")
+            lines.append("-" * 36)
+            for i, (d, v) in enumerate(sorted(senti["recent"].items())):
+                if i == 0:
+                    lines.append(f"{d[-5:]:<12} {v:.0f}亿{'':<9} —")
+                else:
+                    prev_v = sorted(senti["recent"].items())[i-1][1]
+                    diff = v - prev_v
+                    arrow = "↑" if diff >= 0 else "↓"
+                    lines.append(f"{d[-5:]:<12} {v:.0f}亿{'':<9} {arrow}{abs(diff):.0f}亿")
+            if senti.get("pct") is not None:
+                lines.append(f"  （高于{senti['pct']:.0f}%的交易日，近{senti['history_days']}天）")
+
+        if breadth:
+            up, down = breadth["up"], breadth["down"]
+            lines.append(f"涨跌  📈涨{up}家 📉跌{down}家")
+
+    if globals_:
+        lines.append("")
+        lines.append("🌍 全球")
+        lines.append(f"{'指数':<12} {'最新':<10} {'涨跌幅':<10}")
+        lines.append("-" * 36)
+        for s in globals_:
+            c = s["change"]
+            emoji = "🔴" if c > 0 else ("🟢" if c < 0 else "⚪")
+            lines.append(f"{s['code']:<12} {s['current']:<10.2f} {emoji}{c:+.2f}%")
+
+    if not a_shares and not globals_:
+        lines.append("❌ 所有数据源均不可用，请检查网络连接")
+
+    lines.append("")
+    lines.append("⏰ 美股/欧股为上一交易日收盘")
+
+    return "\n".join(lines)
+
+
+def build_briefing() -> str:
+    """兼容旧接口：返回 Markdown（企业微信推送用）"""
+    return build_briefing_md()
 
 
 def _fetch_sentiment() -> dict | None:
@@ -313,15 +376,15 @@ def _fetch_market_breadth() -> dict | None:
 
 def main() -> None:
     log.info("====== 全球股市简报 开始 ======")
-    briefing = build_briefing()
-    print(briefing)
+    brief_md = build_briefing_md()
+    brief_text = build_briefing_text()
+    print(brief_text)
 
     webhook = _get_secret("WECHAT_WEBHOOK")
     if webhook:
-        send_wechat(briefing)
+        send_wechat(brief_md)
     else:
-        text = briefing.replace("**", "").replace("|", " ")
-        send_mail("🌏 全球股市简报", text)
+        send_mail("🌏 全球股市简报", brief_text)
 
     log.info("====== 全球股市简报 完成 ======")
 

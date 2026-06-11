@@ -20,16 +20,18 @@ from config import CFG, get_secret
 HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── 日志 ──────────────────────────────────────
+_handlers: list[logging.Handler] = [logging.StreamHandler()]
+try:
+    _handlers.insert(0, RotatingFileHandler(
+        os.path.join(HISTORY_DIR, "fund_watch.log"),
+        maxBytes=5 * 1024 * 1024, backupCount=3,
+    ))
+except OSError:
+    pass  # 日志目录不可写时只用控制台输出
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        RotatingFileHandler(
-            os.path.join(HISTORY_DIR, "fund_watch.log"),
-            maxBytes=5 * 1024 * 1024, backupCount=3,
-        ),
-        logging.StreamHandler(),
-    ],
+    handlers=_handlers,
 )
 log = logging.getLogger(__name__)
 
