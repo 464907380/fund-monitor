@@ -97,7 +97,7 @@ def test_fetch_stock_change_normal(mock_fetch):
     assert result[1] == 1.25
 
 
-# ── push_alert / push_summary 测试 ────────────
+# ── push_alert 测试 ────────────────────────────
 
 @patch("fund_monitor.send_wechat")
 @patch("fund_monitor.WECHAT_WEBHOOK", "https://qyapi.weixin.qq.com/hook")
@@ -117,15 +117,6 @@ def test_push_alert_empty(mock_send):
     mock_send.assert_not_called()
 
 
-@patch("fund_monitor.send_wechat")
-@patch("fund_monitor.WECHAT_WEBHOOK", "https://qyapi.weixin.qq.com/hook")
-def test_push_summary(mock_send):
-    """当日汇总推送"""
-    from fund_monitor import push_summary
-    mock_send.return_value = True
-    push_summary({"001234": {"min_td": -2.0, "max_td": 1.0, "name": "测试基金",
-                              "first_td": 0.0, "last_td": -0.5, "alerts": []}})
-    mock_send.assert_called_once()
 
 
 # ── is_trading_day / is_trading_time 补充边界测试 ──

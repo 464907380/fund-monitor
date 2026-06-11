@@ -85,8 +85,7 @@ extensions = [".py"]
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
 mode  = "allow"
 deny = ["mcp__unity-mcp__*"]
-allow = ["task", "Edit(fund_watch.py)", "Bash(python -m mypy fund_utils.py fund_watch.py fund_monitor.py global_briefing.py fund_recommend.py config.py 2>&1)", "Bash(python -m pytest tests/ -q 2>&1)", "Bash(git add -A && git commit -m \"fix: sy3错误/str格式化/Docker崩溃/路径遍历/搜索范围\n\n- sy3 or sy6 → sy3 if is not None else sy6（修复0.0误回退）\n- m1/m3/y1 加 str() 包装避免 float 用 <7s 格式化抛 TypeError\n- 新增 _validate_fund_code() 白名单校验（仅允许6位数字）\n- load_hist/save_hist 调用校验防止路径遍历\n- _parse_full_nav 去掉500K搜索上限 + 加 end<0 提前返回\n- Dockerfile 删除不存在的 COPY tests/（被 .dockerignore 过滤）\n- Dockerfile 注释添加持久化数据卷说明\" 2>&1 | Select-Object -Last 4)", "Bash(python -m mypy fund_utils.py fund_watch.py fund_monitor.py global_briefing.py fund_recommend.py config.py 2>&1 && python -m pytest tests/ -q 2>&1)", "Edit(config.py)", "Bash(python fund_watch.py 2>&1)", "Bash(git add -A && git commit -m \"fix: 消除推送配置缺失提示噪音\n\n- config.py: warning→info, 去掉\"企业微信不可用，将走邮件\"的提示\n- fund_watch.py: 删除 main() 中\"未设置，走邮件推送\" log\n- fund_utils.py: warning→debug\n- 邮件能发就静默发，发不了才提示\"两个渠道都不可用\"\" 2>&1 | Select-Object -Last 4)"]
-# ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
+
 
 [sandbox]
 # Confine tool blast radius. File-writers (write_file/edit_file/multi_edit)

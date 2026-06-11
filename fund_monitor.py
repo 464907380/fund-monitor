@@ -490,50 +490,6 @@ def push_alert(alerts: list[str]) -> None:
         send_mail("🚨 基金盘中警报", text)
 
 
-def push_summary(states: dict[str, dict], stock_info: dict[str, dict] | None = None) -> None:
-    """
-    收盘后发送盘中汇总（含当日波动 vs 历史波动对比）
-    stock_info: 个股汇总（可选）
-    """
-    if not states and not stock_info:
-        return
-
-    lines = ["📊 **盘中监控汇总**", ""]
-
-    if states:
-        lines.append("**📈 基金**")
-        for code, s in states.items():
-            name = s.get("name", code)
-            first = s.get("first_td", 0)
-            last = s.get("last_td", 0)
-            low = s.get("min_td", 0)
-            high = s.get("max_td", 0)
-            day_range = high - low  # 当日波动幅度
-            lines.append(
-                f"**{name}({code})** "
-                f"波动 {high:+.1f}%~{low:+.1f}% "
-                f"| 振幅 {day_range:.1f}%"
-                f" | 收盘估算 {last:+.2f}%"
-            )
-
-    if stock_info:
-        if states:
-            lines.append("")
-        lines.append("**📋 个股监控**")
-        for key, s in sorted(stock_info.items()):
-            stock_code = key.split(":")[1]
-            day_range = s.get("max_chg", 0) - s.get("min_chg", 0)
-            lines.append(f"**{s['name']}({stock_code})** "
-                         f"涨跌 {s['chg']:+.2f}% "
-                         f"| 振幅 {day_range:.1f}%"
-                         f" | 最大涨 {s['max_chg']:+.2f}% 最大跌 {s['min_chg']:+.2f}%")
-
-    content = "\n".join(lines)
-    if WECHAT_WEBHOOK:
-        send_wechat(content)
-    else:
-        text = re.sub(r'\*\*', '', content)
-        send_mail("📊 盘中监控汇总", text)
 
 
 # ── 监控主循环 ────────────────────────────────
@@ -566,12 +522,8 @@ def monitor() -> None:
     while True:
         now = datetime.datetime.now()
 
-        # 当天已收盘 → 推送汇总，等明天
+        # 当天已收盘 → 清空状态，等明天
         if now.time() >= datetime.time(15, 5):
-            if states or stock_states:
-                push_summary(states, stock_states)
-                log.info("收盘汇总已推送（含 %d 只基金 + %d 只个股）",
-                         len(states), len(stock_states))
             states.clear()
             stock_states.clear()
             _holdings_cache.clear()
