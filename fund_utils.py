@@ -138,13 +138,13 @@ def _color_cls(val: str) -> str:
 
 
 def _color_inline(val: str) -> str:
-    """数值颜色内联样式：涨红跌绿"""
+    """数值颜色内联样式：涨红跌绿（深色背景优化）"""
     if not val:
         return ""
     if val.startswith("+"):
-        return "color:#d32f2f;"
+        return "color:#ef5350;"
     if val.startswith("-"):
-        return "color:#2e7d32;"
+        return "color:#66bb6a;"
     return ""
 
 

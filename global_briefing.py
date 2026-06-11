@@ -161,7 +161,7 @@ def build_briefing() -> str:
             emoji = "🔴" if c > 0 else ("🟢" if c < 0 else "⚪")
             lines.append(f"|{s['code']}|{s['current']:.2f}|{emoji}{c:+.2f}%|")
 
-    # 市场情绪指标
+    # 成交额及对比
     senti = _fetch_sentiment()
     breadth = _fetch_market_breadth()
     if senti or breadth:
@@ -170,7 +170,14 @@ def build_briefing() -> str:
         lines.append("**📊 市场情绪**")
         parts = []
         if senti:
-            parts.append(f"成交额 {senti['amount']:.0f}亿 | {senti['mood']}")
+            vol_parts = [f"今日 {senti['amount']:.0f}亿"]
+            if senti.get("prev_amount") is not None:
+                diff = senti["amount"] - senti["prev_amount"]
+                direction = "↑" if diff > 0 else "↓"
+                vol_parts.append(f"前日 {senti['prev_amount']:.0f}亿（{direction}{abs(diff):.0f}亿）")
+            if senti.get("pct") is not None:
+                vol_parts.append(f"高于{senti['pct']:.0f}%的交易日（近{senti['history_days']}天）")
+            parts.append("成交额 " + " | ".join(vol_parts))
         if breadth:
             parts.append(f"涨跌方向 {breadth}")
         lines.append("  ".join(parts))
@@ -196,7 +203,7 @@ def build_briefing() -> str:
 
 
 def _fetch_sentiment() -> dict | None:
-    """获取市场情绪指标：成交额（基于历史百分位动态阈值）"""
+    """获取市场成交额（含历史对比数据）"""
     try:
         url = "https://hq.sinajs.cn/list=sh000001,sz399001"
         data = fetch_bytes(url, headers={
@@ -220,41 +227,33 @@ def _fetch_sentiment() -> dict | None:
         # 保存当日成交额到历史
         history = _load_volume_history()
         history[today] = round(amount_yi, 0)
-        # 只保留最近 N 天
         dates = sorted(history.keys())
         if len(dates) > _VOLUME_HISTORY_DAYS:
             for d in dates[:-_VOLUME_HISTORY_DAYS]:
                 del history[d]
         _save_volume_history(history)
 
-        # 用历史百分位判断情绪
+        # 前一日成交额（如果有）
+        prev_amount = None
+        if len(dates) >= 2:
+            prev_date = dates[-2]
+            prev_amount = history.get(prev_date)
+
+        # 历史百分位
+        pct = None
         if len(dates) >= 10:
             vals = sorted(history.values())
             n = len(vals)
-            # 计算当前值在历史中的百分位
             pct = sum(1 for v in vals if v <= amount_yi) / n * 100
-            if pct >= 95:
-                mood = f"🔥🔥 历史高位（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
-            elif pct >= 80:
-                mood = f"🔥 放量（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
-            elif pct >= 50:
-                mood = f"🟡 活跃（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
-            elif pct >= 20:
-                mood = f"🟢 正常（{amount_yi:.0f}亿, 高于{pct:.0f}%的交易日）"
-            else:
-                mood = f"🔵 低迷（{amount_yi:.0f}亿, 仅高于{pct:.0f}%的交易日）"
-        else:
-            # 历史数据不足时退回简单判断
-            if amount_yi > 12000:
-                mood = f"成交{amount_yi:.0f}亿（量较大）"
-            elif amount_yi > 7000:
-                mood = f"成交{amount_yi:.0f}亿（正常）"
-            else:
-                mood = f"成交{amount_yi:.0f}亿（偏低）"
 
-        return {"amount": round(amount_yi, 0), "mood": mood}
+        return {
+            "amount": round(amount_yi, 0),
+            "prev_amount": prev_amount,
+            "pct": round(pct, 0) if pct is not None else None,
+            "history_days": len(dates),
+        }
     except Exception as e:
-        log.debug("获取情绪指标失败: %s", e)
+        log.debug("获取成交额失败: %s", e)
         return None
 
 

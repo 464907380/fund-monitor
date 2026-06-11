@@ -70,8 +70,8 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 def _pipe_table_to_html(compare_lines: list[str]) -> str:
     """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
-    cp = '<tr><td style="padding:12px 14px;background:#f0f8ff;border:1px solid #bcd;border-radius:6px;">'
-    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#1a1a2e;">🏆 市场优选基金 TOP 10 （11 维评分）</p>'
+    cp = '<tr><td style="padding:12px 14px;background:#0f3460;border:1px solid #333;border-radius:6px;">'
+    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#e0e0e0;">🏆 市场优选基金 TOP 10 （11 维评分）</p>'
     in_table = False
     header_done = False
     for line in compare_lines:
@@ -94,17 +94,17 @@ def _pipe_table_to_html(compare_lines: list[str]) -> str:
             if not header_done:
                 cp += '<thead><tr>'
                 for c in clean.strip("|").split("|"):
-                    cp += f'<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #ccc;color:#555;white-space:nowrap;">{c.strip()}</th>'
+                    cp += f'<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #444;color:#888;white-space:nowrap;">{c.strip()}</th>'
                 cp += '</tr></thead><tbody>'
                 header_done = True
             else:
                 cp += '<tr>'
                 for c in clean.strip("|").split("|"):
-                    cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #eee;color:#444;white-space:nowrap;">{c.strip()}</td>'
+                    cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:#bbb;white-space:nowrap;">{c.strip()}</td>'
                 cp += '</tr>'
             continue
         if not in_table:
-            cp += f'<p style="margin:2px 0;font-size:12px;color:#666;">{clean}</p>'
+            cp += f'<p style="margin:2px 0;font-size:12px;color:#888;">{clean}</p>'
     if in_table:
         cp += '</tbody></table>'
     cp += '</td></tr>'
@@ -137,12 +137,12 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         _m3 = _html.escape(str(r.get("m3", "")))
         _y1 = _html.escape(str(r.get("y1", "")))
         row_htmls.append("<tr>"
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-family:Consolas;font-size:11px;color:#888;white-space:nowrap;">{_code}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-size:13px;white-space:nowrap;">{_name}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["day"])}">{_day}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m1"])}">{_m1}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m3"])}">{_m3}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["y1"])}">{_y1}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-family:Consolas;font-size:11px;color:#888;white-space:nowrap;">{_code}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-size:13px;color:#ccc;white-space:nowrap;">{_name}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["day"])}">{_day}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m1"])}">{_m1}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m3"])}">{_m3}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["y1"])}">{_y1}</td>'
             + "</tr>"
         )
     html = tpl_html.replace("{{ROWS}}", "\n".join(row_htmls))
@@ -159,9 +159,9 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
 
     # 警报
     if alerts:
-        al = '<tr><td style="padding:12px 14px;"><p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#c62828;">🚨 警报</p>'
+        al = '<tr><td style="padding:12px 14px;"><p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ef5350;">🚨 警报</p>'
         for a in alerts:
-            al += f'<p style="margin:3px 0;padding:4px 0;font-size:12px;color:#555;">{_strip_html(a)}</p>'
+            al += f'<p style="margin:3px 0;padding:4px 0;font-size:12px;color:#aaa;">{_strip_html(a)}</p>'
         al += '</td></tr>'
         extra_parts.append(al)
 
