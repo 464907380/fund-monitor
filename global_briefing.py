@@ -19,7 +19,32 @@ _VOLUME_BREADTH_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 _VOLUME_HISTORY_DAYS = 60  # 取近60个交易日做百分位计算
 
 
-# ── 指数列表 ──────────────────────────────────
+# 新浪全球指数代码映射（不同市场的代码格式不同）
+_GLOBAL_CODE_MAP = {
+    "gb_$dji":    ["gb_$dji"],
+    "gb_$ixic":   ["gb_$ixic"],
+    "gb_$inx":    ["gb_$inx"],
+    "rt_hkHSI":   ["rt_hkHSI"],
+    "int_nikkei": ["int_nikkei"],
+    "gb_$ks11":   ["gb_$ks11", "int_kospi"],
+    "int_ftse":   ["int_ftse"],
+    "gb_$gdaxi":  ["gb_$gdaxi", "int_dax"],
+    "gb_$fchi":   ["gb_$fchi", "int_cac"],
+    "gb_$ssmi":   ["gb_$ssmi", "int_smi"],
+}
+
+_GLOBAL_DISPLAY_NAMES = {
+    "gb_$dji":    "道琼斯",
+    "gb_$ixic":   "纳斯达克",
+    "gb_$inx":    "标普500",
+    "rt_hkHSI":   "恒生指数",
+    "int_nikkei": "日经225",
+    "gb_$ks11":   "韩国KOSPI",
+    "int_ftse":   "英国富时100",
+    "gb_$gdaxi":  "德国DAX",
+    "gb_$fchi":   "法国CAC40",
+    "gb_$ssmi":   "瑞士SMI",
+}
 A_INDICES = [
     ("sh000001", "上证指数"),
     ("sz399001", "深证成指"),
@@ -39,6 +64,8 @@ GLOBAL_INDICES = [
     ("gb_$fchi",  "法国CAC40"),
     ("gb_$ssmi",  "瑞士SMI"),
 ]
+
+_GLOBAL_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".global_cache.json")
 
 
 # WECHAT_WEBHOOK 在 main() 中惰性读取，支持环境变量刷新
@@ -100,53 +127,138 @@ def get_a_share() -> list[dict]:
     return results
 
 
-def fetch_sina_global() -> list[dict]:
-    """从新浪财经获取全球主要指数（批量请求，国内可访问）
+def _parse_global_data(text: str, raw_code: str) -> dict | None:
+    """解析新浪全球指数数据（支持多种格式）"""
+    try:
+        # gb_$ 格式: "名称,最新价,涨跌幅%,日期,时间,..."
+        if raw_code.startswith("gb_"):
+            # parts: [0]=名称 [1]=最新价 [2]=涨跌幅% [3]=日期
+            current = float(text.split(",")[1]) if text.split(",")[1] else 0
+            change_pct = float(text.split(",")[2]) if len(text.split(",")) > 2 and text.split(",")[2] else 0
+            if current:
+                return {"current": current, "change": round(change_pct, 2)}
+            return None
 
-    新浪全球指数返回格式（不同于A股）：
-    var hq_str_gb_$dji="名称,当前价,涨跌幅%,日期时间,..."
-    字段索引: 0=名称, 1=当前价, 2=涨跌幅%, 3=日期
-    """
-    codes = ",".join(code for code, _ in GLOBAL_INDICES)
-    url = f"https://hq.sinajs.cn/list={codes}"
+        # int_ 格式: "名称,最新价,涨跌额,涨跌幅%"
+        if raw_code.startswith("int_"):
+            parts = text.split(",")
+            if len(parts) >= 4 and parts[1]:
+                current = float(parts[1])
+                change_pct = float(parts[3])
+                if current:
+                    return {"current": current, "change": round(change_pct, 2)}
+            return None
+
+        # rt_ 格式: "代码,名称,最新价,开盘,最高,最低,昨收,涨跌额,涨跌幅%,..."
+        if raw_code.startswith("rt_"):
+            parts = text.split(",")
+            if len(parts) >= 9 and parts[2]:
+                current = float(parts[2])
+                change_pct = float(parts[8]) if parts[8] else 0
+                if current:
+                    return {"current": current, "change": round(change_pct, 2)}
+            return None
+
+        return None
+    except (ValueError, IndexError):
+        return None
+
+
+def _load_global_cache() -> dict:
+    """加载全球指数缓存"""
+    if not os.path.exists(_GLOBAL_CACHE_FILE):
+        return {}
+    try:
+        with open(_GLOBAL_CACHE_FILE, encoding="utf-8") as f:
+            return json.load(f)  # type: ignore[no-any-return]
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_global_cache(cache: dict) -> None:
+    """保存全球指数缓存"""
+    try:
+        with open(_GLOBAL_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def fetch_all_global() -> list[dict]:
+    """获取全球主要指数（多数据源，无实时数据的走缓存）"""
+    today_str = datetime.date.today().isoformat()
+    cache = _load_global_cache()
+
+    # 收集所有需要查询的代码（去重）
+    all_codes = set()
+    for codes in _GLOBAL_CODE_MAP.values():
+        all_codes.update(codes)
+    all_codes.discard("")  # 移除空字符串
+
+    # 批量请求
+    url = f"https://hq.sinajs.cn/list={','.join(all_codes)}"
     data = fetch_bytes(url, headers={
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://finance.sina.com.cn",
     })
-    if data is None:
-        return []
-    name_map = dict(GLOBAL_INDICES)
-    results = []
-    try:
+
+    # 解析返回数据 keyed by code
+    live: dict[str, dict] = {}
+    if data:
         text = data.decode("gbk")
         for line in text.strip().split("\n"):
-            m = re.search(r'var hq_str_gb_\$(\w+)="(.+?)"', line)
-            if not m:
-                continue
-            raw_code = m.group(1)
-            parts = m.group(2).split(",")
-            if len(parts) < 6:
-                continue
-            # 全球指数格式: 0=名称, 1=最新价, 2=涨跌幅%
-            current = float(parts[1]) if parts[1] else 0
-            change_pct = float(parts[2]) if parts[2] else 0
-            if current:
-                full_code = f"gb_${raw_code}"
-                display_name = name_map.get(full_code, raw_code)
+            m = re.search(r'var hq_str_([^=]+)="(.*?)"', line)
+            if m:
+                code = m.group(1)
+                val = m.group(2).strip()
+                if val:
+                    parsed = _parse_global_data(val, code)
+                    if parsed:
+                        live[code] = parsed
+
+    # 按显示顺序组装结果
+    results = []
+    for key, display_name in _GLOBAL_DISPLAY_NAMES.items():
+        codes = _GLOBAL_CODE_MAP.get(key, [])
+        found = None
+        used_code = None
+        for c in codes:
+            if c in live:
+                found = live[c]
+                used_code = c
+                break
+
+        if found:
+            # 有实时数据
+            results.append({
+                "code": display_name,
+                "current": found["current"],
+                "change": found["change"],
+            })
+            # 更新缓存
+            raw_key = key.replace("gb_$", "").replace("rt_", "").replace("int_", "")
+            cache[raw_key] = {**found, "date": today_str}
+        elif cache:
+            # 无实时数据，走缓存
+            raw_key = key.replace("gb_$", "").replace("rt_", "").replace("int_", "")
+            cached = cache.get(raw_key)
+            if cached:
+                date_note = cached.get("date", "")
+                suffix = f"（{date_note[-5:]}）" if date_note else ""
                 results.append({
-                    "code": display_name,
-                    "current": current,
-                    "change": round(change_pct, 2),
+                    "code": display_name + suffix,
+                    "current": cached["current"],
+                    "change": cached["change"],
                 })
-        return results
-    except Exception as e:
-        log.warning("新浪全球指数获取失败: %s", e)
-        return []
+
+    if results:
+        _save_global_cache(cache)
+    return results
 
 
 def get_global() -> list[dict]:
     """获取全球主要指数"""
-    return fetch_sina_global()
+    return fetch_all_global()
 
 
 def build_briefing_md() -> str:
