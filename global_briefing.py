@@ -231,7 +231,7 @@ def fetch_all_global() -> list[dict]:
         if found:
             # 有实时数据
             results.append({
-                "code": display_name,
+                "code": f"{display_name}（{today_str[-5:]}）",
                 "current": found["current"],
                 "change": found["change"],
             })
@@ -246,7 +246,7 @@ def fetch_all_global() -> list[dict]:
                 date_note = cached.get("date", "")
                 suffix = f"（{date_note[-5:]}）" if date_note else ""
                 results.append({
-                    "code": display_name + suffix,
+                    "code": f"{display_name}{suffix}",
                     "current": cached["current"],
                     "change": cached["change"],
                 })
