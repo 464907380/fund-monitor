@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG
-from fund_utils import fetch, log, send_wechat, send_mail, parse_sina_csv
+from fund_utils import fetch, log, _fetch_fund_estimate, send_wechat, send_mail, parse_sina_csv
 from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
@@ -250,22 +250,36 @@ def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
     从新浪获取个股实时涨跌幅。
     返回 (股票名称, 涨跌幅%)，失败返回 None。
     """
+    # 主数据源：新浪
     url = f"https://hq.sinajs.cn/list={sina_code}"
     try:
         data = fetch(url)
         parts = parse_sina_csv(data)
-        if parts is None:
-            return None
-        name = parts[0]
-        prev_close = float(parts[2]) if parts[2] else 0
-        current = float(parts[3]) if parts[3] else 0
-        if prev_close:
-            chg = round((current - prev_close) / prev_close * 100, 2)
-            return name, chg
-        return None
+        if parts is not None:
+            name = parts[0]
+            prev_close = float(parts[2]) if parts[2] else 0
+            current = float(parts[3]) if parts[3] else 0
+            if prev_close:
+                chg = round((current - prev_close) / prev_close * 100, 2)
+                return name, chg
     except Exception as e:
-        log.debug("获取个股 %s 失败: %s", sina_code, e)
-        return None
+        log.debug("新浪获取个股 %s 失败: %s", sina_code, e)
+
+    # 备选：腾讯财经
+    try:
+        data = fetch(f"http://qt.gtimg.cn/q={sina_code}")
+        parts = data.split("~")
+        if len(parts) > 32 and parts[3]:
+            name = parts[1]
+            price = float(parts[3])
+            prev_close = float(parts[4]) if parts[4] else 0
+            if prev_close:
+                chg = round((price - prev_close) / prev_close * 100, 2)
+                return name, chg
+    except Exception as e:
+        log.debug("腾讯获取个股 %s 失败: %s", sina_code, e)
+
+    return None
 
 
 def _get_fund_holdings(code: str) -> list[dict]:
@@ -388,14 +402,10 @@ def check_intraday(code: str, state: dict) -> list[str]:
 
 
     try:
-        gz = fetch(f"https://fundgz.1234567.com.cn/js/{code}.js")
-        m = re.search(r'"fundcode":"([^"]+)","name":"([^"]*)","gszzl":"([-+\d.]+)"', gz)
-        if not m:
+        result = _fetch_fund_estimate(code)
+        if not result:
             return []
-
-        code_r = m.group(1)
-        name = m.group(2) or code
-        gszzl = float(m.group(3))  # 实时估算涨跌幅
+        name, gszzl = result
 
         # 初始化当日状态
         if "first_td" not in state:

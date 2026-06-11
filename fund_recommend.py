@@ -33,21 +33,31 @@ _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund
 
 
 def _fetch_rank_list(pn: int) -> list[list[str]]:
-    """从天天基金排行 API 获取全市场基金排行"""
+    """从天天基金排行 API 获取全市场基金排行（多URL备选）"""
     sd = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
     ed = datetime.date.today().isoformat()
-    url = (
-        f"https://fund.eastmoney.com/data/rankhandler.aspx"
-        f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
-        f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1"
-    )
-    data = fetch(url)
-    if not data:
-        return []
-    raw = data.replace("var rankData = ", "", 1).rstrip(";")
-    raw_clean = re.sub(r'(\{|,)\s*(\w+)\s*:', lambda m: m.group(1) + '"' + m.group(2) + '":', raw)
-    result = json.loads(raw_clean)
-    return [row.split(",") for row in result.get("datas", [])]
+    urls = [
+        (f"https://fund.eastmoney.com/data/rankhandler.aspx"
+         f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
+         f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1"),
+        (f"https://fund.eastmoney.com/data/rankhandler.aspx"
+         f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
+         f"&sd={sd}&ed={ed}&pi=1&pn={pn}"),
+    ]
+    for url in urls:
+        data = fetch(url)
+        if not data:
+            continue
+        try:
+            raw = data.replace("var rankData = ", "", 1).rstrip(";")
+            raw_clean = re.sub(r'(\{|,)\s*(\w+)\s*:', lambda m: m.group(1) + '"' + m.group(2) + '":', raw)
+            result = json.loads(raw_clean)
+            rows = [row.split(",") for row in result.get("datas", [])]
+            if rows:
+                return rows
+        except (json.JSONDecodeError, KeyError, IndexError):
+            continue
+    return []
 
 
 def _save_result(scored: list[tuple]) -> None:

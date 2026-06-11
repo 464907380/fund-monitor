@@ -24,3 +24,11 @@
    - 每次回复的开头先用简明文字写出你的思考过程：你理解了什么、打算怎么做、为什么
    - 然后再执行操作或给出最终回答
    - 不要把所有思考都藏在 `  thinking` 标签里，用户可能看不到那部分
+
+6. **动手前先检视工具/技能清单**
+   - 用户提出任务后，先扫一遍系统提示词顶部的 pinned Skills index
+   - 再扫一遍本文件的 use-all-tools-actively 和 use-skills-actively 记忆
+   - 如果有现成的 skill（如 `/code-review`、`/security-review`、`/test`、`/changelog`）
+     或工具（如 `task`、`explore`、`review`、`research`、`web_fetch`）匹配当前任务，
+     优先使用而非手工操作
+   - 简单操作（改一行、读一个小文件）不受此限

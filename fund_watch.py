@@ -13,7 +13,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from config import CFG
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, \
+from fund_utils import fetch, log, HISTORY_DIR, _fetch_fund_estimate, \
     _color_inline, _strip_html, _send_smtp, send_wechat
 
 # ── 基金列表 ──────────────────────────────────
@@ -319,42 +319,45 @@ def _parse_full_nav(data: str) -> list[dict] | None:
 
 def _parse_real_time(code: str) -> float | None:
     """获取实时估算涨跌幅"""
-    try:
-        gz = fetch(f"https://fundgz.1234567.com.cn/js/{code}.js")
-        m = re.search(r'"gszzl":"([-\d.]+)"', gz)
-        return float(m.group(1)) if m else None
-    except Exception as e:
-        log.debug("拉取实时估算失败 %s: %s", code, e)
-        return None
+    result = _fetch_fund_estimate(code)
+    if result:
+        _, gszzl = result
+        return gszzl
+    return None
 
 
 def _parse_holdings(code: str) -> list[dict] | None:
     """获取前5大持仓明细（使用 csv.reader 处理名称含逗号的情况）"""
-    try:
-        jj = fetch(
-            f"https://fund.eastmoney.com/f10/FundArchivesDatas.aspx"
-            f"?type=jjcc&code={code}&topline=5&year=&month=&rt=0.1"
-        )
-        cm = re.search(r'content:"([^"]+)"', jj, re.DOTALL)
-        if not cm:
-            return None
-        holds = []
-        for line in cm.group(1).split("\\n"):
-            # 使用 csv.reader 解析，正确处理带引号内逗号的情况
-            # 格式: 序号,股票代码,股票名称,占净值比例%,持仓市值,占净值比例
-            reader = csv.reader([line])
-            for parts in reader:
-                if len(parts) < 6:
-                    continue
-                try:
-                    int(parts[0])
-                    holds.append({"n": parts[2], "c": parts[1], "p": float(parts[5]) if parts[5] else 0})
-                except (ValueError, IndexError):
-                    pass
-        return holds if holds else None
-    except Exception as e:
-        log.debug("拉取持仓失败 %s: %s", code, e)
-        return None
+    urls = [
+        f"https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=5&year=&month=&rt=0.1",
+        f"https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=5",
+    ]
+    last_err = None
+    for url in urls:
+        try:
+            jj = fetch(url)
+            cm = re.search(r'content:"([^"]+)"', jj, re.DOTALL)
+            if not cm:
+                continue
+            holds = []
+            for line in cm.group(1).split("\\n"):
+                reader = csv.reader([line])
+                for parts in reader:
+                    if len(parts) < 6:
+                        continue
+                    try:
+                        int(parts[0])
+                        holds.append({"n": parts[2], "c": parts[1], "p": float(parts[5]) if parts[5] else 0})
+                    except (ValueError, IndexError):
+                        pass
+            if holds:
+                return holds
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        log.debug("拉取持仓失败 %s: %s", code, last_err)
+    return None
 
 
 # ── 评分相关解析 ──────────────────────────────

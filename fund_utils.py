@@ -144,6 +144,28 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
 
+# ── 基金实时估算（fund_watch 和 fund_monitor 共用） ──────────
+
+def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
+    """获取基金实时估算涨跌幅，返回 (基金名, 估算涨跌幅%)"""
+    # 主数据源：天天基金
+    urls = [
+        f"https://fundgz.1234567.com.cn/js/{code}.js",
+        f"http://fundgz.1234567.com.cn/js/{code}.js",
+    ]
+    for url in urls:
+        try:
+            gz = fetch(url)
+            m = re.search(r'"fundcode":"([^"]+)","name":"([^"]*)","gszzl":"([-+\d.]+)"', gz)
+            if m:
+                name = m.group(2) or code
+                gszzl = float(m.group(3))
+                return name, gszzl
+        except Exception:
+            continue
+    return None
+
+
 # ── 推送 ──────────────────────────────────────
 
 def _send_smtp(msg: MIMEText) -> None:
