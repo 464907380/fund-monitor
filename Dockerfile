@@ -8,7 +8,7 @@
 #     -v ./config.json:/app/config.json \
 #     -v ./fund_list.json:/app/fund_list.json \
 #     -v ./.env:/app/.env \
-#     -v ./data:/app/data \        # 持久化历史快照和节假日缓存
+#     -v ./data:/app/data \        # 持久化文件（需将 HISTORY_DIR 改为子目录 /app/data，见 fund_utils.py）
 #     fund-monitor python /app/fund_monitor.py
 #
 # 运行一次晚报/简报（可配合宿主机 cron）：

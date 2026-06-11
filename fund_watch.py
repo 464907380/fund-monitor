@@ -871,12 +871,6 @@ def _load_recommend_data() -> dict | None:
         return None
 
 
-def _load_recommend_results() -> list[dict] | None:
-    """加载基金推荐结果列表"""
-    data = _load_recommend_data()
-    if data is None:
-        return None
-    return data.get("results", [])  # type: ignore[no-any-return]
 
 
 def _compare_with_recommendations() -> list[str]:
