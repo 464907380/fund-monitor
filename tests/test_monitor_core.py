@@ -106,7 +106,7 @@ def test_push_alert(mock_send):
     from fund_monitor import push_alert
     mock_send.return_value = True
     with patch.dict("os.environ", {"WECHAT_WEBHOOK": "https://qyapi.weixin.qq.com/hook"}):
-        push_alert(["🚩 测试警报"])
+        push_alert(["🚩 测试警报"], [])
     mock_send.assert_called_once()
 
 
@@ -114,7 +114,7 @@ def test_push_alert(mock_send):
 def test_push_alert_empty(mock_send):
     """空警报列表不应推送"""
     from fund_monitor import push_alert
-    push_alert([])
+    push_alert([], [])
     mock_send.assert_not_called()
 
 

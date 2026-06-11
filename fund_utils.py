@@ -128,16 +128,6 @@ def parse_sina_csv(data: str | bytes, encoding: str = "utf-8") -> list[str] | No
 
 # ── 颜色与文本工具 ────────────────────────────
 
-def _color_cls(val: str) -> str:
-    """数值颜色 class：涨红跌绿"""
-    if not val:
-        return ""
-    if val.startswith("+"):
-        return ' class="red"'
-    if val.startswith("-"):
-        return ' class="green"'
-    return ""
-
 
 def _color_inline(val: str) -> str:
     """数值颜色内联样式：涨红跌绿（深色背景优化）"""

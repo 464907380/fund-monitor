@@ -463,14 +463,10 @@ def check_intraday(code: str, state: dict) -> list[str]:
     return alerts
 
 
-def push_alert(alerts: list[str]) -> None:
-    """推送盘中警报"""
-    if not alerts:
+def push_alert(fund_alerts: list[str], stock_alerts: list[str]) -> None:
+    """推送盘中警报（基金警报和持仓个股警报分开传入，避免关键词误判）"""
+    if not fund_alerts and not stock_alerts:
         return
-
-    # 区分基金警报和持仓个股警报
-    fund_alerts = [a for a in alerts if "持仓" not in a]
-    stock_alerts = [a for a in alerts if "持仓" in a]
 
     parts = []
     if fund_alerts:
@@ -480,12 +476,13 @@ def push_alert(alerts: list[str]) -> None:
 
     content = "\n\n".join(parts)
 
+    all_texts = fund_alerts + stock_alerts
     if _get_webhook():
         send_wechat(content)
     else:
         # 邮件格式（纯文本）
         text = "🚨 盘中警报\n\n" + "\n".join(
-            re.sub(r'<[^>]+>', '', a) for a in alerts
+            re.sub(r'<[^>]+>', '', a) for a in all_texts
         )
         send_mail("🚨 基金盘中警报", text)
 
@@ -546,21 +543,22 @@ def monitor() -> None:
             log.info("持仓数据加载完毕")
 
         # 轮询检查每只基金 + 持仓个股
-        all_alerts = []
+        fund_alerts: list[str] = []
+        stock_alerts: list[str] = []
         got_data = False
         for f in FUND_LIST:
             code = f["code"]
             if code not in states:
                 states[code] = {}
-            alerts = check_intraday(code, states[code])
-            all_alerts.extend(alerts)
+            fa = check_intraday(code, states[code])
+            fund_alerts.extend(fa)
             if states[code].get("last_td") is not None:
                 got_data = True
 
             # 检查该基金的持仓个股
             fund_name = states[code].get("name", code)
-            stock_alerts = check_holdings_intraday(code, fund_name, stock_states)
-            all_alerts.extend(stock_alerts)
+            sa = check_holdings_intraday(code, fund_name, stock_states)
+            stock_alerts.extend(sa)
 
         # 智能节假日检测：所有基金都无实时数据 → 可能是休市日
         if not got_data:
@@ -580,12 +578,11 @@ def monitor() -> None:
             empty_rounds = 0
 
         # 推送本周期警报
-        if all_alerts:
-            push_alert(all_alerts)
+        if fund_alerts or stock_alerts:
+            push_alert(fund_alerts, stock_alerts)
             log.info("推送 %d 条盘中警报（基金 %d 条, 个股 %d 条）",
-                     len(all_alerts),
-                     sum(1 for a in all_alerts if "持仓" not in a),
-                     sum(1 for a in all_alerts if "持仓" in a))
+                     len(fund_alerts) + len(stock_alerts),
+                     len(fund_alerts), len(stock_alerts))
         else:
             log.debug("本轮检查无警报")
 

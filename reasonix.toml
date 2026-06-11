@@ -85,7 +85,7 @@ extensions = [".py"]
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
 mode  = "allow"
 deny = ["mcp__unity-mcp__*"]
-allow = ["remember"]
+allow = ["remember", "Edit"]
 # ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
 
 [sandbox]
