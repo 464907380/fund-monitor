@@ -207,3 +207,16 @@ def send_mail(subject: str, text: str) -> None:
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = qq_email
     _send_smtp(msg)
+
+
+def send_mail_html(subject: str, html: str) -> None:
+    """通过 QQ 邮箱发送 HTML 邮件"""
+    qq_email = get_secret("QQ_EMAIL")
+    qq_auth = get_secret("QQ_MAIL_AUTH")
+    if not qq_email or not qq_auth:
+        log.debug("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
+        return
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
+    msg["From"] = msg["To"] = qq_email
+    _send_smtp(msg)

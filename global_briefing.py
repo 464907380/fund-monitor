@@ -10,7 +10,7 @@ import re
 import datetime
 import os
 import urllib.request
-from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail, parse_sina_csv
+from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail, send_mail_html, parse_sina_csv
 from config import get_secret as _get_secret
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
@@ -453,17 +453,114 @@ def _fetch_market_breadth() -> dict | None:
         return _load_breadth_history() or None
 
 
+def build_briefing_html() -> str:
+    """构造简报 HTML（邮件推送用，深色主题同晚报）"""
+    today = datetime.date.today().isoformat()
+    a_shares = get_a_share()
+    globals_ = get_global()
+    senti = _fetch_sentiment()
+    breadth = _fetch_market_breadth()
+
+    rows = []
+
+    # A股
+    if a_shares:
+        rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🇨🇳 A股</td></tr>')
+        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
+                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
+                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
+        for s in a_shares:
+            c = s["change"]
+            color = "#ef5350" if c > 0 else ("#66bb6a" if c < 0 else "#ccc")
+            rows.append(f'<tr><td style="padding:6px 12px;border-bottom:1px solid #333;color:#ccc;">{s["code"]}</td>'
+                        f'<td style="padding:6px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{s["current"]:.2f}</td>'
+                        f'<td style="padding:6px 12px;text-align:right;font-weight:600;font-family:Consolas;border-bottom:1px solid #333;color:{color};">{"🔴" if c>0 else "🟢" if c<0 else "⚪"}{c:+.2f}%</td></tr>')
+
+    # 成交额
+    if senti:
+        rows.append('<tr><td style="padding:10px 12px 4px;" colspan="3"><p style="margin:0;font-size:13px;font-weight:600;color:#ccc;">📊 成交额</p></td></tr>')
+        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">日期</td>'
+                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">成交额</td>'
+                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">较前一日</td></tr>')
+        for i, (d, v) in enumerate(sorted(senti["recent"].items())):
+            if i == 0:
+                diff_str = "—"
+            else:
+                prev_v = sorted(senti["recent"].items())[i-1][1]
+                diff = v - prev_v
+                diff_str = f'<span style="color:#ef5350;">↑{abs(diff):.0f}亿</span>' if diff >= 0 else f'<span style="color:#66bb6a;">↓{abs(diff):.0f}亿</span>'
+            rows.append(f'<tr><td style="padding:4px 12px;border-bottom:1px solid #333;color:#ccc;">{d[-5:]}</td>'
+                        f'<td style="padding:4px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{v:.0f}亿</td>'
+                        f'<td style="padding:4px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;">{diff_str}</td></tr>')
+        if senti.get("rank_str"):
+            rows.append(f'<tr><td style="padding:6px 12px;font-size:11px;color:#888;" colspan="3">📌 {senti["rank_str"]}</td></tr>')
+
+    # 涨跌家数
+    if breadth:
+        up, down = breadth["up"], breadth["down"]
+        rows.append(f'<tr><td style="padding:8px 12px;font-size:12px;color:#ccc;" colspan="3">📈涨{up}家  📉跌{down}家</td></tr>')
+
+    # 全球
+    if globals_:
+        rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🌍 全球</td></tr>')
+        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
+                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
+                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
+        for s in globals_:
+            c = s["change"]
+            color = "#ef5350" if c > 0 else ("#66bb6a" if c < 0 else "#ccc")
+            rows.append(f'<tr><td style="padding:6px 12px;border-bottom:1px solid #333;color:#ccc;">{s["code"]}</td>'
+                        f'<td style="padding:6px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{s["current"]:.2f}</td>'
+                        f'<td style="padding:6px 12px;text-align:right;font-weight:600;font-family:Consolas;border-bottom:1px solid #333;color:{color};">{"🔴" if c>0 else "🟢" if c<0 else "⚪"}{c:+.2f}%</td></tr>')
+
+    if not a_shares and not globals_:
+        rows.append('<tr><td style="padding:20px 12px;text-align:center;color:#888;" colspan="3">❌ 所有数据源均不可用</td></tr>')
+
+    if globals_ or a_shares:
+        rows.append('<tr><td style="padding:8px 12px;font-size:11px;color:#555;text-align:center;" colspan="3">⏰ 美股/欧股为上一交易日收盘</td></tr>')
+
+    body_rows = "\n".join(rows)
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background:#000;font-family:'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;font-size:13px;color:#ccc;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#000;"><tr><td align="center" style="padding:20px 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#1a1a1a;border-radius:8px;overflow:hidden;">
+
+<tr><td style="text-align:center;padding:24px 16px 8px;">
+<h1 style="margin:0;font-size:20px;color:#e0e0e0;">🌏 全球股市简报</h1>
+<p style="margin:4px 0 0;font-size:12px;color:#666;">{today}</p>
+</td></tr>
+
+<tr><td style="padding:0 10px 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-size:13px;">
+{body_rows}
+</table>
+</td></tr>
+
+<tr><td style="text-align:center;padding:16px 10px;font-size:11px;color:#555;border-top:1px solid #333;">Fund Monitor · 天天基金</td></tr>
+</table>
+</td></tr></table>
+</body>
+</html>"""
+
+
 def main() -> None:
     log.info("====== 全球股市简报 开始 ======")
     brief_md = build_briefing_md()
     brief_text = build_briefing_text()
+    brief_html = build_briefing_html()
     print(brief_text)
 
     webhook = _get_secret("WECHAT_WEBHOOK")
     if webhook:
         send_wechat(brief_md)
     else:
-        send_mail("🌏 全球股市简报", brief_text)
+        send_mail_html("🌏 全球股市简报", brief_html)
 
     log.info("====== 全球股市简报 完成 ======")
 
