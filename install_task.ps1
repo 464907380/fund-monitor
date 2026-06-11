@@ -9,6 +9,9 @@
 #>
 
 $PythonPath = (Get-Command python).Source
+$PythonwPath = $PythonPath -replace 'python\.exe$', 'pythonw.exe'
+if (-not (Test-Path $PythonwPath)) { $PythonwPath = $PythonPath }  # fallback
+
 $ScriptDir = $PSScriptRoot
 
 if (-not $PythonPath) {
@@ -20,7 +23,7 @@ function New-TaskIfMissing {
     param($Name, $Script, $TriggerTime, $Desc)
 
     $ScriptPath = "$ScriptDir\$Script"
-    $Action = New-ScheduledTaskAction -Execute $PythonPath -Argument "`"$ScriptPath`"" -WorkingDirectory $ScriptDir
+    $Action = New-ScheduledTaskAction -Execute $PythonwPath -Argument "`"$ScriptPath`"" -WorkingDirectory $ScriptDir
     $Trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $TriggerTime
     $Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 
