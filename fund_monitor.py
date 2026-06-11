@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG
-from fund_utils import fetch, log, _fetch_fund_estimate, send_wechat, send_mail, parse_sina_csv
+from fund_utils import fetch, log, _fetch_fund_estimate, send_wechat, send_mail, parse_sina_csv, _strip_html
 from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
@@ -433,32 +433,64 @@ def check_intraday(code: str, state: dict) -> list[str]:
 
 
 def push_alert(fund_alerts: list[str], stock_alerts: list[str],
-               stock_groups: dict[str, list[str]] | None = None) -> None:
-    """推送盘中警报（基金警报和持仓个股警报分开传入，避免关键词误判）"""
+               stock_groups: dict[str, tuple[str, list[str]]] | None = None) -> None:
+    """推送盘中警报——按基金分组，涨跌一目了然"""
     if not fund_alerts and not stock_alerts:
         return
 
-    parts = []
-    if fund_alerts:
-        parts.append("**📈 基金警报**\n\n" + "\n\n".join(fund_alerts))
-    if stock_alerts and stock_groups:
-        group_lines = ["**📋 持仓个股警报**"]
-        for fund_name, alerts in sorted(stock_groups.items()):
-            group_lines.append(f"\n**{fund_name}**")
-            for a in alerts:
-                clean = a.split("持仓", 1)[-1] if "持仓" in a else a
-                group_lines.append(f"  {clean}")
-        parts.append("\n".join(group_lines))
+    def _icon_text(raw: str) -> tuple[str, str]:
+        """从原始警报中提取图标(🔴/🟢)和纯文本内容（不含图标）"""
+        icon = "🔴" if raw.startswith("🔴") else "🟢"
+        text = _strip_html(raw)
+        # 去掉行首的图标
+        if text.startswith("🔴") or text.startswith("🟢"):
+            text = text[1:].strip()
+        return icon, text
 
-    content = "\n\n".join(parts)
+    lines: list[str] = []
+    used_funds: set[str] = set()
 
-    all_texts = fund_alerts + stock_alerts
+    # 按基金分组展示
+    if stock_groups:
+        for fund_name, (fund_code, s_alerts) in sorted(stock_groups.items()):
+            used_funds.add(fund_name)
+            # 查找同基金的基金警报
+            matched_fa = [a for a in fund_alerts if fund_name in a]
+            if not matched_fa and not s_alerts:
+                continue
+            lines.append("")
+            lines.append(f"**{fund_name}（{fund_code}）**")
+            if matched_fa:
+                for a in matched_fa:
+                    icon, text = _icon_text(a)
+                    # 去掉基金名(代码)前缀，标题已展示
+                    clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
+                    lines.append(f"  {icon} 基金：{clean_fa}")
+            for a in s_alerts:
+                icon, text = _icon_text(a)
+                # 去掉"基金名持仓"前缀
+                clean = text.split("持仓", 1)[-1] if "持仓" in a else text
+                lines.append(f"  {icon} 持股·{clean}")
+
+    # 没有持股的基金警报单独展示
+    remaining = [a for a in fund_alerts if not any(
+        fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
+    )]
+    if remaining:
+        if lines:
+            lines.append("")
+        lines.append("**其他**")
+        for a in remaining:
+            icon, text = _icon_text(a)
+            lines.append(f"  {icon} {text}")
+
+    content = "\n".join(lines)
+
     if _get_webhook():
         send_wechat(content)
     else:
-        # 邮件格式（纯文本）
         text = "🚨 盘中警报\n\n" + "\n".join(
-            re.sub(r'<[^>]+>', '', a) for a in all_texts
+            _strip_html(a) for a in fund_alerts + stock_alerts
         )
         send_mail("🚨 基金盘中警报", text)
 
@@ -521,7 +553,7 @@ def monitor() -> None:
         # 轮询检查每只基金 + 持仓个股
         fund_alerts: list[str] = []
         stock_alerts: list[str] = []
-        stock_groups: dict[str, list[str]] = {}
+        stock_groups: dict[str, tuple[str, list[str]]] = {}
         got_data = False
         for f in FUND_LIST:
             code = f["code"]
@@ -537,7 +569,7 @@ def monitor() -> None:
             sa = check_holdings_intraday(code, fund_name, stock_states)
             if sa:
                 stock_alerts.extend(sa)
-                stock_groups[fund_name] = sa
+                stock_groups[fund_name] = (code, sa)
 
         # 智能节假日检测：所有基金都无实时数据 → 可能是休市日
         if not got_data:
