@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG
-from fund_utils import fetch, log, clear_cache, send_wechat, send_mail, parse_sina_csv
+from fund_utils import fetch, log, send_wechat, send_mail, parse_sina_csv
 from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────

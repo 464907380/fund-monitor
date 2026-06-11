@@ -10,7 +10,7 @@ import re
 import datetime
 import os
 import urllib.request
-from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail, send_mail_html, parse_sina_csv
+from fund_utils import send_wechat, log, fetch_bytes, send_mail_html, parse_sina_csv
 from config import get_secret as _get_secret
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
@@ -484,7 +484,7 @@ def _fetch_sentiment() -> dict | None:
 def _backfill_volume_history(history: dict, today_amount: float) -> None:
     """从腾讯K线API回填历史成交额（用成交量估算）"""
     try:
-        url = "http://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,10,qfq"
+        url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,10,qfq"
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
         resp = urllib.request.urlopen(req, timeout=10).read()
         j = json.loads(resp)

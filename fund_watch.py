@@ -97,17 +97,17 @@ def _pipe_table_to_html(compare_lines: list[str]) -> str:
             if not header_done:
                 cp += '<thead><tr>'
                 for c in clean.strip("|").split("|"):
-                    cp += f'<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #444;color:#888;white-space:nowrap;">{c.strip()}</th>'
+                    cp += f'<th style="...">{_html.escape(c.strip())}</th>'
                 cp += '</tr></thead><tbody>'
                 header_done = True
             else:
                 cp += '<tr>'
                 for c in clean.strip("|").split("|"):
-                    cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:#bbb;white-space:nowrap;">{c.strip()}</td>'
+                    cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:#bbb;white-space:nowrap;">{_html.escape(c.strip())}</td>'
                 cp += '</tr>'
             continue
         if not in_table:
-            cp += f'<p style="margin:2px 0;font-size:12px;color:#888;">{clean}</p>'
+            cp += f'<p style="margin:2px 0;font-size:12px;color:#888;">{_html.escape(clean)}</p>'
     if in_table:
         cp += '</tbody></table>'
     cp += '</td></tr>'
@@ -232,7 +232,11 @@ def _parse_scale(data: str) -> float | None:
 
 
 def _parse_period_returns(data: str) -> dict:
-    """提取阶段收益：近1月/近3月/近1年"""
+    """提取阶段收益：近1月/近3月/近1年
+
+    注意：天天基金 JS 变量命名容易误解：
+    syl_1y = 近1月 (1y=1月), syl_3y = 近3月, syl_1n = 近1年
+    """
     result = {}
     for key, js_var in [("m1", "syl_1y"), ("m3", "syl_3y"), ("y1", "syl_1n")]:
         m = re.search(rf'var {js_var}\s*=\s*["\']([-\d.]+)["\']', data)
@@ -684,7 +688,7 @@ def get(code: str) -> dict:
         d["rank"], d["rank_total"] = rp
     if rate := _parse_fund_rate(data):
         d["rate"] = rate
-    d["sy6"] = _parse_syl_6y(data)
+    d["sy6"] = _parse_syl_6y(data)  # 近6月收益（暂未用于评分，保留供未来使用）
 
     return d
 
@@ -839,9 +843,9 @@ def check(code: str) -> tuple[dict, list[str]]:
         "name_short": name[:12],
         "day": day_s,
         "f5": f5,
-        "m1": f"{d['m1']:+.1f}%" if d.get("m1") is not None else "",
-        "m3": f"{d['m3']:+.1f}%" if d.get("m3") is not None else "",
-        "y1": f"{d['y1']:+.1f}%" if d.get("y1") is not None else "",
+        "m1": f"{_v:+.1f}%" if (_v := d.get("m1")) is not None else "",
+        "m3": f"{_v:+.1f}%" if (_v := d.get("m3")) is not None else "",
+        "y1": f"{_v:+.1f}%" if (_v := d.get("y1")) is not None else "",
         "mgr": d.get("mgr", "")[:6],
         "holds": d.get("holds", []),
         "_y1_raw": d.get("y1"),
