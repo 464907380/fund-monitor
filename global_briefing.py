@@ -426,31 +426,59 @@ def _save_breadth_history(data: dict) -> None:
 
 
 def _fetch_market_breadth() -> dict | None:
-    """获取涨跌家数（沪深两市合计），收盘后展示上次最后值"""
+    """获取涨跌家数（沪深两市合计），收盘后展示上次缓存值"""
+    # 先试新浪fields 28/29（交易时段有效）
     try:
         url = "https://hq.sinajs.cn/list=sh000001"
         data = fetch_bytes(url, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://finance.sina.com.cn",
         })
-        if data is None:
-            return _load_breadth_history() or None
-        text = data.decode("gbk")
-        m = re.search(r'"(.*?)"', text)
-        if not m:
-            return _load_breadth_history() or None
-        parts = m.group(1).split(",")
-        up = int(float(parts[28])) if len(parts) > 28 and parts[28] else 0
-        down = int(float(parts[29])) if len(parts) > 29 and parts[29] else 0
-        if up > 0 or down > 0:
-            result = {"up": up, "down": down}
+        if data:
+            text = data.decode("gbk")
+            m = re.search(r'"(.*?)"', text)
+            if m:
+                parts = m.group(1).split(",")
+                up = int(float(parts[28])) if len(parts) > 28 and parts[28] else 0
+                down = int(float(parts[29])) if len(parts) > 29 and parts[29] else 0
+                if up > 0 or down > 0:
+                    result = {"up": up, "down": down}
+                    _save_breadth_history(result)
+                    return result
+    except Exception:
+        pass
+
+    # 收盘后清零了 → 用缓存
+    cached = _load_breadth_history()
+    if cached.get("up") and cached.get("down"):
+        return cached
+
+    # 缓存也没有 → 遍历新浪hs_a全市场（仅首次）
+    try:
+        import json as _json, urllib.request as _ur
+        total_up, total_down = 0, 0
+        for _pg in range(1, 101):
+            url = f"https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page={_pg}&num=100&sort=changePercent&asc=0&node=hs_a"
+            req = _ur.Request(url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://finance.sina.com.cn"})
+            resp = _ur.urlopen(req, timeout=10).read().decode("gbk")
+            items = _json.loads(resp)
+            if not items:
+                break
+            for i in items:
+                chg = float(i.get("changepercent", 0))
+                if chg > 0: total_up += 1
+                elif chg < 0: total_down += 1
+            if len(items) < 100:
+                break
+        if total_up or total_down:
+            result = {"up": total_up, "down": total_down}
             _save_breadth_history(result)
+            log.info("涨跌家数: 涨%d家 跌%d家（从新浪全市场遍历）", total_up, total_down)
             return result
-        # 收盘已清零，返回上次保存的值
-        return _load_breadth_history() or None
     except Exception as e:
-        log.debug("获取涨跌家数失败: %s", e)
-        return _load_breadth_history() or None
+        log.debug("涨跌家数遍历失败: %s", e)
+
+    return None
 
 
 def build_briefing_html() -> str:
