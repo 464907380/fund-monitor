@@ -85,7 +85,8 @@ extensions = [".py"]
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
 mode  = "allow"
 deny = ["mcp__unity-mcp__*"]
-
+allow = ["remember"]
+# ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
 
 [sandbox]
 # Confine tool blast radius. File-writers (write_file/edit_file/multi_edit)

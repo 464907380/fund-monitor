@@ -152,14 +152,20 @@ def _send_smtp(msg: MIMEText) -> None:
     """发送 SMTP 邮件（QQ 邮箱）"""
     qq_email = get_secret("QQ_EMAIL")
     qq_auth = get_secret("QQ_MAIL_AUTH")
+    s = None
     try:
         s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
         s.login(qq_email, qq_auth)
         s.sendmail(qq_email, [qq_email], msg.as_string())
-        s.quit()
         log.info("邮件发送成功")
     except Exception as e:
         log.error("邮件发送失败: %s", e)
+    finally:
+        if s:
+            try:
+                s.quit()
+            except Exception:
+                pass
 
 
 def send_wechat(content: str, markdown: bool = True) -> bool:

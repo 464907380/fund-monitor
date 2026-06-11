@@ -13,7 +13,7 @@ import time
 import re
 from config import CFG
 from fund_utils import fetch, log, clear_cache, send_wechat, send_mail, parse_sina_csv
-from fund_watch import FUND_LIST, _parse_holdings, WECHAT_WEBHOOK, _ensure_fund_list_loaded
+from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
 ALERT_DROP_ONCE = CFG.get("fund_monitor", {}).get("alert_drop_once", -3)
@@ -458,7 +458,7 @@ def check_intraday(code: str, state: dict) -> list[str]:
         state["max_td"] = max(state["max_td"], gszzl)
 
     except Exception as e:
-        log.debug("盘中检查 %s 失败: %s", code, e)
+        log.warning("盘中检查 %s 失败: %s", code, e)
 
     return alerts
 
@@ -480,7 +480,7 @@ def push_alert(alerts: list[str]) -> None:
 
     content = "\n\n".join(parts)
 
-    if WECHAT_WEBHOOK:
+    if _get_webhook():
         send_wechat(content)
     else:
         # 邮件格式（纯文本）
@@ -498,7 +498,7 @@ def monitor() -> None:
     """盘中监控主循环"""
     _ensure_fund_list_loaded()
     log.info("====== 盘中监控启动 ======")
-    log.info("推送方式: %s", "企业微信" if WECHAT_WEBHOOK else "邮件")
+    log.info("推送方式: %s", "企业微信" if _get_webhook() else "邮件")
     log.info("监控基金: %d 只", len(FUND_LIST))
     log.info("轮询间隔: %d 分钟", POLL_INTERVAL // 60)
     log.info("基金阈值: 单次超过%+.0f%%(黄)/%+.0f%%(红), 累计超过%+.0f%%(黄)/%+.0f%%(红)",
@@ -533,9 +533,9 @@ def monitor() -> None:
             today = datetime.date.today().isoformat()
             continue
 
-        # 非交易时段 → 等
+        # 非交易时段 → 长休眠到下一个交易日开盘
         if not is_trading_time(now):
-            time.sleep(60)
+            wait_until_next_trading()
             continue
 
         # 交易中：首次检查时预加载所有基金持仓

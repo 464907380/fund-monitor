@@ -86,26 +86,27 @@ def test_check_intraday_invalid_data(mock_fetch):
 
 # ── _fetch_stock_change 测试 ─────────────────
 
-@patch("fund_monitor._fetch_stock_change")
-def test_fetch_stock_change_normal(mock_fetch):
+@patch("fund_monitor.fetch")
+@patch("fund_monitor.parse_sina_csv")
+def test_fetch_stock_change_normal(mock_parse, mock_fetch):
     """正常获取个股涨跌幅"""
-    mock_fetch.return_value = ("贵州茅台", 1.25)
+    mock_fetch.return_value = 'var hq_str_sh600519="贵州茅台,1800.00,1790.00,1810.00,...";'
+    mock_parse.return_value = ["贵州茅台", "1800.00", "1790.00", "1810.00"]
     from fund_monitor import _fetch_stock_change
     result = _fetch_stock_change("sh600519")
     assert result is not None
     assert result[0] == "贵州茅台"
-    assert result[1] == 1.25
 
 
 # ── push_alert 测试 ────────────────────────────
 
 @patch("fund_monitor.send_wechat")
-@patch("fund_monitor.WECHAT_WEBHOOK", "https://qyapi.weixin.qq.com/hook")
 def test_push_alert(mock_send):
     """推送单条警报"""
     from fund_monitor import push_alert
     mock_send.return_value = True
-    push_alert(["🚩 测试警报"])
+    with patch.dict("os.environ", {"WECHAT_WEBHOOK": "https://qyapi.weixin.qq.com/hook"}):
+        push_alert(["🚩 测试警报"])
     mock_send.assert_called_once()
 
 

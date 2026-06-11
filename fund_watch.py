@@ -42,9 +42,19 @@ def _ensure_fund_list_loaded() -> None:
     else:
         FUND_LIST[:] = _FUND_LIST_FALLBACK
 
-WECHAT_WEBHOOK = _get_secret("WECHAT_WEBHOOK")
-QQ_EMAIL = _get_secret("QQ_EMAIL")
-QQ_AUTH_CODE = _get_secret("QQ_MAIL_AUTH")
+def _get_webhook() -> str | None:
+    """惰性读取企业微信 Webhook（支持长进程环境变量刷新）"""
+    return _get_secret("WECHAT_WEBHOOK")
+
+
+def _get_email_user() -> str | None:
+    """惰性读取 QQ 邮箱（支持长进程环境变量刷新）"""
+    return _get_secret("QQ_EMAIL")
+
+
+def _get_email_auth() -> str | None:
+    """惰性读取 QQ 邮箱授权码"""
+    return _get_secret("QQ_MAIL_AUTH")
 
 ALERT_DROP_1M = CFG.get("fund_watch", {}).get("alert_drop_1m", -10)
 ALERT_DROP_1M_RED = CFG.get("fund_watch", {}).get("alert_drop_1m_red", -15)
@@ -103,7 +113,9 @@ def _pipe_table_to_html(compare_lines: list[str]) -> str:
 
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
     """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
-    if not QQ_EMAIL or not QQ_AUTH_CODE:
+    qq_email = _get_email_user()
+    qq_auth = _get_email_auth()
+    if not qq_email or not qq_auth:
         log.debug("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
     tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
@@ -138,7 +150,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     extra_parts = []
 
     # 持仓对比（将管道表转为 HTML）
-    compare_lines = _compare_with_recommendations(rows)
+    compare_lines = _compare_with_recommendations()
     if compare_lines:
         cp = _pipe_table_to_html(compare_lines)
         extra_parts.append(cp)
@@ -155,7 +167,7 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
 
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
-    msg["From"] = msg["To"] = QQ_EMAIL
+    msg["From"] = msg["To"] = qq_email
     _send_smtp(msg)
 
 
@@ -179,7 +191,7 @@ def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
         )
 
     # 持仓 vs 推荐对比
-    compare_lines = _compare_with_recommendations(rows)
+    compare_lines = _compare_with_recommendations()
     if compare_lines:
         md_lines.append("")
         md_lines.extend(compare_lines)
@@ -766,7 +778,7 @@ def check(code: str) -> tuple[dict, list[str]]:
         alerts.append(f"🚩 <font color=\"warning\">{name}({code}) 经理: {h['m']}→{d['mgr']}</font>")
     h["m"] = d.get("mgr", "")
 
-    if h.get("s") and d.get("sc") is not None:
+    if h.get("s") is not None and h["s"] > 0 and d.get("sc") is not None:
         r = d["sc"] / h["s"]
         if r >= ALERT_SCALE_2X:
             alerts.append(f"🚩 <font color=\"warning\">{name}({code}) 规模翻倍 {h['s']:.1f}亿→{d['sc']:.1f}亿</font>")
@@ -786,7 +798,11 @@ def check(code: str) -> tuple[dict, list[str]]:
     td = d.get("td")
     navs = d.get("nav", [])
     if td is None and len(navs) >= 2:
-        td = (navs[-1]["v"] - navs[-2]["v"]) / navs[-2]["v"] * 100
+        last_date = navs[-1].get("d", "")
+        # 仅在最新净值日期为今明两天时才显示（避免非交易日冒充当日涨跌）
+        _td = datetime.date.today()
+        if last_date in (_td.isoformat(), (_td - datetime.timedelta(days=1)).isoformat()):
+            td = (navs[-1]["v"] - navs[-2]["v"]) / navs[-2]["v"] * 100
     day_s = f"{td:+.2f}%" if td is not None else ""
 
     f5 = ""
@@ -832,6 +848,7 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_annual_return": d.get("annual_return"),
         "_profit_ratio": d.get("profit_ratio"),
         "_recovery": d.get("recovery"),
+        "_sy3": d.get("sy3"),
         "_sy6": d.get("sy6"),
     }
     return row, alerts
@@ -858,7 +875,7 @@ def _load_recommend_results() -> list[dict] | None:
     return data.get("results", [])  # type: ignore[no-any-return]
 
 
-def _compare_with_recommendations(_held_rows: list[dict]) -> list[str]:
+def _compare_with_recommendations() -> list[str]:
     """
     展示市场优选基金排行（来自上次推荐结果）。
     """
@@ -955,7 +972,8 @@ def main() -> None:
             "rate": r.get("_rate"),
             "profit_ratio": r.get("_profit_ratio"),
             "recovery": r.get("_recovery"),
-            "sy6": r.get("_sy6"),
+            "y1": r.get("_y1_raw"),
+            "sy3": r.get("_sy3", r.get("_sy6")),
         }
         r["score"] = _calc_score(d)
 
@@ -978,7 +996,7 @@ def main() -> None:
 
     # 持仓 vs 推荐对比
     if rows:
-        compare_lines = _compare_with_recommendations(rows)
+        compare_lines = _compare_with_recommendations()
         if compare_lines:
             lines.extend(compare_lines)
 

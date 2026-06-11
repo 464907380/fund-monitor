@@ -147,6 +147,9 @@ def main() -> None:
         try:
             idx = sys.argv.index("--add")
             code = sys.argv[idx + 1]
+            if not re.fullmatch(r"\d{6}", code):
+                print("❌ 基金代码格式错误，应为6位数字")
+                return
             results = _load_result()
             name = ""
             if results:
