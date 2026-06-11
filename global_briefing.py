@@ -175,16 +175,16 @@ def build_briefing_md() -> str:
         lines.append("**📊 市场情绪**")
 
         if senti:
-            recent = sorted(senti["recent"].items())
+            recent = sorted(senti["recent"].items(), reverse=True)
             lines.append("**成交额**")
             lines.append("|日期|成交额|较前一日|")
             lines.append("|---|---|---:|")
             for i, (d, v) in enumerate(recent):
-                if i == 0:
+                if i == len(recent) - 1:
                     lines.append(f"|{d[-5:]}|{v:.0f}亿|—|")
                 else:
-                    prev_v = recent[i-1][1]
-                    diff = v - prev_v
+                    next_v = recent[i+1][1]
+                    diff = v - next_v
                     lines.append(f"|{d[-5:]}|{v:.0f}亿|{'↑' if diff>=0 else '↓'}{abs(diff):.0f}亿|")
             if senti.get("rank_str"):
                 lines.append(f"> {senti['rank_str']}")
@@ -241,12 +241,13 @@ def build_briefing_text() -> str:
             lines.append("成交额")
             lines.append(f"{'日期':<12} {'成交额':<12} {'较前一日':<12}")
             lines.append("-" * 36)
-            for i, (d, v) in enumerate(sorted(senti["recent"].items())):
-                if i == 0:
+            sorted_recent = sorted(senti["recent"].items(), reverse=True)
+            for i, (d, v) in enumerate(sorted_recent):
+                if i == len(sorted_recent) - 1:
                     lines.append(f"{d[-5:]:<12} {v:.0f}亿{'':<9} —")
                 else:
-                    prev_v = sorted(senti["recent"].items())[i-1][1]
-                    diff = v - prev_v
+                    next_v = sorted_recent[i+1][1]
+                    diff = v - next_v
                     arrow = "↑" if diff >= 0 else "↓"
                     lines.append(f"{d[-5:]:<12} {v:.0f}亿{'':<9} {arrow}{abs(diff):.0f}亿")
             if senti.get("rank_str"):
@@ -511,12 +512,13 @@ def build_briefing_html() -> str:
         rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">日期</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">成交额</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">较前一日</td></tr>')
-        for i, (d, v) in enumerate(sorted(senti["recent"].items())):
-            if i == 0:
+        sorted_recent = sorted(senti["recent"].items(), reverse=True)
+        for i, (d, v) in enumerate(sorted_recent):
+            if i == len(sorted_recent) - 1:
                 diff_str = "—"
             else:
-                prev_v = sorted(senti["recent"].items())[i-1][1]
-                diff = v - prev_v
+                next_v = sorted_recent[i+1][1]
+                diff = v - next_v
                 diff_str = f'<span style="color:#ef5350;">↑{abs(diff):.0f}亿</span>' if diff >= 0 else f'<span style="color:#66bb6a;">↓{abs(diff):.0f}亿</span>'
             rows.append(f'<tr><td style="padding:4px 12px;border-bottom:1px solid #333;color:#ccc;">{d[-5:]}</td>'
                         f'<td style="padding:4px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{v:.0f}亿</td>'
