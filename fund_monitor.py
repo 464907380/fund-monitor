@@ -432,7 +432,8 @@ def check_intraday(code: str, state: dict) -> list[str]:
     return alerts
 
 
-def push_alert(fund_alerts: list[str], stock_alerts: list[str]) -> None:
+def push_alert(fund_alerts: list[str], stock_alerts: list[str],
+               stock_groups: dict[str, list[str]] | None = None) -> None:
     """推送盘中警报（基金警报和持仓个股警报分开传入，避免关键词误判）"""
     if not fund_alerts and not stock_alerts:
         return
@@ -440,8 +441,14 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str]) -> None:
     parts = []
     if fund_alerts:
         parts.append("**📈 基金警报**\n\n" + "\n\n".join(fund_alerts))
-    if stock_alerts:
-        parts.append("**📋 持仓个股警报**\n\n" + "\n\n".join(stock_alerts))
+    if stock_alerts and stock_groups:
+        group_lines = ["**📋 持仓个股警报**"]
+        for fund_name, alerts in sorted(stock_groups.items()):
+            group_lines.append(f"\n**{fund_name}**")
+            for a in alerts:
+                clean = a.split("持仓", 1)[-1] if "持仓" in a else a
+                group_lines.append(f"  {clean}")
+        parts.append("\n".join(group_lines))
 
     content = "\n\n".join(parts)
 
@@ -514,6 +521,7 @@ def monitor() -> None:
         # 轮询检查每只基金 + 持仓个股
         fund_alerts: list[str] = []
         stock_alerts: list[str] = []
+        stock_groups: dict[str, list[str]] = {}
         got_data = False
         for f in FUND_LIST:
             code = f["code"]
@@ -527,7 +535,9 @@ def monitor() -> None:
             # 检查该基金的持仓个股
             fund_name = states[code].get("name", code)
             sa = check_holdings_intraday(code, fund_name, stock_states)
-            stock_alerts.extend(sa)
+            if sa:
+                stock_alerts.extend(sa)
+                stock_groups[fund_name] = sa
 
         # 智能节假日检测：所有基金都无实时数据 → 可能是休市日
         if not got_data:
@@ -548,7 +558,7 @@ def monitor() -> None:
 
         # 推送本周期警报
         if fund_alerts or stock_alerts:
-            push_alert(fund_alerts, stock_alerts)
+            push_alert(fund_alerts, stock_alerts, stock_groups)
             log.info("推送 %d 条盘中警报（基金 %d 条, 个股 %d 条）",
                      len(fund_alerts) + len(stock_alerts),
                      len(fund_alerts), len(stock_alerts))
