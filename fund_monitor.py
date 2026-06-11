@@ -496,7 +496,7 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
             matched_fa = [a for a in fund_alerts if fund_name in a]
             if not matched_fa and not s_alerts:
                 continue
-            rows.append(f'<tr><td style="padding:10px 12px;"><div style="background:#2a2a2a;border-radius:6px;padding:10px;">'
+            rows.append(f'<tr><td style="padding:10px 12px;"><div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:10px;">'
                         f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}（{fund_code}）</p>')
             for a in matched_fa:
                 icon, text = _icon_text(a)
