@@ -295,6 +295,11 @@ def _get_fund_holdings(code: str) -> list[dict]:
     return _holdings_cache.get(code, [])
 
 
+def _chg_text(chg: float) -> str:
+    """涨跌幅文案：涨/跌"""
+    return f"当前{'涨' if chg >= 0 else '跌'}{abs(chg):.2f}%"
+
+
 def check_holdings_intraday(fund_code: str, fund_name: str,
                             stock_states: dict[str, dict]) -> list[str]:
     """
@@ -338,22 +343,22 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
         if diff <= STOCK_DROP_RED:
             alerts.append(
                 f"🚩 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
-                f"急跌 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）</font>"
+                f"急跌 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
         elif diff <= STOCK_DROP_YELLOW:
             alerts.append(
                 f"🟡 {fund_name}持仓{stock_name}({stock_code})"
-                f"下跌 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）"
+                f"下跌 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）"
             )
         elif diff >= STOCK_JUMP_RED:
             alerts.append(
                 f"🚩 <font color=\"info\">{fund_name}持仓{stock_name}({stock_code})"
-                f"急涨 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）</font>"
+                f"急涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
         elif diff >= STOCK_JUMP_YELLOW:
             alerts.append(
                 f"🟢 {fund_name}持仓{stock_name}({stock_code})"
-                f"上涨 {diff:+.1f}%（当前涨{chg:+.2f}%，占比{ratio:.1f}%）"
+                f"上涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）"
             )
 
         # ── 累计涨跌幅检测（从当天首次检查到现在的总变动） ──
