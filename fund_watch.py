@@ -104,7 +104,7 @@ def _pipe_table_to_html(compare_lines: list[str]) -> str:
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
     """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
     if not QQ_EMAIL or not QQ_AUTH_CODE:
-        log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
+        log.debug("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
     tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
     if not os.path.exists(tpl_path):
@@ -929,8 +929,6 @@ def main() -> None:
     today = datetime.date.today().isoformat()
     log.info("====== 基金晚报 %s 开始 ======", today)
 
-    if not WECHAT_WEBHOOK:
-        log.info("WECHAT_WEBHOOK 未设置，走邮件推送")
 
     # 第一遍：拉取所有基金原始数据
     raw_rows: list[dict] = []

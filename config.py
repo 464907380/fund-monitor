@@ -54,15 +54,13 @@ def _warn_missing_secrets() -> None:
     qq_email = get_secret("QQ_EMAIL")
     qq_auth = get_secret("QQ_MAIL_AUTH")
     if not webhook and not (qq_email and qq_auth):
-        missing.append("推送不可用：WECHAT_WEBHOOK 和 QQ_EMAIL+QQ_MAIL_AUTH 均未配置")
-    elif not webhook:
-        missing.append("企业微信推送不可用：WECHAT_WEBHOOK 未配置，将走邮件推送")
-    if qq_email and not qq_auth:
-        missing.append("邮件推送不可用：QQ_MAIL_AUTH 未配置")
+        missing.append("💡 提示：未配置 WECHAT_WEBHOOK 和 QQ 邮箱，无法推送")
+    elif qq_email and not qq_auth:
+        missing.append("💡 提示：QQ_MAIL_AUTH 未配置，邮件推送不可用")
     if missing:
         import logging
         for msg in missing:
-            logging.warning("⚠️ %s", msg)
+            logging.info("%s", msg)
 
 
 # 在加载任何配置前，先加载 .env 到环境变量（这样 fund_watch.py 的 os.getenv() 能读到）

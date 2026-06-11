@@ -187,7 +187,7 @@ def send_mail(subject: str, text: str) -> None:
     qq_email = get_secret("QQ_EMAIL")
     qq_auth = get_secret("QQ_MAIL_AUTH")
     if not qq_email or not qq_auth:
-        log.warning("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
+        log.debug("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
         return
     msg = MIMEText(text, "plain", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
