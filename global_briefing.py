@@ -185,8 +185,8 @@ def build_briefing_md() -> str:
                     prev_v = recent[i-1][1]
                     diff = v - prev_v
                     lines.append(f"|{d[-5:]}|{v:.0f}亿|{'↑' if diff>=0 else '↓'}{abs(diff):.0f}亿|")
-            if senti.get("pct") is not None:
-                lines.append(f"> 高于{senti['pct']:.0f}%的交易日（近{senti['history_days']}天）")
+            if senti.get("rank_str"):
+                lines.append(f"> {senti['rank_str']}")
 
         if breadth:
             up, down = breadth["up"], breadth["down"]
@@ -248,8 +248,8 @@ def build_briefing_text() -> str:
                     diff = v - prev_v
                     arrow = "↑" if diff >= 0 else "↓"
                     lines.append(f"{d[-5:]:<12} {v:.0f}亿{'':<9} {arrow}{abs(diff):.0f}亿")
-            if senti.get("pct") is not None:
-                lines.append(f"  （高于{senti['pct']:.0f}%的交易日，近{senti['history_days']}天）")
+            if senti.get("rank_str"):
+                lines.append(f"  {senti['rank_str']}")
 
         if breadth:
             up, down = breadth["up"], breadth["down"]
@@ -318,18 +318,26 @@ def _fetch_sentiment() -> dict | None:
         # 全部历史数据
         recent = dict(sorted(history.items()))
 
-        # 历史百分位
-        pct = None
-        if len(dates) >= 10:
+        # 排名（比历史多少天高/低）
+        rank_str = None
+        if len(dates) >= 5:
             vals = sorted(history.values())
             n = len(vals)
-            pct = sum(1 for v in vals if v <= amount_yi) / n * 100
+            below = sum(1 for v in vals if v <= amount_yi)  # ≤今天的（含自己）
+            rank = n - below + 1  # 排名，1=最高，n=最低
+            higher_than = below - 1  # 今天比多少天高
+            rank_str = f"近{n}天中排第{rank}（高于{higher_than}天"
+            if higher_than == 0:
+                rank_str += "，最低）"
+            elif higher_than == n - 1:
+                rank_str += "，最高）"
+            else:
+                rank_str += "）"
 
         return {
             "amount": round(amount_yi, 0),
             "recent": recent,
-            "history_days": len(dates),
-            "pct": round(pct, 0) if pct is not None else None,
+            "rank_str": rank_str,
         }
     except Exception as e:
         log.debug("获取成交额失败: %s", e)
