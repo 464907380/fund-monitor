@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -34,6 +35,7 @@ log = logging.getLogger(__name__)
 
 # ── 网络缓存 ──────────────────────────────────
 _cache: dict[str, tuple[float, str]] = {}       # url -> (timestamp, data)
+_cache_lock = threading.Lock()
 _CACHE_TTL = CFG.get("network", {}).get("cache_ttl_seconds", 300)
 _CACHE_MAX = CFG.get("network", {}).get("cache_max_entries", 100)
 _RETRY_MAX = CFG.get("network", {}).get("retry_max", 3)
@@ -43,13 +45,14 @@ _RETRY_BACKOFF = CFG.get("network", {}).get("retry_backoff_seconds", [1, 3, 8])
 def _cache_evict() -> None:
     """清除过期缓存；超出上限时清除最旧的条目"""
     now = time.time()
-    expired = [k for k, (t, _) in _cache.items() if now - t > _CACHE_TTL]
-    for k in expired:
-        del _cache[k]
-    if len(_cache) > _CACHE_MAX:
-        sorted_items = sorted(_cache.items(), key=lambda kv: kv[1][0])
-        for k, _ in sorted_items[:len(sorted_items) // 2]:
+    with _cache_lock:
+        expired = [k for k, (t, _) in _cache.items() if now - t > _CACHE_TTL]
+        for k in expired:
             del _cache[k]
+        if len(_cache) > _CACHE_MAX:
+            sorted_items = sorted(_cache.items(), key=lambda kv: kv[1][0])
+            for k, _ in sorted_items[:len(sorted_items) // 2]:
+                del _cache[k]
     log.debug("缓存清理: 过期 %d, 当前 %d 条", len(expired), len(_cache))
 
 
@@ -81,20 +84,23 @@ def _retry_fetch(url: str) -> str:
 
 def fetch(url: str) -> str:
     """带缓存的 HTTP GET"""
-    entry = _cache.get(url)
-    if entry:
-        ts, data = entry
-        if time.time() - ts <= _CACHE_TTL:
-            return data
-        del _cache[url]
+    with _cache_lock:
+        entry = _cache.get(url)
+        if entry:
+            ts, data = entry
+            if time.time() - ts <= _CACHE_TTL:
+                return data
+            del _cache[url]
     resp = _retry_fetch(url)
-    _cache[url] = (time.time(), resp)
+    with _cache_lock:
+        _cache[url] = (time.time(), resp)
     return resp
 
 
 def clear_cache() -> None:
     """清空所有缓存（供外部强制刷新使用）"""
-    _cache.clear()
+    with _cache_lock:
+        _cache.clear()
 
 
 def fetch_bytes(url: str, headers: dict | None = None) -> bytes | None:

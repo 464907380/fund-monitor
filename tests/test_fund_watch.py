@@ -42,13 +42,6 @@ def test_parse_period_returns():
     # 注意：此处正则使用双引号，单引号不匹配——正确行为
 
 
-def test_parse_price_info():
-    from fund_watch import _parse_price_info
-
-    js = '"data":[1.234,2.345,3.456,4.567,5.678]'
-    assert _parse_price_info(js) == 1
-    assert _parse_price_info("nothing") is None
-
 
 def test_parse_manager():
     from fund_watch import _parse_manager

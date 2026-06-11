@@ -35,7 +35,8 @@ GLOBAL_INDICES = [
     ("gb_$gdaxi", "德国DAX"),
 ]
 
-WECHAT_WEBHOOK = _get_secret("WECHAT_WEBHOOK")
+
+# WECHAT_WEBHOOK 在 main() 中惰性读取，支持环境变量刷新
 
 
 def fetch_sina(code: str) -> dict | None:
@@ -330,7 +331,8 @@ def main() -> None:
     briefing = build_briefing()
     print(briefing)
 
-    if WECHAT_WEBHOOK:
+    webhook = _get_secret("WECHAT_WEBHOOK")
+    if webhook:
         send_wechat(briefing)
     else:
         text = briefing.replace("**", "").replace("|", " ")

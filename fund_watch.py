@@ -111,7 +111,8 @@ def _pipe_table_to_html(compare_lines: list[str]) -> str:
     return cp
 
 
-def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
+def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str,
+                   compare_lines: list[str] | None = None) -> None:
     """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
     qq_email = _get_email_user()
     qq_auth = _get_email_auth()
@@ -150,7 +151,8 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     extra_parts = []
 
     # 持仓对比（将管道表转为 HTML）
-    compare_lines = _compare_with_recommendations()
+    if compare_lines is None:
+        compare_lines = _compare_with_recommendations()
     if compare_lines:
         cp = _pipe_table_to_html(compare_lines)
         extra_parts.append(cp)
@@ -172,12 +174,15 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
 
 
 def push(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
-    sent = send_wechat(md_content(rows, alerts, today))
+    # 预计算推荐对比，两个推送通道共用
+    compare_lines = _compare_with_recommendations()
+    sent = send_wechat(md_content(rows, alerts, today, compare_lines))
     if not sent:
-        send_mail_html(subject, rows, alerts, today)
+        send_mail_html(subject, rows, alerts, today, compare_lines)
 
 
-def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
+def md_content(rows: list[dict], alerts: list[str], today: str,
+               compare_lines: list[str] | None = None) -> str:
     """构造 Markdown 内容（企业微信推送用）"""
     md_lines = [
         f"📊 **基金晚报 {today}**",
@@ -191,7 +196,8 @@ def md_content(rows: list[dict], alerts: list[str], today: str) -> str:
         )
 
     # 持仓 vs 推荐对比
-    compare_lines = _compare_with_recommendations()
+    if compare_lines is None:
+        compare_lines = _compare_with_recommendations()
     if compare_lines:
         md_lines.append("")
         md_lines.extend(compare_lines)
@@ -230,10 +236,6 @@ def _parse_period_returns(data: str) -> dict:
     return result
 
 
-def _parse_price_info(data: str) -> int | None:
-    """提取基金价格/净值"""
-    m = re.search(r'"data":\[([\d.]+),([\d.]+),([\d.]+),([\d.]+),([\d.]+)\]', data)
-    return int(float(m.group(1))) if m else None
 
 
 def _calc_period_return(full_nav: list[dict], lookback_days: int) -> float | None:
@@ -654,8 +656,6 @@ def get(code: str) -> dict:
     if sc := _parse_scale(data):
         d["sc"] = sc
     d.update(_parse_period_returns(data))
-    if sp := _parse_price_info(data):
-        d["sp"] = sp
     if mgr := _parse_manager(data):
         d["mgr"] = mgr
     if inst := _parse_institutional_ratio(data):
@@ -706,8 +706,12 @@ def load_hist(code: str) -> dict:
 
 def save_hist(code: str, h: dict) -> None:
     _validate_fund_code(code)
-    with open(os.path.join(HISTORY_DIR, f".fw_{code}.json"), "w", encoding="utf-8") as f:
-        json.dump(h, f, ensure_ascii=False)
+    path = os.path.join(HISTORY_DIR, f".fw_{code}.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(h, f, ensure_ascii=False)
+    except OSError as e:
+        log.warning("保存历史数据失败 %s: %s", code, e)
 
 
 # ── 主检查逻辑 ────────────────────────────────
@@ -879,17 +883,17 @@ def _compare_with_recommendations() -> list[str]:
     """
     展示市场优选基金排行（来自上次推荐结果）。
     """
+    data = _load_recommend_data()
+    recs = data.get("results", []) if data else None
     lines: list[str] = []
-    recs = _load_recommend_results()
-    if recs is None:
+    if not recs:
         lines.append("")
         lines.append("💡 **想看看市场上有哪些优秀基金？**")
         lines.append("   运行 python fund_recommend.py（约4分钟）")
         lines.append("   之后晚报自动展示推荐排行")
         return lines
 
-    # 检查推荐结果是否过旧（复用已加载的数据）
-    data = _load_recommend_data()
+    # 检查推荐结果是否过旧
     if data:
         try:
             rec_date = data.get("date", "")
@@ -973,7 +977,7 @@ def main() -> None:
             "profit_ratio": r.get("_profit_ratio"),
             "recovery": r.get("_recovery"),
             "y1": r.get("_y1_raw"),
-            "sy3": r.get("_sy3", r.get("_sy6")),
+            "sy3": r.get("_sy3"),  # 无近3年数据不评分（不回退到近6月）
         }
         r["score"] = _calc_score(d)
 
