@@ -36,20 +36,20 @@ def test_check_intraday_drop_red(mock_fetch):
 
 @patch("fund_utils.fetch")
 def test_check_intraday_drop_yellow(mock_fetch):
-    """跌幅超过黄色阈值触发下跌警报"""
+    """跌幅超过红色阈值（无黄红分级后统一-3%）"""
     from fund_monitor import check_intraday
     state = {"first_td": 0.0, "last_td": 0.0, "name": "测试基金"}
-    mock_fetch.return_value = _make_gzjs("001234", "测试基金", "-2.50")
+    mock_fetch.return_value = _make_gzjs("001234", "测试基金", "-4.00")
     alerts = check_intraday("001234", state)
-    assert any("下跌" in a for a in alerts)
+    assert any("急跌" in a for a in alerts)
 
 
 @patch("fund_utils.fetch")
 def test_check_intraday_jump_red(mock_fetch):
-    """涨幅超过红色阈值触发急涨警报"""
+    """涨幅超过红色阈值触发急涨警报（统一后+5%）"""
     from fund_monitor import check_intraday
     state = {"first_td": 0.0, "last_td": 0.0, "name": "测试基金"}
-    mock_fetch.return_value = _make_gzjs("001234", "测试基金", "4.00")
+    mock_fetch.return_value = _make_gzjs("001234", "测试基金", "6.00")
     alerts = check_intraday("001234", state)
     assert any("急涨" in a for a in alerts)
 

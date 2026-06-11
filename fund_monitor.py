@@ -17,23 +17,15 @@ from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_li
 
 # ── 基金急涨急跌阈值 ──────────────────────────
 ALERT_DROP_ONCE = CFG.get("fund_monitor", {}).get("alert_drop_once", -3)
-ALERT_DROP_ONCE_YELLOW = CFG.get("fund_monitor", {}).get("alert_drop_once_yellow", -2)
-ALERT_JUMP_ONCE = CFG.get("fund_monitor", {}).get("alert_jump_once", 3)
-ALERT_JUMP_ONCE_YELLOW = CFG.get("fund_monitor", {}).get("alert_jump_once_yellow", 2)
+ALERT_JUMP_ONCE = CFG.get("fund_monitor", {}).get("alert_jump_once", 5)
 ALERT_ACCUM_DROP = CFG.get("fund_monitor", {}).get("alert_accum_drop", -7)
-ALERT_ACCUM_DROP_YELLOW = CFG.get("fund_monitor", {}).get("alert_accum_drop_yellow", -5)
-ALERT_ACCUM_JUMP = CFG.get("fund_monitor", {}).get("accum_jump", 7)
-ALERT_ACCUM_JUMP_YELLOW = CFG.get("fund_monitor", {}).get("accum_jump_yellow", 5)
+ALERT_ACCUM_JUMP = CFG.get("fund_monitor", {}).get("accum_jump", 10)
 
 # ── 个股急涨急跌阈值（持仓监控） ──────────────
 STOCK_DROP_RED = CFG.get("fund_monitor", {}).get("stock_alert_drop_red", -5)
-STOCK_DROP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_drop_yellow", -3)
-STOCK_JUMP_RED = CFG.get("fund_monitor", {}).get("stock_alert_jump_red", 5)
-STOCK_JUMP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_jump_yellow", 3)
+STOCK_JUMP_RED = CFG.get("fund_monitor", {}).get("stock_alert_jump_red", 7)
 STOCK_ACCUM_DROP_RED = CFG.get("fund_monitor", {}).get("stock_alert_accum_drop_red", -10)
-STOCK_ACCUM_DROP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_accum_drop_yellow", -7)
-STOCK_ACCUM_JUMP_RED = CFG.get("fund_monitor", {}).get("stock_alert_accum_jump_red", 10)
-STOCK_ACCUM_JUMP_YELLOW = CFG.get("fund_monitor", {}).get("stock_alert_accum_jump_yellow", 7)
+STOCK_ACCUM_JUMP_RED = CFG.get("fund_monitor", {}).get("stock_alert_accum_jump_red", 12)
 
 # ── 轮询间隔（秒） ────────────────────────────
 POLL_INTERVAL = CFG.get("fund_monitor", {}).get("poll_interval_seconds", 600)
@@ -345,20 +337,10 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
                 f"🚩 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
                 f"急跌 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
-        elif diff <= STOCK_DROP_YELLOW:
-            alerts.append(
-                f"🟡 {fund_name}持仓{stock_name}({stock_code})"
-                f"下跌 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）"
-            )
         elif diff >= STOCK_JUMP_RED:
             alerts.append(
                 f"🚩 <font color=\"info\">{fund_name}持仓{stock_name}({stock_code})"
                 f"急涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
-            )
-        elif diff >= STOCK_JUMP_YELLOW:
-            alerts.append(
-                f"🟢 {fund_name}持仓{stock_name}({stock_code})"
-                f"上涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）"
             )
 
         # ── 累计涨跌幅检测（从当天首次检查到现在的总变动） ──
@@ -369,20 +351,10 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
                 f"🚩 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
                 f"当日累计急跌 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
             )
-        elif accum <= STOCK_ACCUM_DROP_YELLOW:
-            alerts.append(
-                f"🟡 {fund_name}持仓{stock_name}({stock_code})"
-                f"当日累计下跌 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）"
-            )
         elif accum >= STOCK_ACCUM_JUMP_RED:
             alerts.append(
                 f"🚩 <font color=\"info\">{fund_name}持仓{stock_name}({stock_code})"
                 f"当日累计急涨 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
-            )
-        elif accum >= STOCK_ACCUM_JUMP_YELLOW:
-            alerts.append(
-                f"🟢 {fund_name}持仓{stock_name}({stock_code})"
-                f"当日累计上涨 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）"
             )
 
         # 更新个股状态
@@ -430,18 +402,10 @@ def check_intraday(code: str, state: dict) -> list[str]:
                 f"🚩 <font color=\"warning\">{name}({code}) 急跌 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
             )
-        elif diff_once <= ALERT_DROP_ONCE_YELLOW:
-            alerts.append(
-                f"🟡 {name}({code}) 下跌 {diff_once:+.1f}%（当前{gszzl:+.2f}%）"
-            )
         elif diff_once >= ALERT_JUMP_ONCE:
             alerts.append(
                 f"🚩 <font color=\"info\">{name}({code}) 急涨 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
-            )
-        elif diff_once >= ALERT_JUMP_ONCE_YELLOW:
-            alerts.append(
-                f"🟢 {name}({code}) 上涨 {diff_once:+.1f}%（当前{gszzl:+.2f}%）"
             )
 
         # ── 累计涨跌幅检测 ──
@@ -451,26 +415,16 @@ def check_intraday(code: str, state: dict) -> list[str]:
                 f"🚩 <font color=\"warning\">{name}({code}) 当日累计跌 {accum:.1f}%"
                 f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）</font>"
             )
-        elif accum <= ALERT_ACCUM_DROP_YELLOW:
-            alerts.append(
-                f"🟡 {name}({code}) 当日累计跌 {accum:.1f}%"
-                f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）"
-            )
         elif accum >= ALERT_ACCUM_JUMP:
             alerts.append(
                 f"🚩 <font color=\"info\">{name}({code}) 当日累计涨 {accum:.1f}%"
                 f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）</font>"
             )
-        elif accum >= ALERT_ACCUM_JUMP_YELLOW:
-            alerts.append(
-                f"🟢 {name}({code}) 当日累计涨 {accum:.1f}%"
-                f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）"
-            )
 
         # 更新状态
         state["last_td"] = gszzl
-        state["min_td"] = min(state["min_td"], gszzl)
-        state["max_td"] = max(state["max_td"], gszzl)
+        state["min_td"] = min(state.get("min_td", gszzl), gszzl)
+        state["max_td"] = max(state.get("max_td", gszzl), gszzl)
 
     except Exception as e:
         log.warning("盘中检查 %s 失败: %s", code, e)
@@ -513,12 +467,12 @@ def monitor() -> None:
     log.info("推送方式: %s", "企业微信" if _get_webhook() else "邮件")
     log.info("监控基金: %d 只", len(FUND_LIST))
     log.info("轮询间隔: %d 分钟", POLL_INTERVAL // 60)
-    log.info("基金阈值: 单次超过%+.0f%%(黄)/%+.0f%%(红), 累计超过%+.0f%%(黄)/%+.0f%%(红)",
-             ALERT_JUMP_ONCE_YELLOW, ALERT_JUMP_ONCE,
-             ALERT_ACCUM_JUMP_YELLOW, ALERT_ACCUM_JUMP)
-    log.info("个股阈值: 单次超过%+.0f%%(黄)/%+.0f%%(红), 累计超过%+.0f%%(黄)/%+.0f%%(红)",
-             STOCK_JUMP_YELLOW, STOCK_JUMP_RED,
-             STOCK_ACCUM_JUMP_YELLOW, STOCK_ACCUM_JUMP_RED)
+    log.info("基金阈值: 单次超过%+.0f%%, 累计超过%+.0f%%",
+             ALERT_JUMP_ONCE,
+             ALERT_ACCUM_JUMP)
+    log.info("个股阈值: 单次超过%+.0f%%, 累计超过%+.0f%%",
+             STOCK_JUMP_RED,
+             STOCK_ACCUM_JUMP_RED)
 
     today = datetime.date.today().isoformat()
     states: dict[str, dict] = {}

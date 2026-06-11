@@ -17,22 +17,15 @@
 
     "fund_monitor": {
         "alert_drop_once": -3,
-        "alert_drop_once_yellow": -2,
         "alert_jump_once": 5,
-        "alert_jump_once_yellow": 3,
         "alert_accum_drop": -7,
         "alert_accum_drop_yellow": -5,
         "accum_jump": 10,
-        "accum_jump_yellow": 8,
 
         "stock_alert_drop_red": -5,
-        "stock_alert_drop_yellow": -3,
         "stock_alert_jump_red": 7,
-        "stock_alert_jump_yellow": 5,
         "stock_alert_accum_drop_red": -10,
-        "stock_alert_accum_drop_yellow": -7,
         "stock_alert_accum_jump_red": 12,
-        "stock_alert_accum_jump_yellow": 10,
 
         "poll_interval_seconds": 600,
         "max_empty_rounds": 2,
