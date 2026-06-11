@@ -315,10 +315,8 @@ def _fetch_sentiment() -> dict | None:
             _backfill_volume_history(history, amount_yi)
             dates = sorted(history.keys())
 
-        # 最近7天成交额
-        recent = {}
-        for d in dates[-7:]:
-            recent[d] = history[d]
+        # 全部历史数据
+        recent = dict(sorted(history.items()))
 
         # 历史百分位
         pct = None
