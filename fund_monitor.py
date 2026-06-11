@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG
-from fund_utils import fetch, log, _fetch_fund_estimate, send_wechat, send_mail, parse_sina_csv, _strip_html
+from fund_utils import fetch, log, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html
 from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
@@ -489,10 +489,54 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
     if _get_webhook():
         send_wechat(content)
     else:
-        text = "🚨 盘中警报\n\n" + "\n".join(
-            _strip_html(a) for a in fund_alerts + stock_alerts
-        )
-        send_mail("🚨 基金盘中警报", text)
+        # HTML 深色主题邮件
+        rows = []
+        # 按基金分组渲染
+        for fund_name, (fund_code, s_alerts) in sorted(stock_groups.items() if stock_groups else []):
+            matched_fa = [a for a in fund_alerts if fund_name in a]
+            if not matched_fa and not s_alerts:
+                continue
+            rows.append(f'<tr><td style="padding:10px 12px;"><div style="background:#2a2a2a;border-radius:6px;padding:10px;">'
+                        f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}（{fund_code}）</p>')
+            for a in matched_fa:
+                icon, text = _icon_text(a)
+                clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
+                color = "#ef5350" if icon == "🔴" else "#66bb6a"
+                rows.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 基金：{clean_fa}</p>')
+            for a in s_alerts:
+                icon, text = _icon_text(a)
+                clean = text.split("持仓", 1)[-1] if "持仓" in a else text
+                color = "#ef5350" if icon == "🔴" else "#66bb6a"
+                rows.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 持股·{clean}</p>')
+            rows.append('</div></td></tr>')
+
+        remaining = [a for a in fund_alerts if not any(
+            fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
+        )]
+        if remaining:
+            rows.append('<tr><td style="padding:6px 12px;"><p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#ccc;">其他</p>')
+            for a in remaining:
+                icon, text = _icon_text(a)
+                color = "#ef5350" if icon == "🔴" else "#66bb6a"
+                rows.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} {text}</p>')
+            rows.append('</td></tr>')
+
+        html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#000;font-family:'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;font-size:13px;color:#ccc;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#000;"><tr><td align="center" style="padding:20px 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#1a1a1a;border-radius:8px;overflow:hidden;">
+<tr><td style="text-align:center;padding:20px 12px 8px;">
+<h1 style="margin:0;font-size:18px;color:#e0e0e0;">🚨 盘中警报</h1>
+</td></tr>
+{''.join(rows)}
+<tr><td style="text-align:center;padding:12px 10px;font-size:11px;color:#555;border-top:1px solid #333;">Fund Monitor · 天天基金</td></tr>
+</table>
+</td></tr></table>
+</body>
+</html>"""
+        send_mail_html("🚨 基金盘中警报", html)
 
 
 
