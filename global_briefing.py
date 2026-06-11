@@ -637,8 +637,8 @@ def build_briefing_html(a_shares: list[dict] | None = None,
 
     # A股
     if a_shares:
-        rows.append('<tr style="background:#2a2a2a;" bgcolor="#2a2a2a"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🇨🇳 A股</td></tr>')
-        rows.append('<tr style="background:#222;" bgcolor="#222222"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
+        rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🇨🇳 A股</td></tr>')
+        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
         for s in a_shares:
@@ -651,7 +651,7 @@ def build_briefing_html(a_shares: list[dict] | None = None,
     # 成交额
     if senti:
         rows.append('<tr><td style="padding:10px 12px 4px;" colspan="3"><p style="margin:0;font-size:13px;font-weight:600;color:#ccc;">📊 成交额</p></td></tr>')
-        rows.append('<tr style="background:#222;" bgcolor="#222222"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">日期</td>'
+        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">日期</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">成交额</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">较前一日</td></tr>')
         sorted_recent = sorted(senti["recent"].items(), reverse=True)
@@ -675,8 +675,8 @@ def build_briefing_html(a_shares: list[dict] | None = None,
 
     # 全球
     if globals_:
-        rows.append('<tr style="background:#2a2a2a;" bgcolor="#2a2a2a"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🌍 全球</td></tr>')
-        rows.append('<tr style="background:#222;" bgcolor="#222222"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
+        rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🌍 全球</td></tr>')
+        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
                     '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
         for s in globals_:
@@ -701,8 +701,8 @@ def build_briefing_html(a_shares: list[dict] | None = None,
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 </head>
 <body style="margin:0;padding:0;background:#000;font-family:'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;font-size:13px;color:#ccc;">
-<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#000000" style="background:#000;"><tr><td align="center" style="padding:20px 10px;">
-<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#1a1a1a;border-radius:8px;overflow:hidden;" bgcolor="#1a1a1a">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#000;"><tr><td align="center" style="padding:20px 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#1a1a1a;border-radius:8px;overflow:hidden;">
 
 <tr><td style="text-align:center;padding:24px 16px 8px;">
 <h1 style="margin:0;font-size:20px;color:#e0e0e0;">🌏 全球股市简报</h1>

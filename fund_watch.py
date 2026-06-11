@@ -97,7 +97,7 @@ def _pipe_table_to_html(compare_lines: list[str]) -> str:
             if not header_done:
                 cp += '<thead><tr>'
                 for c in clean.strip("|").split("|"):
-                    cp += f'<th style="...">{_html.escape(c.strip())}</th>'
+                    cp += f'<th style="padding:4px 6px;text-align:center;border-bottom:1px solid #444;color:#888;white-space:nowrap;">{_html.escape(c.strip())}</th>'
                 cp += '</tr></thead><tbody>'
                 header_done = True
             else:
