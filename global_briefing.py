@@ -9,11 +9,13 @@ import json
 import re
 import datetime
 import os
+import urllib.request
 from fund_utils import send_wechat, log, HISTORY_DIR, fetch_bytes, send_mail, parse_sina_csv
 from config import get_secret as _get_secret
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
 _VOLUME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".volume_history.json")
+_VOLUME_BREADTH_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".breadth_history.json")
 _VOLUME_HISTORY_DAYS = 60  # 取近60个交易日做百分位计算
 
 
@@ -33,6 +35,8 @@ GLOBAL_INDICES = [
     ("gb_$ks11",  "韩国KOSPI"),
     ("gb_$ftse",  "英国富时100"),
     ("gb_$gdaxi", "德国DAX"),
+    ("gb_$fchi",  "法国CAC40"),
+    ("gb_$ssmi",  "瑞士SMI"),
 ]
 
 
@@ -276,7 +280,7 @@ def build_briefing() -> str:
 
 
 def _fetch_sentiment() -> dict | None:
-    """获取市场成交额（含历史对比数据）"""
+    """获取市场成交额（含历史对比数据），不足7天时从腾讯回填"""
     try:
         url = "https://hq.sinajs.cn/list=sh000001,sz399001"
         data = fetch_bytes(url, headers={
@@ -306,7 +310,12 @@ def _fetch_sentiment() -> dict | None:
                 del history[d]
         _save_volume_history(history)
 
-        # 最近几天成交额（用于显示趋势）
+        # 如果不足7天，从腾讯回填（用成交量估算成交额）
+        if len(dates) < 7:
+            _backfill_volume_history(history, amount_yi)
+            dates = sorted(history.keys())
+
+        # 最近7天成交额
         recent = {}
         for d in dates[-7:]:
             recent[d] = history[d]
@@ -329,6 +338,47 @@ def _fetch_sentiment() -> dict | None:
         return None
 
 
+def _backfill_volume_history(history: dict, today_amount: float) -> None:
+    """从腾讯K线API回填历史成交额（用成交量估算）"""
+    try:
+        url = "http://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,10,qfq"
+        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
+        resp = urllib.request.urlopen(req, timeout=10).read()
+        j = json.loads(resp)
+        klines = j["data"]["sh000001"]["day"]
+
+        # 找今天的K线算换算比例
+        ratio = None
+        for k in klines:
+            if k[0] == datetime.date.today().isoformat() and today_amount > 0:
+                vol = float(k[5])
+                close = float(k[2])
+                if vol > 0:
+                    ratio = today_amount / (vol * close / 1e8)
+                break
+
+        if not ratio:
+            return
+
+        filled = 0
+        for k in klines:
+            date = k[0]
+            if date in history:
+                continue
+            vol = float(k[5])
+            close = float(k[2])
+            estimated = round(vol * close / 1e8 * ratio, 0)
+            if estimated > 0:
+                history[date] = estimated
+                filled += 1
+
+        if filled:
+            _save_volume_history(history)
+            log.info("成交量回填: 新增 %d 天", filled)
+    except Exception as e:
+        log.debug("成交量回填失败: %s", e)
+
+
 def _load_volume_history() -> dict:
     """加载成交额历史"""
     if not os.path.exists(_VOLUME_HISTORY_FILE):
@@ -349,8 +399,28 @@ def _save_volume_history(history: dict) -> None:
         log.debug("保存成交额历史失败: %s", e)
 
 
+def _load_breadth_history() -> dict:
+    """加载上次的涨跌家数"""
+    if not os.path.exists(_VOLUME_BREADTH_FILE):
+        return {}
+    try:
+        with open(_VOLUME_BREADTH_FILE, encoding="utf-8") as f:
+            return json.load(f)  # type: ignore[no-any-return]
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_breadth_history(data: dict) -> None:
+    """保存涨跌家数"""
+    try:
+        with open(_VOLUME_BREADTH_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
 def _fetch_market_breadth() -> dict | None:
-    """获取涨跌家数（沪深两市合计）"""
+    """获取涨跌家数（沪深两市合计），收盘后展示上次最后值"""
     try:
         url = "https://hq.sinajs.cn/list=sh000001"
         data = fetch_bytes(url, headers={
@@ -358,20 +428,23 @@ def _fetch_market_breadth() -> dict | None:
             "Referer": "https://finance.sina.com.cn",
         })
         if data is None:
-            return None
+            return _load_breadth_history() or None
         text = data.decode("gbk")
         m = re.search(r'"(.*?)"', text)
         if not m:
-            return None
+            return _load_breadth_history() or None
         parts = m.group(1).split(",")
         up = int(float(parts[28])) if len(parts) > 28 and parts[28] else 0
         down = int(float(parts[29])) if len(parts) > 29 and parts[29] else 0
-        if up == 0 and down == 0:
-            return None  # 收盘后数据清零，不展示
-        return {"up": up, "down": down}
+        if up > 0 or down > 0:
+            result = {"up": up, "down": down}
+            _save_breadth_history(result)
+            return result
+        # 收盘已清零，返回上次保存的值
+        return _load_breadth_history() or None
     except Exception as e:
         log.debug("获取涨跌家数失败: %s", e)
-        return None
+        return _load_breadth_history() or None
 
 
 def main() -> None:
