@@ -1,0 +1,12 @@
+/code-review     — 审查当前代码改动——正确性、安全、可读性、测试覆盖
+/security-review — 安全专项审查——注入、鉴权、密钥、路径遍历
+/architecture-decision — 创建架构决策记录 ADR
+/karpathy-guidelines — 编程行为指南（已找回本地文件）
+/test            — 跑测试 + 诊断失败 + 修到全绿
+/research        — 上网查资料 + 对比本地代码
+/explore         — 只读式探索整个代码库
+/review          — review 当前分支 diff
+/changelog       — 从 git commit 整理变更清单（本地文件还在）
+bug-report       — 结构化 bug 报告（本地文件还在）
+systematic-debugging — 系统化调试流程（本地文件还在）
+project-architecture — 项目架构规范（本地文件还在）
