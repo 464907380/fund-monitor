@@ -26,10 +26,11 @@ def test_a_indices_have_three():
     """A股三大指数应包含上证/深证/沪深300"""
     from global_briefing import A_INDICES
 
-    assert len(A_INDICES) == 3
+    assert len(A_INDICES) == 4
     names = [n for _, n in A_INDICES]
     assert "上证指数" in names
     assert "深证成指" in names
+    assert "创业板指" in names
     assert "沪深300" in names
 
 

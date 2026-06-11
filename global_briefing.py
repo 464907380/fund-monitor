@@ -23,6 +23,7 @@ _VOLUME_HISTORY_DAYS = 60  # 取近60个交易日做百分位计算
 A_INDICES = [
     ("sh000001", "上证指数"),
     ("sz399001", "深证成指"),
+    ("sz399006", "创业板指"),
     ("sz399300", "沪深300"),
 ]
 
@@ -68,7 +69,7 @@ def fetch_sina(code: str) -> dict | None:
 
 def fetch_eastmoney_a(code: str) -> dict | None:
     """备选：从东方财富获取A股指数"""
-    mapping = {"sh000001": "1.000001", "sz399001": "0.399001", "sz399300": "1.000300"}
+    mapping = {"sh000001": "1.000001", "sz399001": "0.399001", "sz399006": "0.399006", "sz399300": "1.000300"}
     secid = mapping.get(code)
     if not secid:
         return None
