@@ -176,9 +176,11 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     _send_smtp(msg)
 
 
-def push(subject: str, rows: list[dict], alerts: list[str], today: str) -> None:
+def push(subject: str, rows: list[dict], alerts: list[str], today: str,
+         compare_lines: list[str] | None = None) -> None:
     # 预计算推荐对比，两个推送通道共用
-    compare_lines = _compare_with_recommendations()
+    if compare_lines is None:
+        compare_lines = _compare_with_recommendations()
     sent = send_wechat(md_content(rows, alerts, today, compare_lines))
     if not sent:
         send_mail_html(subject, rows, alerts, today, compare_lines)
@@ -995,16 +997,15 @@ def main() -> None:
         for a in all_alerts:  # type: ignore[assignment]
             lines.append(f"  {a}")
 
-    # 持仓 vs 推荐对比
-    if rows:
-        compare_lines = _compare_with_recommendations()
-        if compare_lines:
-            lines.extend(compare_lines)
+    # 持仓 vs 推荐对比（终端和推送共用，只读一次文件）
+    compare_lines = _compare_with_recommendations() if rows else None
+    if compare_lines:
+        lines.extend(compare_lines)
 
     full_text = "\n".join(lines)
 
     print(full_text)
-    push("📊 基金晚报", rows, all_alerts, today)
+    push("📊 基金晚报", rows, all_alerts, today, compare_lines)
     log.info("====== 基金晚报 %s 完成 ======", today)
 
 

@@ -270,11 +270,16 @@ def get_global() -> list[dict]:
     return fetch_all_global()
 
 
-def build_briefing_md() -> str:
+def build_briefing_md(a_shares: list[dict] | None = None,
+                      globals_: list[dict] | None = None,
+                      senti: dict | None = None,
+                      breadth: dict | None = None) -> str:
     """构造简报 Markdown（企业微信推送用）"""
     today = datetime.date.today().isoformat()
-    a_shares = get_a_share()
-    globals_ = get_global()
+    if a_shares is None:
+        a_shares = get_a_share()
+    if globals_ is None:
+        globals_ = get_global()
 
     lines = [f"🌏 **全球股市简报 {today}**", ""]
 
@@ -288,8 +293,10 @@ def build_briefing_md() -> str:
             lines.append(f"|{s['code']}|{s['current']:.2f}|{emoji}{c:+.2f}%|")
 
     # 成交额及对比
-    senti = _fetch_sentiment()
-    breadth = _fetch_market_breadth()
+    if senti is None:
+        senti = _fetch_sentiment()
+    if breadth is None:
+        breadth = _fetch_market_breadth()
     if senti or breadth:
         if a_shares:
             lines.append("")
@@ -334,11 +341,16 @@ def build_briefing_md() -> str:
     return "\n".join(lines)
 
 
-def build_briefing_text() -> str:
+def build_briefing_text(a_shares: list[dict] | None = None,
+                       globals_: list[dict] | None = None,
+                       senti: dict | None = None,
+                       breadth: dict | None = None) -> str:
     """构造简报文本版（终端/邮件用，对齐格式参考晚报）"""
     today = datetime.date.today().isoformat()
-    a_shares = get_a_share()
-    globals_ = get_global()
+    if a_shares is None:
+        a_shares = get_a_share()
+    if globals_ is None:
+        globals_ = get_global()
 
     lines = [f"🌏 全球股市简报 {today}", ""]
 
@@ -352,8 +364,10 @@ def build_briefing_text() -> str:
             lines.append(f"{s['code']:<12} {s['current']:<10.2f} {emoji}{c:+.2f}%")
 
     # 成交额及对比
-    senti = _fetch_sentiment()
-    breadth = _fetch_market_breadth()
+    if senti is None:
+        senti = _fetch_sentiment()
+    if breadth is None:
+        breadth = _fetch_market_breadth()
     if senti or breadth:
         lines.append("")
         lines.append("📊 市场情绪")
@@ -604,13 +618,20 @@ def _fetch_market_breadth() -> dict | None:
     return None
 
 
-def build_briefing_html() -> str:
+def build_briefing_html(a_shares: list[dict] | None = None,
+                       globals_: list[dict] | None = None,
+                       senti: dict | None = None,
+                       breadth: dict | None = None) -> str:
     """构造简报 HTML（邮件推送用，深色主题同晚报）"""
     today = datetime.date.today().isoformat()
-    a_shares = get_a_share()
-    globals_ = get_global()
-    senti = _fetch_sentiment()
-    breadth = _fetch_market_breadth()
+    if a_shares is None:
+        a_shares = get_a_share()
+    if globals_ is None:
+        globals_ = get_global()
+    if senti is None:
+        senti = _fetch_sentiment()
+    if breadth is None:
+        breadth = _fetch_market_breadth()
 
     rows = []
 
@@ -703,9 +724,14 @@ def build_briefing_html() -> str:
 
 def main() -> None:
     log.info("====== 全球股市简报 开始 ======")
-    brief_md = build_briefing_md()
-    brief_text = build_briefing_text()
-    brief_html = build_briefing_html()
+    # 数据只取一次，三个 builder 共用
+    a_shares = get_a_share()
+    globals_ = get_global()
+    senti = _fetch_sentiment()
+    breadth = _fetch_market_breadth()
+    brief_md = build_briefing_md(a_shares, globals_, senti, breadth)
+    brief_text = build_briefing_text(a_shares, globals_, senti, breadth)
+    brief_html = build_briefing_html(a_shares, globals_, senti, breadth)
     print(brief_text)
 
     webhook = _get_secret("WECHAT_WEBHOOK")
