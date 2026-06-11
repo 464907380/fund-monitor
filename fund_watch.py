@@ -23,11 +23,13 @@ _FUND_LIST_FALLBACK = [
     {"code": "001480"}, {"code": "001753"}, {"code": "001170"},
 ]
 FUND_LIST: list[dict] = []  # 占位，稍后由 _load_fund_list() 或 _ensure_fund_list_loaded() 填充
+_fund_list_loaded = False
 
 
 def _ensure_fund_list_loaded() -> None:
     """惰性加载基金列表（替代模块级副作用）"""
-    if FUND_LIST:
+    global _fund_list_loaded
+    if _fund_list_loaded:
         return  # 已加载
     _fund_list_path = os.path.join(HISTORY_DIR, "fund_list.json")
     if os.path.exists(_fund_list_path):
@@ -41,6 +43,7 @@ def _ensure_fund_list_loaded() -> None:
             FUND_LIST[:] = _FUND_LIST_FALLBACK
     else:
         FUND_LIST[:] = _FUND_LIST_FALLBACK
+    _fund_list_loaded = True
 
 def _get_webhook() -> str | None:
     """惰性读取企业微信 Webhook（支持长进程环境变量刷新）"""

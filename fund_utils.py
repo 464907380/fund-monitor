@@ -180,7 +180,7 @@ def send_wechat(content: str, markdown: bool = True) -> bool:
     if not webhook:
         return False
     msgtype = "markdown" if markdown else "text"
-    payload = json.dumps({msgtype: {msgtype: content}}).encode("utf-8")
+    payload = json.dumps({"msgtype": msgtype, msgtype: {"content": content}}).encode("utf-8")
     req = urllib.request.Request(
         webhook, data=payload,
         headers={"Content-Type": "application/json"},

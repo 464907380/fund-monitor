@@ -117,6 +117,21 @@ def test_holdings_with_stock_code():
                     pass
 
 
+def test_ensure_fund_list_loaded_empty(tmp_path, monkeypatch):
+    """空的 fund_list.json 应该被视为已加载，而不是回退默认列表"""
+    import fund_watch
+    monkeypatch.setattr(fund_watch, "HISTORY_DIR", str(tmp_path))
+    fund_list_path = tmp_path / "fund_list.json"
+    fund_list_path.write_text("[]", encoding="utf-8")
+
+    fund_watch.FUND_LIST[:] = []
+    monkeypatch.setattr(fund_watch, "_fund_list_loaded", False)
+    fund_watch._ensure_fund_list_loaded()
+
+    assert fund_watch._fund_list_loaded is True
+    assert fund_watch.FUND_LIST == []
+
+
 # ═══════════════════════════════════════════════
 # 个股监控测试
 # ═══════════════════════════════════════════════

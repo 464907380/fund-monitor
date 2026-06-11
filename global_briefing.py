@@ -171,8 +171,8 @@ def build_briefing() -> str:
 
         # 成交额趋势
         if senti:
-            recent = sorted(senti["recent"].items())  # [(date, amount), ...]
-            lines.append("**成交额（近几日）**")
+            recent = sorted(senti["recent"].items())
+            lines.append("**成交额**")
             vol_rows = []
             for i, (d, v) in enumerate(recent):
                 if i == 0:
@@ -185,19 +185,12 @@ def build_briefing() -> str:
             lines.append("|---|---|---:|")
             lines.extend(vol_rows)
             if senti.get("pct") is not None:
-                lines.append(f"> 今日量高于{senti['pct']:.0f}%的交易日（近{senti['history_days']}天）")
+                lines.append(f"> 高于{senti['pct']:.0f}%的交易日（近{senti['history_days']}天）")
 
         # 涨跌家数
         if breadth:
-            if breadth.get("up") is not None and breadth.get("down") is not None and breadth["up"] > 0:
-                up, down = breadth["up"], breadth["down"]
-                emoji = "📈" if up > down else ("📉" if up < down else "➖")
-                lines.append(f"**涨跌家数** {emoji} 涨{up}家 / 跌{down}家")
-            elif breadth.get("direction"):
-                dir_text = "涨多跌少" if breadth["direction"] == "涨" else "涨少跌多"
-                emoji_map = {"涨": "📈", "跌": "📉", "平": "➖"}
-                emoji = emoji_map.get(breadth["direction"], "➖")
-                lines.append(f"**涨跌** {emoji} {dir_text}（收盘后数据更新中）")
+            up, down = breadth["up"], breadth["down"]
+            lines.append(f"**涨跌** 📈涨{up}家 📉跌{down}家")
 
     if globals_:
         if a_shares or senti:
@@ -308,24 +301,11 @@ def _fetch_market_breadth() -> dict | None:
         if not m:
             return None
         parts = m.group(1).split(",")
-
-        up = int(float(parts[28])) if len(parts) > 28 and parts[28] else None
-        down = int(float(parts[29])) if len(parts) > 29 and parts[29] else None
-
-        # 如果涨跌家数为0（收盘后数据滞后），用方向估算
-        if (up is None or down is None or up == 0) and len(parts) > 3:
-            prev_close = float(parts[2]) if parts[2] else 0
-            current = float(parts[3]) if parts[3] else 0
-            if current > prev_close:
-                direction = "涨"
-            elif current < prev_close:
-                direction = "跌"
-            else:
-                direction = "平"
-        else:
-            direction = None
-
-        return {"up": up, "down": down, "direction": direction}
+        up = int(float(parts[28])) if len(parts) > 28 and parts[28] else 0
+        down = int(float(parts[29])) if len(parts) > 29 and parts[29] else 0
+        if up == 0 and down == 0:
+            return None  # 收盘后数据清零，不展示
+        return {"up": up, "down": down}
     except Exception as e:
         log.debug("获取涨跌家数失败: %s", e)
         return None

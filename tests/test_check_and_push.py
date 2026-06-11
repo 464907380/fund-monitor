@@ -107,6 +107,11 @@ def test_send_wechat_success(mock_urlopen):
         result = send_wechat("测试消息")
     assert result is True
     mock_urlopen.assert_called_once()
+    req = mock_urlopen.call_args.args[0]
+    body = json.loads(req.data.decode("utf-8"))
+    assert body["msgtype"] == "markdown"
+    assert body["markdown"]["content"] == "测试消息"
+    assert dict(req.header_items())["Content-type"] == "application/json"
 
 
 @patch("fund_utils.urllib.request.urlopen")
