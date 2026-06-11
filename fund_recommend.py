@@ -248,7 +248,7 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
                     d.get("max_dd", 0), d.get("win_rate", 0),
                     d.get("inst", 0), d.get("sc", 0), d.get("rate", 0),
                     d.get("profit_ratio", 0), d.get("recovery", 0),
-                    d.get("sy3", 0))
+                    0 if d.get("sy3") is None else d["sy3"])
         except Exception as e:
             log.debug("跳过 %s: %s", code, e)
             return None

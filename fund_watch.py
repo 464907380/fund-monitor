@@ -74,7 +74,7 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 def _pipe_table_to_html(compare_lines: list[str]) -> str:
     """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
     cp = '<tr><td style="padding:12px 14px;background:#0f3460;border:1px solid #333;border-radius:6px;">'
-    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#e0e0e0;">🏆 市场优选基金 TOP 10 （11 维评分）</p>'
+    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#e0e0e0;">🏆 市场优选基金 TOP 10 （12 维评分）</p>'
     in_table = False
     header_done = False
     for line in compare_lines:
@@ -905,7 +905,7 @@ def _compare_with_recommendations() -> list[str]:
             pass
 
     lines.append("")
-    lines.append("🏆 **市场优选基金 TOP 10**  （11 维评分）")
+    lines.append("🏆 **市场优选基金 TOP 10**  （12 维评分）")
     lines.append("")
     lines.append(f"|{'排名':<4}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
     lines.append(f"|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
@@ -919,7 +919,7 @@ def _compare_with_recommendations() -> list[str]:
         y1 = str(r.get("y1", ""))
         sharpe = r.get("sharpe", 0)
         dd = r.get("max_dd", 0)
-        sy3 = r.get("sy3") if r.get("sy3") is not None else r.get("sy6", 0)
+        sy3 = 0 if r.get("sy3") is None else r["sy3"]
         lines.append(f"|{badge:<4}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
     lines.append("")
