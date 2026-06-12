@@ -213,21 +213,50 @@ def _strip_html(text: str) -> str:
 
 def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
     """获取基金实时估算涨跌幅，返回 (基金名, 估算涨跌幅%)"""
-    # 主数据源：天天基金
-    urls = [
-        api_url("fund_estimate", code=code),
-        api_url("fund_estimate_fallback", code=code),
+    import urllib.request
+
+    sources = [
+        # 1-2. 天天基金实时估值
+        {"url": api_url("fund_estimate", code=code),
+         "pattern": r'"fundcode":"[^"]+","name":"([^"]*)","gszzl":"([-+\d.]+)"', "ni": 1, "vi": 2},
+        {"url": api_url("fund_estimate_fallback", code=code),
+         "pattern": r'"fundcode":"[^"]+","name":"([^"]*)","gszzl":"([-+\d.]+)"', "ni": 1, "vi": 2},
     ]
-    for url in urls:
+    for src in sources:
         try:
-            gz = fetch(url)
-            m = re.search(r'"fundcode":"([^"]+)","name":"([^"]*)","gszzl":"([-+\d.]+)"', gz)
+            gz = fetch(src["url"])
+            m = re.search(src["pattern"], gz)
             if m:
-                name = m.group(2) or code
-                gszzl = float(m.group(3))
-                return name, gszzl
+                return (m.group(src["ni"]) or code, float(m.group(src["vi"])))
         except Exception:
             continue
+
+    # 3. 天天基金历史净值 API（需 Referer，直接取今日净值涨跌幅）
+    try:
+        url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+        req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            gz = r.read().decode("utf-8")
+        m = re.search(r'"JZZZL":"([-+\d.]+)"', gz)
+        if m:
+            return code, float(m.group(1))
+    except Exception:
+        pass
+
+    # 4. 新浪财经基金行情
+    try:
+        url = f"http://hq.sinajs.cn/list=of{code}"
+        req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = r.read()
+        # Sina 返回 GBK 编码
+        gz = raw.decode("gbk")
+        m = re.search(r'"([^,]*),([-\d.]+),[-\d.]+,([-\d.]+),([-\d.]+),(\d{4}-\d{2}-\d{2})"', gz)
+        if m:
+            return m.group(1), float(m.group(4))
+    except Exception:
+        pass
+
     return None
 
 
