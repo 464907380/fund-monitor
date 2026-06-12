@@ -43,6 +43,11 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1",
         api_url("fund_rank") + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}",
+        # 3. HTTP 备选（绕过 SSL 超时问题）
+        "http://fund.eastmoney.com/data/rankhandler.aspx" + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
+                              f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1",
+        "http://fund.eastmoney.com/data/rankhandler.aspx" + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
+                              f"&sd={sd}&ed={ed}&pi=1&pn={pn}",
     ]
     for url in urls:
         data = fetch(url)
