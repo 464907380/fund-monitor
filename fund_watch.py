@@ -462,6 +462,18 @@ def _score_sy3(d: dict) -> float:
     return sy3_score
 
 
+def _score_sy6(d: dict) -> float:
+    """近6月收益评分 — 从净值数据计算"""
+    sy6 = d.get("sy6")
+    if sy6 is None:
+        return 0.0
+    if sy6 >= 50:   sy6_score = 90 + (sy6 - 50) / 50 * 10
+    elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 30
+    elif sy6 >= 0:   sy6_score = 10 + sy6 / 20 * 50
+    else:            sy6_score = 0
+    return sy6_score
+
+
 def _score_max_dd(d: dict) -> float:
     """最大回撤评分"""
     max_dd = d.get("max_dd")
@@ -512,17 +524,18 @@ def _score_rate(d: dict) -> float:
 # 增/删/改权重都在这里，_calc_score 和晚报说明自动同步
 SCORE_DIMS: list[tuple[str, Callable, float, str]] = [
     ("近1年收益",    _score_y1,             0.20, "最近一年的表现，反映基金近期赚钱能力"),
-    ("夏普比率",     _score_sharpe,         0.15, "每承受 1 份波动能换来多少超额收益"),
+    ("夏普比率",     _score_sharpe,         0.12, "每承受 1 份波动能换来多少超额收益"),
     ("上行胜率",     _score_win_rate,       0.10, "赚钱天数占总交易天数的比例"),
     ("盈亏比",       _score_profit_ratio,   0.10, "平均盈利÷平均亏损，>1说明赚比亏多"),
     ("索提诺比率",   _score_sortino,        0.10, "只考虑下跌波动，更贴近真实风险感受"),
     ("修复系数",     _score_recovery,       0.10, "总收益÷最大回撤，衡量跌下去能不能涨回来"),
     ("近3年收益",    _score_sy3,            0.10, "从净值数据取约750个交易日精确计算，看穿越牛熊能力"),
-    ("费率",         _score_rate,           0.07, "申购费越低越好"),
-    ("最大回撤",     _score_max_dd,         0.05, "历史最大跌幅，公式：max(0, min(90, 110-回撤×1.2))"),
-    ("年化收益率",    _score_annual_return,  0.03, "基金成立以来年化回报"),
-    ("基金规模",     _score_scale,          0.00, "1~50亿最理想，太小不灵活、太大难操作"),
-    ("机构持有比例", _score_institutional,  0.00, "专业机构认可度，小幅参考"),
+    ("近6月收益",    _score_sy6,            0.05, "近六个月表现，补充近1年的中短期维度"),
+    ("费率",         _score_rate,           0.05, "申购费越低越好"),
+    ("最大回撤",     _score_max_dd,         0.03, "历史最大跌幅"),
+    ("基金规模",     _score_scale,          0.02, "1~50亿最理想，太小不灵活、太大难操作"),
+    ("年化收益率",    _score_annual_return,  0.02, "基金成立以来年化回报"),
+    ("机构持有比例", _score_institutional,  0.01, "专业机构认可度，小幅参考"),
 ]
 
 
