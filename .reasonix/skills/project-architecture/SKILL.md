@@ -13,13 +13,19 @@ description: 基金监控项目架构与改动规范
 
 ## 文件职责
 
-| 文件 | 职责 | 健康度 |
-|------|------|--------|
-| `fund_watch.py` | 晚报 + HTTP + 推送 + 解析 | ⚠️ 952行，职责偏多 |
-| `fund_monitor.py` | 盘中监控 + 个股 + 快照 | ✅ 清晰 |
-| `global_briefing.py` | 全球简报 + 情绪指标 | ✅ 清晰 |
-| `fund_recommend.py` | 全市场选基 + 评分 | ✅ 独立 |
-| `config.py` | 配置加载 | ✅ 清晰 |
+| 文件 | 职责 | 行数 |
+|------|------|:----:|
+| `fund_watch.py` | 晚报流程主控 | 443 |
+| `fund_scoring.py` | 12 维评分模型 | 217 |
+| `fund_metrics.py` | 净值指标计算 | 102 |
+| `fund_alerts.py` | 净值异常警报检测 | 60 |
+| `fund_render.py` | HTML/MD 渲染 + 推送 | 265 |
+| `fund_monitor.py` | 盘中实时监控 | 574 |
+| `global_briefing.py` | 全球股市简报 | 748 |
+| `fund_recommend.py` | 全市场基金推荐 | 252 |
+| `fund_utils.py` | 公共基础设施（网络/缓存/推送/心跳） | 365 |
+| `fund_server.py` | Web 管理服务器 | 322 |
+| `config.py` | 配置加载 + API URL 管理 | 162 |
 
 ---
 
@@ -39,3 +45,9 @@ description: 基金监控项目架构与改动规范
 - 修Bug/改代码后：mypy 零错误 + pytest 通过
 - 核心逻辑（净值计算/推送/阈值）要有测试覆盖
 - 不要引入AI扮演的"专家"来背书
+
+## 已知待改进
+
+- `fund_monitor.push_alert` (110行) / `monitor()` (113行) / `build_briefing_html` (104行) 超100行待拆分
+- mypy 18个报错（主要在 fund_scoring.py，类型注解问题）
+- 云服务器部署（待办）
