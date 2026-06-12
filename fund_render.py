@@ -4,6 +4,7 @@
 import datetime
 import json
 import os
+import re
 import html as _html
 from email.header import Header
 from email.mime.text import MIMEText
@@ -204,8 +205,15 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         log.warning("email_template.html 不存在，跳过保存晚报")
         return
     try:
+        # 适配 iframe 展示：去掉外层黑底（与 iframe #1a1a1a 背景融合）
+        # 以及去掉 "Fund Monitor · 天天基金" footer
+        web = html
+        web = web.replace("background:#000", "background:#1a1a1a")
+        web = web.replace('bgcolor="#000000"', '')
+        web = web.replace('padding:20px 10px;', 'padding:0;')
+        web = re.sub(r'<tr><td[^>]*>Fund Monitor[^<]*</td></tr>', '', web)
         with open(_BRIEFING_FILE, "w", encoding="utf-8") as f:
-            f.write(html)
+            f.write(web)
         log.info("晚报已保存到 %s", _BRIEFING_FILE)
     except OSError as e:
         log.warning("保存晚报失败: %s", e)
