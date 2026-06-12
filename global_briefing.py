@@ -562,6 +562,80 @@ def _save_breadth_history(data: dict) -> None:
         pass
 
 
+
+def _html_a_share_section(a_shares: list[dict] | None) -> list[str]:
+    """渲染 A 股指数 HTML 行"""
+    rows = []
+    if not a_shares:
+        return rows
+    rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">\U0001f1e8\U0001f1f3 A股</td></tr>')
+    rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
+                '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
+                '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
+    for s in a_shares:
+        c_val = s["change"]
+        color = "#ef5350" if c_val > 0 else ("#66bb6a" if c_val < 0 else "#ccc")
+        arrow = "\U0001f534" if c_val > 0 else ("\U0001f7e2" if c_val < 0 else "\u26aa")
+        rows.append(f'<tr><td style="padding:6px 12px;border-bottom:1px solid #333;color:#ccc;">{s["code"]}</td>'
+                    f'<td style="padding:6px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{s["current"]:.2f}</td>'
+                    f'<td style="padding:6px 12px;text-align:right;font-weight:600;font-family:Consolas;border-bottom:1px solid #333;color:{color};">{arrow}{c_val:+.2f}%</td></tr>')
+    return rows
+
+
+def _html_volume_section(senti: dict | None) -> list[str]:
+    """渲染成交额 HTML 行"""
+    rows = []
+    if not senti:
+        return rows
+    rows.append('<tr><td style="padding:10px 12px 4px;" colspan="3"><p style="margin:0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 成交额</p></td></tr>')
+    rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">日期</td>'
+                '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">成交额</td>'
+                '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">较前一日</td></tr>')
+    sorted_recent = sorted(senti["recent"].items(), reverse=True)
+    for i, (d, v) in enumerate(sorted_recent):
+        if i == len(sorted_recent) - 1:
+            diff_str = "\u2014"
+        else:
+            next_v = sorted_recent[i+1][1]
+            diff = v - next_v
+            diff_str = f'<span style="color:#ef5350;">\u2191{abs(diff):.0f}亿</span>' if diff >= 0 else f'<span style="color:#66bb6a;">\u2193{abs(diff):.0f}亿</span>'
+        rows.append(f'<tr><td style="padding:4px 12px;border-bottom:1px solid #333;color:#ccc;">{d[-5:]}</td>'
+                    f'<td style="padding:4px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{v:.0f}亿</td>'
+                    f'<td style="padding:4px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;">{diff_str}</td></tr>')
+    if senti.get("rank_str"):
+        rows.append(f'<tr><td style="padding:6px 12px;font-size:11px;color:#888;" colspan="3">\U0001f4cc {senti["rank_str"]}</td></tr>')
+    return rows
+
+
+def _html_breadth_section(breadth: dict | None) -> list[str]:
+    """渲染涨跌家数 HTML 行"""
+    if not breadth:
+        return []
+    up, down = breadth["up"], breadth["down"]
+    return [f'<tr><td style="padding:8px 12px;font-size:12px;color:#ccc;" colspan="3">\U0001f4c8涨{up}家  \U0001f4c9跌{down}家</td></tr>']
+
+
+def _html_global_section(globals_: list[dict] | None) -> list[str]:
+    """渲染全球指数 HTML 行"""
+    rows = []
+    if not globals_:
+        return rows
+    rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">\U0001f30d 全球</td></tr>')
+    rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
+                '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
+                '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
+    for s in globals_:
+        c_val = s["change"]
+        color = "#ef5350" if c_val > 0 else ("#66bb6a" if c_val < 0 else "#ccc")
+        arrow = "\U0001f534" if c_val > 0 else ("\U0001f7e2" if c_val < 0 else "\u26aa")
+        rows.append(f'<tr><td style="padding:6px 12px;border-bottom:1px solid #333;color:#ccc;">{s["code"]}</td>'
+                    f'<td style="padding:6px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{s["current"]:.2f}</td>'
+                    f'<td style="padding:6px 12px;text-align:right;font-weight:600;font-family:Consolas;border-bottom:1px solid #333;color:{color};">{arrow}{c_val:+.2f}%</td></tr>')
+    return rows
+
+
+
+
 def _fetch_market_breadth() -> dict | None:
     """获取涨跌家数（沪深两市合计），收盘后展示上次缓存值"""
     # 先试新浪fields 28/29（交易时段有效）
@@ -634,65 +708,18 @@ def build_briefing_html(a_shares: list[dict] | None = None,
         breadth = _fetch_market_breadth()
 
     rows = []
-
-    # A股
-    if a_shares:
-        rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🇨🇳 A股</td></tr>')
-        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
-                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
-                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
-        for s in a_shares:
-            c = s["change"]
-            color = "#ef5350" if c > 0 else ("#66bb6a" if c < 0 else "#ccc")
-            rows.append(f'<tr><td style="padding:6px 12px;border-bottom:1px solid #333;color:#ccc;">{s["code"]}</td>'
-                        f'<td style="padding:6px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{s["current"]:.2f}</td>'
-                        f'<td style="padding:6px 12px;text-align:right;font-weight:600;font-family:Consolas;border-bottom:1px solid #333;color:{color};">{"🔴" if c>0 else "🟢" if c<0 else "⚪"}{c:+.2f}%</td></tr>')
-
-    # 成交额
-    if senti:
-        rows.append('<tr><td style="padding:10px 12px 4px;" colspan="3"><p style="margin:0;font-size:13px;font-weight:600;color:#ccc;">📊 成交额</p></td></tr>')
-        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">日期</td>'
-                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">成交额</td>'
-                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">较前一日</td></tr>')
-        sorted_recent = sorted(senti["recent"].items(), reverse=True)
-        for i, (d, v) in enumerate(sorted_recent):
-            if i == len(sorted_recent) - 1:
-                diff_str = "—"
-            else:
-                next_v = sorted_recent[i+1][1]
-                diff = v - next_v
-                diff_str = f'<span style="color:#ef5350;">↑{abs(diff):.0f}亿</span>' if diff >= 0 else f'<span style="color:#66bb6a;">↓{abs(diff):.0f}亿</span>'
-            rows.append(f'<tr><td style="padding:4px 12px;border-bottom:1px solid #333;color:#ccc;">{d[-5:]}</td>'
-                        f'<td style="padding:4px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{v:.0f}亿</td>'
-                        f'<td style="padding:4px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;">{diff_str}</td></tr>')
-        if senti.get("rank_str"):
-            rows.append(f'<tr><td style="padding:6px 12px;font-size:11px;color:#888;" colspan="3">📌 {senti["rank_str"]}</td></tr>')
-
-    # 涨跌家数
-    if breadth:
-        up, down = breadth["up"], breadth["down"]
-        rows.append(f'<tr><td style="padding:8px 12px;font-size:12px;color:#ccc;" colspan="3">📈涨{up}家  📉跌{down}家</td></tr>')
-
-    # 全球
-    if globals_:
-        rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">🌍 全球</td></tr>')
-        rows.append('<tr style="background:#222;"><td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;border-bottom:1px solid #333;">指数</td>'
-                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">最新</td>'
-                    '<td style="padding:6px 12px;font-size:11px;color:#888;font-weight:600;text-align:right;border-bottom:1px solid #333;">涨跌幅</td></tr>')
-        for s in globals_:
-            c = s["change"]
-            color = "#ef5350" if c > 0 else ("#66bb6a" if c < 0 else "#ccc")
-            rows.append(f'<tr><td style="padding:6px 12px;border-bottom:1px solid #333;color:#ccc;">{s["code"]}</td>'
-                        f'<td style="padding:6px 12px;text-align:right;font-family:Consolas;border-bottom:1px solid #333;color:#ccc;">{s["current"]:.2f}</td>'
-                        f'<td style="padding:6px 12px;text-align:right;font-weight:600;font-family:Consolas;border-bottom:1px solid #333;color:{color};">{"🔴" if c>0 else "🟢" if c<0 else "⚪"}{c:+.2f}%</td></tr>')
+    rows.extend(_html_a_share_section(a_shares))
+    rows.extend(_html_volume_section(senti))
+    rows.extend(_html_breadth_section(breadth))
+    rows.extend(_html_global_section(globals_))
 
     if not a_shares and not globals_:
-        rows.append('<tr><td style="padding:20px 12px;text-align:center;color:#888;" colspan="3">❌ 所有数据源均不可用</td></tr>')
+        rows.append('<tr><td style="padding:20px 12px;text-align:center;color:#888;" colspan="3">\u274c \u6240\u6709\u6570\u636e\u6e90\u5747\u4e0d\u53ef\u7528</td></tr>')
 
     if globals_ or a_shares:
-        rows.append('<tr><td style="padding:8px 12px;font-size:11px;color:#555;text-align:center;" colspan="3">⏰ 美股/欧股为上一交易日收盘</td></tr>')
+        rows.append('<tr><td style="padding:8px 12px;font-size:11px;color:#555;text-align:center;" colspan="3">\u23f0 \u7f8e\u80a1/\u6b27\u80a1\u4e3a\u4e0a\u4e00\u4e2a\u4ea4\u6613\u65e5\u6536\u76d8</td></tr>')
 
-    body_rows = "\n".join(rows)
+    body_rows = "\\n".join(rows)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -705,7 +732,7 @@ def build_briefing_html(a_shares: list[dict] | None = None,
 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#1a1a1a;border-radius:8px;overflow:hidden;">
 
 <tr><td style="text-align:center;padding:24px 16px 8px;">
-<h1 style="margin:0;font-size:20px;color:#e0e0e0;">🌏 全球股市简报</h1>
+<h1 style="margin:0;font-size:20px;color:#e0e0e0;">\U0001f30f \u5168\u7403\u80a1\u5e02\u7b80\u62a5</h1>
 <p style="margin:4px 0 0;font-size:12px;color:#666;">{today}</p>
 </td></tr>
 
@@ -715,12 +742,11 @@ def build_briefing_html(a_shares: list[dict] | None = None,
 </table>
 </td></tr>
 
-<tr><td style="text-align:center;padding:16px 10px;font-size:11px;color:#555;border-top:1px solid #333;">Fund Monitor · 天天基金</td></tr>
+<tr><td style="text-align:center;padding:16px 10px;font-size:11px;color:#555;border-top:1px solid #333;">Fund Monitor \u00b7 \u5929\u5929\u57fa\u91d1</td></tr>
 </table>
 </td></tr></table>
 </body>
 </html>"""
-
 
 def main() -> None:
     write_heartbeat("global_briefing")

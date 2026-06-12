@@ -349,96 +349,36 @@ def check_intraday(code: str, state: dict) -> list[str]:
     return alerts
 
 
-def push_alert(fund_alerts: list[str], stock_alerts: list[str],
-               stock_groups: dict[str, tuple[str, list[str]]] | None = None) -> None:
-    """推送盘中警报——按基金分组，涨跌一目了然"""
-    if not fund_alerts and not stock_alerts:
-        return
+def _icon_text(raw: str) -> tuple[str, str]:
+    """从原始警报中提取图标(🔴/🟢)和纯文本内容（不含图标）"""
+    icon = "🔴" if raw.startswith("🔴") else "🟢"
+    text = _strip_html(raw)
+    if text.startswith("🔴") or text.startswith("🟢"):
+        text = text[1:].strip()
+    return icon, text
 
-    def _icon_text(raw: str) -> tuple[str, str]:
-        """从原始警报中提取图标(🔴/🟢)和纯文本内容（不含图标）"""
-        icon = "🔴" if raw.startswith("🔴") else "🟢"
-        text = _strip_html(raw)
-        # 去掉行首的图标
-        if text.startswith("🔴") or text.startswith("🟢"):
-            text = text[1:].strip()
-        return icon, text
 
-    lines: list[str] = []
-    used_funds: set[str] = set()
+def _push_html(fund_alerts: list[str],
+               stock_groups: dict[str, tuple[str, list[str]]] | None) -> None:
+    """推送盘中警报 HTML 邮件"""
+    rows = []
+    for fund_name, (fund_code, s_alerts) in sorted(stock_groups.items() if stock_groups else []):
+        matched_fa = [a for a in fund_alerts if fund_name in a]
+        if not matched_fa and not s_alerts:
+            continue
+        rows.append(_render_fund_section(fund_name, fund_code, matched_fa, s_alerts))
 
-    # 按基金分组展示
-    if stock_groups:
-        for fund_name, (fund_code, s_alerts) in sorted(stock_groups.items()):
-            used_funds.add(fund_name)
-            # 查找同基金的基金警报
-            matched_fa = [a for a in fund_alerts if fund_name in a]
-            if not matched_fa and not s_alerts:
-                continue
-            lines.append("")
-            lines.append(f"**{fund_name}（{fund_code}）**")
-            if matched_fa:
-                for a in matched_fa:
-                    icon, text = _icon_text(a)
-                    # 去掉基金名(代码)前缀，标题已展示
-                    clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
-                    lines.append(f"  {icon} 基金：{clean_fa}")
-            for a in s_alerts:
-                icon, text = _icon_text(a)
-                # 去掉"基金名持仓"前缀
-                clean = text.split("持仓", 1)[-1] if "持仓" in a else text
-                lines.append(f"  {icon} 持股·{clean}")
-
-    # 没有持股的基金警报单独展示
     remaining = [a for a in fund_alerts if not any(
         fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
     )]
     if remaining:
-        if lines:
-            lines.append("")
-        lines.append("**其他**")
-        for a in remaining:
-            icon, text = _icon_text(a)
-            lines.append(f"  {icon} {text}")
+        html_remaining = ''.join(
+            f'<p style="margin:2px 0;font-size:12px;color:{"#ef5350" if a.startswith("🔴") else "#66bb6a"};">{_icon_text(a)[0]} {_icon_text(a)[1]}</p>'
+            for a in remaining
+        )
+        rows.append(f'<tr><td style="padding:6px 12px;"><p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#ccc;">其他</p>{html_remaining}</td></tr>')
 
-    content = "\n".join(lines)
-
-    if _get_webhook():
-        send_wechat(content)
-    else:
-        # HTML 深色主题邮件 - bgcolor 兼容 QQ 邮箱
-        rows = []
-        # 按基金分组渲染
-        for fund_name, (fund_code, s_alerts) in sorted(stock_groups.items() if stock_groups else []):
-            matched_fa = [a for a in fund_alerts if fund_name in a]
-            if not matched_fa and not s_alerts:
-                continue
-            rows.append(f'<tr><td style="padding:10px 12px;"><div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:10px;">'
-                        f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}（{fund_code}）</p>')
-            for a in matched_fa:
-                icon, text = _icon_text(a)
-                clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
-                color = "#ef5350" if icon == "🔴" else "#66bb6a"
-                rows.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 基金：{clean_fa}</p>')
-            for a in s_alerts:
-                icon, text = _icon_text(a)
-                clean = text.split("持仓", 1)[-1] if "持仓" in a else text
-                color = "#ef5350" if icon == "🔴" else "#66bb6a"
-                rows.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 持股·{clean}</p>')
-            rows.append('</div></td></tr>')
-
-        remaining = [a for a in fund_alerts if not any(
-            fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
-        )]
-        if remaining:
-            rows.append('<tr><td style="padding:6px 12px;"><p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#ccc;">其他</p>')
-            for a in remaining:
-                icon, text = _icon_text(a)
-                color = "#ef5350" if icon == "🔴" else "#66bb6a"
-                rows.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} {text}</p>')
-            rows.append('</td></tr>')
-
-        html = f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
 <body bgcolor="#000000" style="margin:0;padding:0;background:#000;font-family:'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;font-size:13px;color:#ccc;">
@@ -452,7 +392,68 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
 </td></tr></table>
 </body>
 </html>"""
-        send_mail_html("🚨 基金盘中警报", html)
+    send_mail_html("🚨 基金盘中警报", html)
+
+
+def _render_fund_section(fund_name: str, fund_code: str,
+                          matched_fa: list[str], s_alerts: list[str]) -> str:
+    """渲染单只基金的警报 HTML 区块"""
+    parts = [f'<tr><td style="padding:10px 12px;"><div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:10px;">'
+             f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}（{fund_code}）</p>']
+    for a in matched_fa:
+        icon, text = _icon_text(a)
+        clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
+        color = "#ef5350" if icon == "🔴" else "#66bb6a"
+        parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 基金：{clean_fa}</p>')
+    for a in s_alerts:
+        icon, text = _icon_text(a)
+        clean = text.split("持仓", 1)[-1] if "持仓" in a else text
+        color = "#ef5350" if icon == "🔴" else "#66bb6a"
+        parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 持股·{clean}</p>')
+    parts.append('</div></td></tr>')
+    return '\n'.join(parts)
+
+
+def push_alert(fund_alerts: list[str], stock_alerts: list[str],
+               stock_groups: dict[str, tuple[str, list[str]]] | None = None) -> None:
+    """推送盘中警报——按基金分组，涨跌一目了然"""
+    if not fund_alerts and not stock_alerts:
+        return
+
+    # Markdown 推送（企业微信）
+    lines: list[str] = []
+    if stock_groups:
+        for fund_name, (fund_code, s_alerts) in sorted(stock_groups.items()):
+            matched_fa = [a for a in fund_alerts if fund_name in a]
+            if not matched_fa and not s_alerts:
+                continue
+            lines.append("")
+            lines.append(f"**{fund_name}（{fund_code}）**")
+            for a in matched_fa:
+                icon, text = _icon_text(a)
+                clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
+                lines.append(f"  {icon} 基金：{clean_fa}")
+            for a in s_alerts:
+                icon, text = _icon_text(a)
+                clean = text.split("持仓", 1)[-1] if "持仓" in a else text
+                lines.append(f"  {icon} 持股·{clean}")
+
+    remaining = [a for a in fund_alerts if not any(
+        fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
+    )]
+    if remaining:
+        if lines:
+            lines.append("")
+        lines.append("**其他**")
+        for a in remaining:
+            icon, text = _icon_text(a)
+            lines.append(f"  {icon} {text}")
+
+    content = "\n".join(lines)
+    if _get_webhook():
+        send_wechat(content)
+    else:
+        _push_html(fund_alerts, stock_groups)
 
 
 
