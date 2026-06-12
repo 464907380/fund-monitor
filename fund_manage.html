@@ -276,6 +276,8 @@ h1 {
     <div id="dimsList" style="font-size:12px;"></div>
     <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;">
       <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;">保存</button>
+      <button onclick="resetDims()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;">重置</button>
+      <span style="font-size:11px;color:#555;">· 取消勾选 = 关闭维度，保存后下次评分生效</span>
     </div>
   </div>
 
@@ -562,22 +564,58 @@ async function loadDims() {
   if (!d.ok || !d.dims) return;
   const el = document.getElementById('dimsList');
   if (!el) return;
-  el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#2a2a2a;">'
+  const allKeys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
+  const usedKeys = d.dims.map(function(x){ return x.key; });
+  const availKeys = allKeys.filter(function(k){ return usedKeys.indexOf(k) < 0; });
+  el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;" id="dimsTable"><thead><tr style="background:#2a2a2a;">'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">开关</th>'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">维度</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;">权重</th>'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">说明</th>'
+    + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;"></th>'
     + '</tr></thead><tbody>'
     + d.dims.map(function(dim, i) {
         const pct = Math.round(dim.weight * 100);
         return '<tr>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" ' + (dim.enabled !== false ? 'checked' : '') + ' onchange="markDimsDirty()"></td>'
-          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + dim.name + '</td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + dim.name + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + dim.key + '</span></td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + dim.desc + '</td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
           + '</tr>';
       }).join('')
-    + '</tbody></table></div>';
+    + '</tbody></table></div>'
+    + (availKeys.length > 0 ? '<div style="padding:8px 4px;text-align:center;"><button onclick="addDim()" style="background:rgba(255,255,255,0.05);border:1px dashed rgba(255,255,255,0.2);border-radius:6px;color:#888;padding:6px 16px;font-size:12px;cursor:pointer;">+ 添加维度</button></div>' : '');
+}
+
+function addDim() {
+  const keys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
+  const names = ['\u8fd11\u5e74\u6536\u76ca','\u8fd13\u6708\u6536\u76ca','\u8fd11\u6708\u6536\u76ca','\u590f\u666e\u6bd4\u7387','\u4e0a\u884c\u80dc\u7387','\u76c8\u4e8f\u6bd4','\u7d22\u63d0\u8bfa\u6bd4\u7387','\u4fee\u590d\u7cfb\u6570','\u8fd16\u6708\u6536\u76ca','\u8fd13\u5e74\u6536\u76ca','\u6700\u5927\u56de\u64a4','\u8d39\u7387','\u57fa\u91d1\u89c4\u6a21','\u5e74\u5316\u6536\u76ca\u7387','\u673a\u6784\u6301\u6709\u6bd4\u4f8b'];
+  const descs = ['\u6700\u8fd1\u4e00\u5e74\u7684\u8868\u73b0','\u8fd1\u4e09\u4e2a\u6708\u6da8\u8dcc\u5e45','\u8fd1\u4e00\u4e2a\u6708\u6da8\u8dcc\u5e45','\u6bcf\u627f\u53d7 1 \u4efd\u6ce2\u52a8\u80fd\u6362\u6765\u7684\u6536\u76ca','\u8d5a\u94b1\u5929\u6570\u6bd4\u4f8b','\u5e73\u5747\u76c8\u5229/\u4e8f\u635f','\u53ea\u8003\u8651\u4e0b\u8dcc\u6ce2\u52a8','\u603b\u6536\u76ca/\u6700\u5927\u56de\u64a4','\u8fd1\u516d\u4e2a\u6708\u8868\u73b0','\u8fd13\u5e74\u7cbe\u786e\u8ba1\u7b97','\u5386\u53f2\u6700\u5927\u8dcc\u5e45','\u7533\u8d2d\u8d39','1~50\u4ebf\u6700\u7406\u60f3',
+'\u57fa\u91d1\u6210\u7acb\u4ee5\u6765\u5e74\u5316\u56de\u62a5','\u4e13\u4e1a\u673a\u6784\u8ba4\u53ef\u5ea6'];
+  var sel = prompt('\u9009\u62e9\u8981\u6dfb\u52a0\u7684\u7ef4\u5ea6:\n' + availKeys.join(', '));
+  if (!sel) return;
+  const allKeys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
+  const rows = document.querySelectorAll('#dimsTable tbody tr');
+  const used = [];
+  rows.forEach(function(r){ used.push(r.querySelector('td:nth-child(2) span').textContent); });
+  if (used.indexOf(sel) >= 0) { showMsg('\u8be5\u7ef4\u5ea6\u5df2\u5728\u5217\u8868\u4e2d', 'fail'); return; }
+  var idx2 = allKeys.indexOf(sel);
+  if (idx2 < 0) { showMsg('\u672a\u77e5\u7ef4\u5ea6: ' + sel, 'fail'); return; }
+  const tbody = document.querySelector('#dimsTable tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" checked onchange="markDimsDirty()"></td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + names[idx2] + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + sel + '</span></td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + descs[idx2] + '</td>'
+    + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">\u2716</button></td>';
+  tbody.appendChild(tr);
+  markDimsDirty();
+}
+
+function removeDim(btn) {
+  btn.closest('tr').remove();
+  markDimsDirty();
 }
 
 function markDimsDirty() {
@@ -585,14 +623,16 @@ function markDimsDirty() {
 }
 
 async function saveDims() {
-  const rows = document.querySelectorAll('#dimsList tbody tr');
+  const rows = document.querySelectorAll('#dimsTable tbody tr');
   const dims = [];
   rows.forEach(function(row) {
     const cb = row.querySelector('input[type=checkbox]');
     const num = row.querySelector('input[type=number]');
-    const name = row.querySelectorAll('td')[1].textContent;
+    const key = row.querySelector('td:nth-child(2) span').textContent;
+    var name = row.querySelector('td:nth-child(2)').textContent.replace(key,'').trim();
+    if (name.endsWith('\n')) name = name.slice(0,-1).trim();
     const desc = row.querySelectorAll('td')[3].textContent;
-    dims.push({name: name, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc});
+    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc});
   });
   const r = await fetch(API + '/api/dims', {
     method: 'POST',
@@ -602,13 +642,46 @@ async function saveDims() {
   const d = await r.json();
   if (d.ok) {
     document.getElementById('dimsSaveBtn').style.background = 'linear-gradient(135deg,#66bb6a,#43a047)';
-    showMsg('✔ 权重已更新', 'ok');
+    showMsg('\u2714 \u6743\u91cd\u5df2\u66f4\u65b0', 'ok');
+    loadDims();
   } else {
-    showMsg('✖ ' + (d.error || '保存失败'), 'fail');
+    showMsg('\u2716 ' + (d.error || '\u4fdd\u5b58\u5931\u8d25'), 'fail');
   }
 }
 
-loadDims();
-</script>
+async function resetDims() {
+  if (!confirm('\u786e\u5b9a\u91cd\u7f6e\u4e3a\u9ed8\u8ba4\u6743\u91cd\u914d\u7f6e\uff1f')) return;
+  const defaults = [
+    {name:'\u8fd13\u6708\u6536\u76ca',key:'m3',weight:0.12,enabled:true,desc:'\u8fd1\u4e09\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u4e2d\u671f\u8d8b\u52bf'},
+    {name:'\u8fd11\u6708\u6536\u76ca',key:'m1',weight:0.15,enabled:true,desc:'\u8fd1\u4e00\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u6355\u6349\u77ed\u671f\u52a8\u91cf'},
+    {name:'\u8fd11\u5e74\u6536\u76ca',key:'y1',weight:0.09,enabled:true,desc:'\u6700\u8fd1\u4e00\u5e74\u7684\u8868\u73b0\uff0c\u53cd\u6620\u57fa\u91d1\u8fd1\u671f\u8d5a\u94b1\u80fd\u529b'},
+    {name:'\u4e0a\u884c\u80dc\u7387',key:'win_rate',weight:0.07,enabled:true,desc:'\u8d5a\u94b1\u5929\u6570\u5360\u603b\u4ea4\u6613\u5929\u6570\u7684\u6bd4\u4f8b'},
+    {name:'\u76c8\u4e8f\u6bd4',key:'profit_ratio',weight:0.07,enabled:true,desc:'\u5e73\u5747\u76c8\u5229\u00f7\u5e73\u5747\u4e8f\u635f\uff0c>1\u8bf4\u660e\u8d5a\u6bd4\u4e8f\u591a'},
+    {name:'\u590f\u666e\u6bd4\u7387',key:'sharpe',weight:0.06,enabled:true,desc:'\u6bcf\u627f\u53d7 1 \u4efd\u6ce2\u52a8\u80fd\u6362\u6765\u591a\u5c11\u989d\u5916\u6536\u76ca'},
+    {name:'\u7d22\u63d0\u8bfa\u6bd4\u7387',key:'sortino',weight:0.06,enabled:true,desc:'\u53ea\u8003\u8651\u4e0b\u8dcc\u6ce2\u52a8\uff0c\u66f4\u8d34\u8fd1\u771f\u5b9e\u98ce\u9669\u611f\u53d7'},
+    {name:'\u8fd13\u5e74\u6536\u76ca',key:'sy3',weight:0.07,enabled:true,desc:'\u4ece\u51c0\u503c\u6570\u636e\u53d6\u7ea7750\u4e2a\u4ea4\u6613\u65e5\u7cbe\u786e\u8ba1\u7b97\uff0c\u770b\u7a7f\u8d8a\u725b\u718a\u80fd\u529b'},
+    {name:'\u8fd16\u6708\u6536\u76ca',key:'sy6',weight:0.06,enabled:true,desc:'\u8fd1\u516d\u4e2a\u6708\u8868\u73b0\uff0c\u8865\u5145\u8fd11\u5e74\u7684\u4e2d\u77ed\u671f\u7ef4\u5ea6'},
+    {name:'\u6700\u5927\u56de\u64a4',key:'max_dd',weight:0.10,enabled:true,desc:'\u5386\u53f2\u6700\u5927\u8dcc\u5e45'},
+    {name:'\u4fee\u590d\u7cfb\u6570',key:'recovery',weight:0.04,enabled:true,desc:'\u603b\u6536\u76ca\u00f7\u6700\u5927\u56de\u64a4\uff0c\u8861\u91cf\u8dcc\u4e0b\u53bb\u80fd\u4e0d\u80fd\u6da8\u56de\u6765'},
+    {name:'\u8d39\u7387',key:'rate',weight:0.03,enabled:true,desc:'\u7533\u8d2d\u8d39\u8d8a\u4f4e\u8d8a\u597d'},
+    {name:'\u57fa\u91d1\u89c4\u6a21',key:'scale',weight:0.02,enabled:true,desc:'1~50\u4ebf\u6700\u7406\u60f3\uff0c\u592a\u5c0f\u4e0d\u7075\u6d3b\u3001\u592a\u5927\u96be\u64cd\u4f5c'},
+    {name:'\u5e74\u5316\u6536\u76ca\u7387',key:'annual_return',weight:0.04,enabled:true,desc:'\u57fa\u91d1\u6210\u7acb\u4ee5\u6765\u5e74\u5316\u56de\u62a5'},
+    {name:'\u673a\u6784\u6301\u6709\u6bd4\u4f8b',key:'institutional',weight:0.02,enabled:true,desc:'\u4e13\u4e1a\u673a\u6784\u8ba4\u53ef\u5ea6\uff0c\u5c0f\u5e45\u53c2\u8003'},
+  ];
+  const r = await fetch(API + '/api/dims', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({dims: defaults}),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    showMsg('\u2714 \u5df2\u91cd\u7f6e\u4e3a\u9ed8\u8ba4\u914d\u7f6e', 'ok');
+    loadDims();
+  } else {
+    showMsg('\u2716 ' + (d.error || '\u91cd\u7f6e\u5931\u8d25'), 'fail');
+  }
+}
+
+loadDims();/script>
 </body>
 </html>
