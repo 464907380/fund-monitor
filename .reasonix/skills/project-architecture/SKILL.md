@@ -15,17 +15,17 @@ description: 基金监控项目架构与改动规范
 
 | 文件 | 职责 | 行数 |
 |------|------|:----:|
-| `fund_watch.py` | 晚报流程主控 | 443 |
-| `fund_scoring.py` | 12 维评分模型 | 217 |
-| `fund_metrics.py` | 净值指标计算 | 102 |
+| `fund_watch.py` | 晚报流程主控 | ~450 |
+| `fund_scoring.py` | 15 维评分模型 | ~260 |
+| `fund_metrics.py` | 净值指标计算 | 103 |
 | `fund_alerts.py` | 净值异常警报检测 | 60 |
-| `fund_render.py` | HTML/MD 渲染 + 推送 | 265 |
-| `fund_monitor.py` | 盘中实时监控 | 574 |
-| `global_briefing.py` | 全球股市简报 | 748 |
-| `fund_recommend.py` | 全市场基金推荐 | 252 |
-| `fund_utils.py` | 公共基础设施（网络/缓存/推送/心跳） | 365 |
-| `fund_server.py` | Web 管理服务器 | 322 |
-| `config.py` | 配置加载 + API URL 管理 | 162 |
+| `fund_render.py` | HTML/MD 渲染 + 推送 | ~430 |
+| `fund_monitor.py` | 盘中实时监控 | 575 |
+| `global_briefing.py` | 全球股市简报 | ~780 |
+| `fund_recommend.py` | 全市场基金推荐 | ~265 |
+| `fund_utils.py` | 公共基础设施（网络/缓存/推送/心跳） | ~395 |
+| `fund_server.py` | Web 管理服务器 | ~405 |
+| `config.py` | 配置加载 + API URL 管理 | ~170 |
 
 ---
 
@@ -48,6 +48,8 @@ description: 基金监控项目架构与改动规范
 
 ## 已知待改进
 
-- `fund_monitor.push_alert` (110行) / `monitor()` (113行) / `build_briefing_html` (104行) 超100行待拆分
-- mypy 18个报错（主要在 fund_scoring.py，类型注解问题）
+- `fund_monitor.monitor()` (105行) 主循环，暂时可接受
+- `fund_render.py` 推送/保存逻辑无直接测试覆盖
+- `global_briefing.py` 数据获取无测试覆盖
+- 部分硬编码超时未全部迁移到 config（低频使用的已不处理）
 - 云服务器部署（待办）
