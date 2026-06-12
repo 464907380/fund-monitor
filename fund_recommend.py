@@ -20,7 +20,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
-    from fund_watch import get, log, _calc_score, SCORE_DIMS, fetch
+    from fund_watch import get, log, fetch
+    from fund_scoring import _calc_score, SCORE_DIMS
     from fund_utils import write_heartbeat, clear_heartbeat
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
