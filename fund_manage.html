@@ -12,7 +12,7 @@ body {
   font-family: 'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;
   font-size: 14px; min-height: 100vh;
 }
-.container { max-width: 680px; margin: 0 auto; padding: 32px 16px; }
+.container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
 
 /* 标题 */
 header { text-align: center; margin-bottom: 28px; }
@@ -23,7 +23,7 @@ h1 {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
-.subtitle { font-size: 12px; color: #555; margin-top: 4px; letter-spacing: 4px; }
+.subtitle { font-size: 13px; color: #666; margin-top: 4px; letter-spacing: 4px; }
 
 /* 卡片 */
 .card {
@@ -81,7 +81,7 @@ h1 {
 .list-header {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-size: 13px; color: #666; letter-spacing: 1px;
+  font-size: 14px; color: #888; letter-spacing: 1px;
 }
 .list-header .count { color: #888; font-weight: 600; }
 
@@ -101,7 +101,7 @@ h1 {
   font-size: 13px; color: #555; letter-spacing: 1px;
 }
 .fund-row .name {
-  font-size: 16px; font-weight: 600; color: #e8e8e8;
+  font-size: 17px; font-weight: 600; color: #e8e8e8;
   letter-spacing: 0.5px;
 }
 
@@ -152,33 +152,16 @@ h1 {
 .feature-icon { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
 .feature-body { flex: 1; min-width: 0; }
 .feature-name { font-size: 15px; font-weight: 600; color: #e0e0e0; }
-.feature-desc { font-size: 12px; color: #666; margin-top: 1px; line-height: 1.5; }
-.feature-info { font-size: 11px; color: #555; margin-top: 2px; }
+.feature-desc { font-size: 13px; color: #777; margin-top: 2px; line-height: 1.5; }
+.feature-info { font-size: 12px; color: #666; margin-top: 2px; }
 .feature-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.feature-time { font-size: 11px; color: #555; white-space: nowrap; font-family: Consolas,monospace; }
+.feature-time { font-size: 12px; color: #666; white-space: nowrap; font-family: Consolas,monospace; letter-spacing: 0.5px; }
 .feature-status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .feature-status.ok { background: #66bb6a; box-shadow: 0 0 6px rgba(102,187,106,0.5); }
 .feature-status.fail { background: #ef5350; box-shadow: 0 0 6px rgba(239,83,80,0.5); }
-.feature-status.unknown { background: #555; }
-
-.feature-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 4px;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-.feature-row:last-child { border-bottom: none; }
-.feature-row:hover { background: rgba(255,255,255,0.02); border-radius: 6px; }
-.feature-icon { font-size: 24px; width: 36px; text-align: center; flex-shrink: 0; }
-.feature-body { flex: 1; }
-.feature-name { font-size: 15px; font-weight: 600; color: #e0e0e0; }
-.feature-desc { font-size: 12px; color: #666; margin-top: 2px; }
-.feature-time {
-  font-size: 12px; color: #555; white-space: nowrap;
-  font-family: Consolas, monospace; letter-spacing: 0.5px;
-}
 .empty {
   text-align: center; padding: 48px 16px;
-  color: #444; font-size: 14px; letter-spacing: 1px;
+  color: #555; font-size: 15px; letter-spacing: 1px;
 }
 
 /* 底部信息 */
@@ -255,10 +238,10 @@ h1 {
       <span class="count" id="briefDate" style="font-size:12px;">未生成</span>
     </div>
     <div class="divider"></div>
-    <div id="briefContent" style="padding:0;font-size:12px;color:#ccc;"></div>
-    <div style="padding:12px 4px 0;text-align:center;">
+    <div style="padding:0 0 8px;text-align:center;">
       <button onclick="runBriefing()" id="briefBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;transition:all 0.15s;">📊 生成晚报</button>
     </div>
+    <div id="briefContent" style="padding:0;font-size:12px;color:#ccc;"></div>
   </div>
 
   <div class="card add-card">
