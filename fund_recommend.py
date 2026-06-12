@@ -2,12 +2,12 @@
 基金推荐工具 — 从全市场筛选优质基金
 
 策略：
-  1. 从天天基金排行 API 拉取全市场近 1 年收益排行 TOP 500（不限类型）
+  1. 从天天基金排行 API 拉取全市场近 1 年收益排行 TOP 200（不限类型）
   2. 近 1 年收益为负的剔除，其余全部进入 12 维深度评分
   3. 输出 TOP 10 推荐，支持保存结果
 
 用法：
-  python fund_recommend.py                    # 全市场 TOP 500 深度评分
+  python fund_recommend.py                    # 全市场 TOP 200 深度评分
   python fund_recommend.py --load             # 查看上次推荐结果
   python fund_recommend.py --add 基金代码     # 将基金加入 fund_list.json
 """
@@ -28,7 +28,7 @@ except ImportError:
     sys.exit(1)
 
 # ── 配置 ──────────────────────────────────────
-_TOP = 500
+_TOP = 200
 SHOW_TOP = 10
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
@@ -150,7 +150,7 @@ def main() -> None:
     # ── 正常推荐流程 ──
     try:
         print("=" * 60)
-        print("🔍 基金优选推荐工具 — 全市场 TOP 500 深度评分")
+        print("🔍 基金优选推荐工具 — 全市场 TOP 200 深度评分")
         print("=" * 60)
 
         est_min = _TOP * 2 // 60
