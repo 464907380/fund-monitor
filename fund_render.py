@@ -265,7 +265,7 @@ def _web_rich_recommend_table() -> str:
         badge = medals[i] if i < 3 else f'{i+1}.'
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("name","")))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("name","")))} <span style="color:#666;font-family:Consolas;font-size:11px;">{r.get("code","")}</span></td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;">{r.get("score",0):.1f}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
@@ -384,12 +384,13 @@ def _format_recommend_rankings() -> list[str]:
     lines.append("")
     lines.append("🏆 **市场优选基金 TOP 10**  （12 维评分）")
     lines.append("")
-    lines.append(f"|{'排名':<4}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
-    lines.append(f"|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
+    lines.append(f"|{'排名':<4}|{'代码':<7}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
+    lines.append(f"|:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
     medals = ["🥇", "🥈", "🥉"]
     for i, r in enumerate(recs[:10], 1):
         badge = medals[i - 1] if i <= 3 else f" {i}."
         name = r.get("name", "")[:14]
+        code = r.get("code", "")
         ar = r.get("annual_return", 0)
         m1 = str(r.get("m1", ""))
         m3 = str(r.get("m3", ""))
@@ -397,7 +398,7 @@ def _format_recommend_rankings() -> list[str]:
         sharpe = r.get("sharpe", 0)
         dd = r.get("max_dd", 0)
         sy3 = 0 if r.get("sy3") is None else r["sy3"]
-        lines.append(f"|{badge:<4}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
+        lines.append(f"|{badge:<4}|{code:<7}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
     lines.append("")
     lines.append("  ── 排名依据：从全市场 200 只基金中精选 TOP 10 ──")
