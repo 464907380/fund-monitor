@@ -9,13 +9,13 @@ import sys
 import subprocess
 import http.server
 import threading
-import time
+import datetime
 import urllib.parse
 import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
+from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR, is_trading_day
 from config import api_url
 
 # ── 后台任务管理 ──
@@ -38,7 +38,6 @@ def _spawn_recommend() -> None:
 
     def _wait_and_cleanup() -> None:
         _recommend_proc.wait()
-        time.sleep(30)
         clear_heartbeat("fund_recommend")
 
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
@@ -58,8 +57,6 @@ def _spawn_briefing() -> None:
 
     def _wait_and_cleanup() -> None:
         _briefing_proc.wait()
-        # 至少保持 30 秒心跳，防止非交易日进程快速退出导致前端刷新检测不到
-        time.sleep(30)
         clear_heartbeat("fund_briefing")
 
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
@@ -376,6 +373,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/briefing":
             try:
+                if not is_trading_day(datetime.date.today()):
+                    self._send(*_json_response({"ok": False, "error": "今天非交易日，无需生成晚报"}))
+                    return
                 if _briefing_proc and _briefing_proc.poll() is None:
                     self._send(*_json_response({"ok": False, "error": "晚报生成任务正在运行中"}))
                     return
