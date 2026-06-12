@@ -322,13 +322,15 @@ def _fmt(v) -> str:
 def _get_dim_value(r: dict, dim_name: str) -> str:
     """根据维度名称从推荐结果中取值"""
     mapping = {
-        "近1年收益": lambda: r.get("y1", ""),
+        "近1年收益": lambda: f'{r.get("y1", 0):.1f}' if isinstance(r.get("y1"), (int, float)) else str(r.get("y1", "")),
+        "近3月收益": lambda: f'{r.get("m3", 0):.1f}' if isinstance(r.get("m3"), (int, float)) else str(r.get("m3", "")),
+        "近1月收益": lambda: f'{r.get("m1", 0):.1f}' if isinstance(r.get("m1"), (int, float)) else str(r.get("m1", "")),
         "夏普比率": lambda: _fmt(r.get("sharpe")),
         "上行胜率": lambda: _fmt(r.get("win_rate")),
         "盈亏比": lambda: _fmt(r.get("profit_ratio")),
         "索提诺比率": lambda: _fmt(r.get("sortino")),
         "修复系数": lambda: _fmt(r.get("recovery")),
-        "近3年收益": lambda: _fmt(r.get("sy3")),
+        "近3年收益": lambda: f'{r.get("sy3", 0):.1f}' if isinstance(r.get("sy3"), (int, float)) else str(r.get("sy3", "")),
         "近6月收益": lambda: r.get("m1", ""),  # 推荐结果无 sy6, 用 m1 近似
         "费率": lambda: _fmt(r.get("rate")),
         "最大回撤": lambda: _fmt(r.get("max_dd")),
