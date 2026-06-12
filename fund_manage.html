@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>基金管理</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: linear-gradient(135deg, #0a0a0f 0%, #141428 50%, #0d0d1a 100%);
+  color: #ccc;
+  font-family: 'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;
+  font-size: 14px; min-height: 100vh;
+}
+.container { max-width: 680px; margin: 0 auto; padding: 32px 16px; }
+
+/* 标题 */
+header { text-align: center; margin-bottom: 28px; }
+h1 {
+  font-size: 26px; font-weight: 700; letter-spacing: 2px;
+  background: linear-gradient(90deg, #66bb6a, #42a5f5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.subtitle { font-size: 12px; color: #555; margin-top: 4px; letter-spacing: 4px; }
+
+/* 卡片 */
+.card {
+  background: rgba(26,26,40,0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  overflow: visible;
+}
+
+/* 添加区域卡片（浮在列表上方） */
+.add-card { position: relative; z-index: 10; }
+.add-section label {
+  display: block; font-size: 13px; color: #888; margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+.add-row { display: flex; gap: 10px; }
+/* 搜索建议 */
+.search-wrap { position: relative; flex: 1; }
+.search-wrap input {
+  width: 100%; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+  color: #e0e0e0; padding: 10px 14px; font-size: 15px; outline: none;
+  transition: border-color 0.2s;
+}
+.search-wrap input:focus { border-color: #66bb6a; box-shadow: 0 0 0 2px rgba(102,187,106,0.15); }
+.search-wrap input::placeholder { color: #444; }
+.suggestions {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 9999;
+  background: #1a1a2e; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px; margin-top: 4px; max-height: 240px; overflow-y: auto;
+  display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.suggestions.show { display: block; }
+.suggestions .item {
+  padding: 10px 14px; cursor: pointer; display: flex; justify-content: space-between;
+  align-items: center; transition: background 0.1s;
+}
+.suggestions .item:hover { background: rgba(102,187,106,0.1); }
+.suggestions .item .scode { font-family: Consolas,monospace; font-size: 12px; color: #666; }
+.suggestions .item .sname { font-size: 14px; color: #ccc; }
+.add-row button {
+  background: linear-gradient(135deg, #66bb6a, #43a047);
+  color: #fff; border: none; border-radius: 8px;
+  padding: 10px 22px; font-size: 14px; cursor: pointer; font-weight: 600;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.add-row button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,187,106,0.3); }
+.add-row button:active { transform: translateY(0); }
+
+/* 列表 */
+.list-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 13px; color: #666; letter-spacing: 1px;
+}
+.list-header .count { color: #888; font-weight: 600; }
+
+/* 基金行 */
+.fund-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background 0.15s;
+}
+.fund-row:last-child { border-bottom: none; }
+.fund-row:hover { background: rgba(255,255,255,0.02); border-radius: 6px; }
+
+.fund-row .info { display: flex; flex-direction: column; gap: 2px; }
+.fund-row .code {
+  font-family: 'SF Mono','Consolas','Liberation Mono',monospace;
+  font-size: 13px; color: #555; letter-spacing: 1px;
+}
+.fund-row .name {
+  font-size: 16px; font-weight: 600; color: #e8e8e8;
+  letter-spacing: 0.5px;
+}
+
+.fund-row .del-btn {
+  background: rgba(239,83,80,0.1);
+  border: 1px solid rgba(239,83,80,0.25);
+  border-radius: 6px;
+  color: #ef5350; padding: 6px 14px; font-size: 12px; cursor: pointer;
+  transition: all 0.15s; font-weight: 500;
+}
+.fund-row .del-btn:hover {
+  background: #ef5350; color: #fff; border-color: #ef5350;
+  box-shadow: 0 2px 8px rgba(239,83,80,0.3);
+}
+
+/* 消息 */
+.msg {
+  padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;
+  font-size: 13px; display: none; animation: fadeIn 0.2s;
+}
+.msg.ok {
+  display: block;
+  background: rgba(102,187,106,0.1);
+  color: #81c784;
+  border: 1px solid rgba(102,187,106,0.2);
+}
+.msg.err {
+  display: block;
+  background: rgba(239,83,80,0.1);
+  color: #ef9a9a;
+  border: 1px solid rgba(239,83,80,0.2);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 功能概览 */
+.feature-list { }
+.feature-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.feature-row:last-child { border-bottom: none; }
+.feature-row:hover { background: rgba(255,255,255,0.02); border-radius: 6px; }
+.feature-icon { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
+.feature-body { flex: 1; min-width: 0; }
+.feature-name { font-size: 15px; font-weight: 600; color: #e0e0e0; }
+.feature-desc { font-size: 12px; color: #666; margin-top: 1px; line-height: 1.5; }
+.feature-info { font-size: 11px; color: #555; margin-top: 2px; }
+.feature-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.feature-time { font-size: 11px; color: #555; white-space: nowrap; font-family: Consolas,monospace; }
+.feature-status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.feature-status.ok { background: #66bb6a; box-shadow: 0 0 6px rgba(102,187,106,0.5); }
+.feature-status.fail { background: #ef5350; box-shadow: 0 0 6px rgba(239,83,80,0.5); }
+.feature-status.unknown { background: #555; }
+.feature-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.feature-row:last-child { border-bottom: none; }
+.feature-row:hover { background: rgba(255,255,255,0.02); border-radius: 6px; }
+.feature-icon { font-size: 24px; width: 36px; text-align: center; flex-shrink: 0; }
+.feature-body { flex: 1; }
+.feature-name { font-size: 15px; font-weight: 600; color: #e0e0e0; }
+.feature-desc { font-size: 12px; color: #666; margin-top: 2px; }
+.feature-time {
+  font-size: 12px; color: #555; white-space: nowrap;
+  font-family: Consolas, monospace; letter-spacing: 0.5px;
+}
+.empty {
+  text-align: center; padding: 48px 16px;
+  color: #444; font-size: 14px; letter-spacing: 1px;
+}
+
+/* 底部信息 */
+.footer {
+  text-align: center; font-size: 11px; color: #333;
+  margin-top: 24px; letter-spacing: 2px;
+}
+
+/* 删除确认弹窗美化 */
+.modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  justify-content: center; align-items: center; z-index: 100;
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+  background: #1e1e30; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; padding: 24px; max-width: 360px; width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.modal-box p { margin-bottom: 20px; color: #ccc; font-size: 15px; text-align: center; }
+.modal-box .code-big {
+  display: block; font-size: 22px; font-weight: 700;
+  color: #e0e0e0; text-align: center; margin-bottom: 4px;
+  font-family: Consolas, monospace;
+}
+.modal-box .name-big {
+  display: block; font-size: 13px; color: #777; text-align: center; margin-bottom: 16px;
+}
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions button {
+  flex: 1; padding: 10px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.modal-actions .btn-cancel {
+  background: rgba(255,255,255,0.05); color: #999;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.modal-actions .btn-cancel:hover { background: rgba(255,255,255,0.1); }
+.modal-actions .btn-confirm {
+  background: linear-gradient(135deg, #ef5350, #e53935); color: #fff;
+}
+.modal-actions .btn-confirm:hover { box-shadow: 0 4px 12px rgba(239,83,80,0.3); }
+
+/* 渐变分割线 */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(102,187,106,0.2), rgba(66,165,245,0.2), transparent);
+  margin: 8px 0 16px;
+}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+
+  <header>
+    <h1>📋 基金监控</h1>
+    <div class="subtitle">FUND WATCH MANAGER</div>
+  </header>
+
+  <div id="msg" class="msg"></div>
+
+  <div class="card">
+    <div class="list-header">
+      <span>功能概览</span>
+    </div>
+    <div class="divider"></div>
+    <div id="features"></div>
+  </div>
+
+  <div class="card add-card">
+    <div class="add-section">
+      <label>✦ 添加基金（多个用空格/逗号分隔）</label>
+      <div class="add-row">
+        <div class="search-wrap">
+          <input id="addInput" type="text" placeholder="输入代码或名称搜索…" autocomplete="off" spellcheck="false">
+          <div class="suggestions" id="suggestions"></div>
+        </div>
+        <button onclick="addFunds()">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="list-header">
+      <span>监控列表</span>
+      <span class="count" id="count">0 只</span>
+    </div>
+    <div class="divider"></div>
+    <div id="list"></div>
+  </div>
+
+  <div class="footer">FUND WATCH · 数据来自天天基金</div>
+</div>
+
+<!-- 确认弹窗 -->
+<div class="modal-overlay" id="modal">
+  <div class="modal-box">
+    <span class="code-big" id="modalCode"></span>
+    <span class="name-big" id="modalName"></span>
+    <p>确定从监控中移除吗？</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-confirm" onclick="confirmRemove()">确认移除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let funds = [];
+let pendingCode = null;
+
+function showMsg(text, type) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg ' + type;
+  el.style.animation = 'none';
+  el.offsetHeight;
+  el.style.animation = 'fadeIn 0.2s';
+  setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+async function loadList() {
+  const r = await fetch(API + '/api/list');
+  const d = await r.json();
+  funds = d.funds || [];
+  render();
+}
+
+function render() {
+  const el = document.getElementById('list');
+  document.getElementById('count').textContent = funds.length + ' 只';
+  if (!funds.length) {
+    el.innerHTML = '<div class="empty">暂无监控基金</div>';
+    return;
+  }
+  el.innerHTML = funds.map(f => `
+    <div class="fund-row">
+      <div class="info">
+        <span class="name">${f.name || f.code}</span>
+        <span class="code">${f.name ? f.code : ''}</span>
+      </div>
+      <button class="del-btn" onclick="openModal('${f.code}', '${(f.name || '').replace(/'/g,"\\'")}')">删除</button>
+    </div>
+  `).join('');
+}
+
+async function addFunds() {
+  const input = document.getElementById('addInput');
+  const raw = input.value.trim();
+  if (!raw) return;
+  const codes = raw.split(/[\s,，、;；]+/).filter(Boolean);
+  const r = await fetch(API + '/api/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ codes }),
+  });
+  const d = await r.json();
+  input.value = '';
+  if (d.ok) {
+    const parts = [];
+    if (d.added.length) parts.push('✅ 添加 ' + d.added.join(', '));
+    if (d.skipped.length) parts.push('⏭️ 已存在 ' + d.skipped.join(', '));
+    if (d.invalid.length) parts.push('⚠️ 格式错误 ' + d.invalid.join(', '));
+    showMsg(parts.join('；') + `（当前 ${d.total} 只）`, 'ok');
+    await loadList();
+  } else {
+    showMsg('❌ ' + (d.error || '添加失败'), 'err');
+  }
+}
+
+function openModal(code, name) {
+  pendingCode = code;
+  document.getElementById('modalCode').textContent = code;
+  document.getElementById('modalName').textContent = name;
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+  pendingCode = null;
+  document.getElementById('modal').classList.remove('show');
+}
+
+async function confirmRemove() {
+  if (!pendingCode) return;
+  const code = pendingCode;
+  closeModal();
+  const r = await fetch(API + '/api/remove', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ codes: [code] }),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    showMsg('已移除 ' + code + '（当前 ' + d.total + ' 只）', 'ok');
+    await loadList();
+  } else {
+    showMsg('❌ ' + (d.error || '移除失败'), 'err');
+  }
+}
+
+document.getElementById('addInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addFunds();
+});
+
+// 搜索建议
+let searchTimer = null;
+document.getElementById('addInput').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  if (!q) { closeSuggestions(); return; }
+  searchTimer = setTimeout(async () => {
+    const r = await fetch(API + '/api/search?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    showSuggestions(d.results || []);
+  }, 200);
+});
+
+document.getElementById('addInput').addEventListener('blur', () => {
+  setTimeout(closeSuggestions, 200);
+});
+document.getElementById('addInput').addEventListener('focus', e => {
+  if (e.target.value.trim()) {
+    e.target.dispatchEvent(new Event('input'));
+  }
+});
+
+function showSuggestions(results) {
+  const el = document.getElementById('suggestions');
+  if (!results.length) { el.classList.remove('show'); return; }
+  el.innerHTML = results.map(r => `
+    <div class="item" data-code="${r.code}" data-name="${r.name.replace(/"/g,'&quot;')}">
+      <span class="sname">${r.name}</span>
+      <span class="scode">${r.code}</span>
+    </div>
+  `).join('');
+  el.classList.add('show');
+  // 点击选中
+  el.querySelectorAll('.item').forEach(item => {
+    item.addEventListener('click', () => {
+      const code = item.dataset.code;
+      const name = item.dataset.name;
+      document.getElementById('addInput').value = code;
+      closeSuggestions();
+    });
+  });
+}
+
+function closeSuggestions() {
+  document.getElementById('suggestions').classList.remove('show');
+}
+
+loadList();
+
+async function loadFeatures() {
+  const r = await fetch(API + '/api/tasks');
+  const d = await r.json();
+  if (!d.ok) return;
+  const el = document.getElementById('features');
+  el.innerHTML = d.tasks.map(t => {
+    const statusClass = t.ok === true ? 'ok' : t.ok === false ? 'fail' : 'unknown';
+    const lastInfo = t.last_run ? (t.ok ? '上次成功' : '上次失败') : '尚未运行';
+    return `
+      <div class="feature-row" data-task-id="${t.id}">
+        <div class="feature-icon">${t.icon}</div>
+        <div class="feature-body">
+          <div class="feature-name">${t.label} <span class="feature-running" style="display:none;font-size:11px;color:#66bb6a;font-weight:600;"></span></div>
+          <div class="feature-desc">${t.desc || ''}</div>
+          <div class="feature-info">${lastInfo}${t.next_run ? ' · 下次 ' + t.next_run : ''}</div>
+        </div>
+        <div class="feature-meta">
+          <span class="feature-time">${t.time}</span>
+          <span class="feature-status ${statusClass}"></span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+
+function updateHeartbeat() {
+  fetch(API + '/api/heartbeat').then(r => r.json()).then(d => {
+    if (!d.ok) return;
+    const hb = d.heartbeats || {};
+    document.querySelectorAll('.feature-row').forEach(row => {
+      const name = row.dataset.taskId;
+      const el = row.querySelector('.feature-running');
+      if (name && hb[name]) {
+        el.textContent = '  ▶ 运行中';
+        el.style.display = 'inline';
+      } else if (el) {
+        el.textContent = '';
+        el.style.display = 'none';
+      }
+    });
+  });
+}
+
+loadFeatures();
+updateHeartbeat();
+setInterval(updateHeartbeat, 10000);
+
+async function loadHeartbeat() {
+  const r = await fetch(API + '/api/heartbeat');
+  const d = await r.json();
+  if (!d.ok) return;
+  const hb = d.heartbeats || {};
+  // 给每个正在运行的任务的行加一个"运行中"标记
+  document.querySelectorAll('.feature-row').forEach(row => {
+    const name = row.dataset.taskId;
+    if (name && hb[name]) {
+      row.querySelector('.feature-running').textContent = '▶ 运行中';
+      row.querySelector('.feature-running').style.display = 'inline';
+    } else if (name) {
+      row.querySelector('.feature-running').textContent = '';
+      row.querySelector('.feature-running').style.display = 'none';
+    }
+  });
+}
+setInterval(loadFeatures, 30000);
+</script>
+</body>
+</html>
