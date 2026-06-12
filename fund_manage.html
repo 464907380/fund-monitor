@@ -553,10 +553,62 @@ async function checkBriefRunning() {
 }
 
 checkBriefRunning();
-loadDims();
-loadDims();
 
 loadBriefing();
+
+async function loadDims() {
+  const r = await fetch(API + '/api/dims');
+  const d = await r.json();
+  if (!d.ok || !d.dims) return;
+  const el = document.getElementById('dimsList');
+  if (!el) return;
+  el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#2a2a2a;">'
+    + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">开关</th>'
+    + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">维度</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;">权重</th>'
+    + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">说明</th>'
+    + '</tr></thead><tbody>'
+    + d.dims.map(function(dim, i) {
+        const pct = Math.round(dim.weight * 100);
+        return '<tr>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" ' + (dim.enabled !== false ? 'checked' : '') + ' onchange="markDimsDirty()"></td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + dim.name + '</td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + dim.desc + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+function markDimsDirty() {
+  document.getElementById('dimsSaveBtn').style.background = 'linear-gradient(135deg,#ef5350,#e53935)';
+}
+
+async function saveDims() {
+  const rows = document.querySelectorAll('#dimsList tbody tr');
+  const dims = [];
+  rows.forEach(function(row) {
+    const cb = row.querySelector('input[type=checkbox]');
+    const num = row.querySelector('input[type=number]');
+    const name = row.querySelectorAll('td')[1].textContent;
+    const desc = row.querySelectorAll('td')[3].textContent;
+    dims.push({name: name, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc});
+  });
+  const r = await fetch(API + '/api/dims', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({dims: dims}),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    document.getElementById('dimsSaveBtn').style.background = 'linear-gradient(135deg,#66bb6a,#43a047)';
+    showMsg('✔ 权重已更新', 'ok');
+  } else {
+    showMsg('✖ ' + (d.error || '保存失败'), 'fail');
+  }
+}
+
+loadDims();
 </script>
 </body>
 </html>
