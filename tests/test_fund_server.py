@@ -87,7 +87,8 @@ class TestFundServerRoutes(unittest.TestCase):
             self.assertEqual(resp["removed"], ["000001"])
 
     @patch("fund_server._load")
-    def test_api_add_duplicate(self, mock_load):
+    @patch("fund_server._save")
+    def test_api_add_duplicate(self, mock_save, mock_load):
         """POST /api/add 重复添加应跳过"""
         mock_load.return_value = [{"code": "000001", "name": "测试基金"}]
         body = json.dumps({"codes": ["000001"]}).encode()
