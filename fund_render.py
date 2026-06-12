@@ -37,6 +37,9 @@ ALERT_SCALE_1_5X = CFG.get("fund_watch", {}).get("alert_scale_1_5x", 1.5)
 # ── 推荐结果文件（需要 HISTORY_DIR 定义后）──
 _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json")
 
+_BRIEFING_FILE = os.path.join(HISTORY_DIR, ".briefing_fund.html")
+"""晚报 HTML 文件（供 Web 页面展示）"""
+
 
 # ── 推送 ──────────────────────────────────────
 
@@ -83,23 +86,17 @@ def _pipe_table_to_html(ranking_lines: list[str]) -> str:
     return cp
 
 
-def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str,
-                   ranking_lines: list[str] | None = None) -> None:
-    """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
-    qq_email = _get_email_user()
-    qq_auth = _get_email_auth()
-    if not qq_email or not qq_auth:
-        log.debug("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
-        return
+def _build_briefing_html(rows: list[dict], alerts: list[str], today: str,
+                         ranking_lines: list[str] | None = None) -> str | None:
+    """构建晚报完整 HTML，返回字符串；模板缺失时返回 None"""
     tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
     if not os.path.exists(tpl_path):
-        log.warning("email_template.html 不存在，跳过邮件")
-        return
+        return None
     with open(tpl_path, encoding="utf-8") as f:
         tpl_html = f.read()
     tpl_html = tpl_html.replace("{{DATE}}", today)
 
-    # 表格行（white-space:nowrap 自动撑宽）
+    # 表格行
     row_htmls = []
     for r in rows:
         _code = _html.escape(str(r.get("code", "")))
@@ -119,15 +116,13 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         )
     html = tpl_html.replace("{{ROWS}}", "\n".join(row_htmls))
 
-    # 警报区块
     extra_parts = []
 
-    # 推荐排行（将管道表转为 HTML）
+    # 推荐排行
     if ranking_lines is None:
         ranking_lines = _format_recommend_rankings()
     if ranking_lines:
-        cp = _pipe_table_to_html(ranking_lines)
-        extra_parts.append(cp)
+        extra_parts.append(_pipe_table_to_html(ranking_lines))
 
     # 警报
     if alerts:
@@ -138,7 +133,21 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
         extra_parts.append(al)
 
     html = html.replace("{{ALERTS}}", "\n".join(extra_parts) if extra_parts else "")
+    return html
 
+
+def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str,
+                   ranking_lines: list[str] | None = None) -> None:
+    """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
+    qq_email = _get_email_user()
+    qq_auth = _get_email_auth()
+    if not qq_email or not qq_auth:
+        log.debug("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
+        return
+    html = _build_briefing_html(rows, alerts, today, ranking_lines)
+    if html is None:
+        log.warning("email_template.html 不存在，跳过邮件")
+        return
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = qq_email
@@ -153,6 +162,7 @@ def push(subject: str, rows: list[dict], alerts: list[str], today: str,
     sent = send_wechat(md_content(rows, alerts, today, ranking_lines))
     if not sent:
         send_mail_html(subject, rows, alerts, today, ranking_lines)
+    _save_briefing(rows, alerts, today, ranking_lines)
 
 
 def md_content(rows: list[dict], alerts: list[str], today: str,
@@ -184,6 +194,22 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
     return "\n".join(md_lines)
 
 # ── 数据获取 ──────────────────────────────────
+
+
+def _save_briefing(rows: list[dict], alerts: list[str], today: str,
+                   ranking_lines: list[str] | None = None) -> None:
+    """保存晚报 HTML 到文件，供 Web 页面展示"""
+    html = _build_briefing_html(rows, alerts, today, ranking_lines)
+    if html is None:
+        log.warning("email_template.html 不存在，跳过保存晚报")
+        return
+    try:
+        with open(_BRIEFING_FILE, "w", encoding="utf-8") as f:
+            f.write(html)
+        log.info("晚报已保存到 %s", _BRIEFING_FILE)
+    except OSError as e:
+        log.warning("保存晚报失败: %s", e)
+
 
 def _load_recommend_data() -> dict | None:
     """加载推荐结果完整数据（含日期和结果列表），合并文件读取"""

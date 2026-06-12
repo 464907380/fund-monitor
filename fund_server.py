@@ -15,7 +15,7 @@ import urllib.request
 # 同目录模块
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat
+from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
 from config import api_url
 
 # ── 后台任务管理 ──
@@ -222,6 +222,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             alive = {k: is_heartbeat_alive(k, 1800) for k in hb}
             self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive}))
             return
+
+        if parsed.path == "/api/briefing":
+            path = os.path.join(HISTORY_DIR, ".briefing_fund.html")
+            if os.path.exists(path):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        html = f.read()
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
+                except Exception as e:
+                    body = ("<html><body style='background:#1a1a1a;color:#666;padding:40px;text-align:center;font-family:sans-serif;'>"
+                            "<p>读取晚报失败</p></body></html>")
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, body.encode("utf-8"))
+            else:
+                body = ("<html><body style='background:#1a1a1a;color:#666;padding:40px;text-align:center;font-family:sans-serif;'>"
+                        "<p>\u2622\ufe0f 晚报尚未生成</p>"
+                        "<p style='font-size:12px;color:#555;'>等待 15:30 定时任务运行</p></body></html>")
+                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, body.encode("utf-8"))
             return
 
         if parsed.path == "/api/recommend":
