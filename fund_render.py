@@ -197,6 +197,85 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
 # ── 数据获取 ──────────────────────────────────
 
 
+def _web_rich_fund_table(rows: list[dict]) -> str:
+    """生成自选基金完整数据 HTML 表格（Web 版）"""
+    parts = ['<div style="margin-top:16px;padding:0 10px;">'
+             '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 自选基金完整数据</p>'
+             '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
+             '<thead><tr style="background:#2a2a2a;">'
+             '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">代码</th>'
+             '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金名</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">涨跌</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近5日</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近1月</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近3月</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近1年</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">评分</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">年化%</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">夏普</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">索提诺</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">回撤%</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">胜率%</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">经理</th>'
+             '</tr></thead><tbody>']
+    for r in rows:
+        col = lambda v: f'style="color:#ef5350;"' if (isinstance(v, str) and v.startswith("+")) else (f'style="color:#66bb6a;"' if (isinstance(v, str) and v.startswith("-")) else 'style="color:#ccc;"')
+        parts.append(f'<tr>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-family:Consolas;color:#888;">{_html.escape(str(r.get("code","")))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#ccc;">{_html.escape(str(r.get("name_short","")))}</td>')
+        _v = r.get("day",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        _v = r.get("f5",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        _v = r.get("m1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        _v = r.get("m3",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        _v = r.get("y1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#66bb6a;">{r.get("score","")}</td>' if r.get("score") is not None else f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;color:#555;">-</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_annual_return"))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sharpe"))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sortino"))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_max_dd"))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_win_rate"))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:11px;color:#888;">{_html.escape(str(r.get("mgr","")))}</td>')
+        parts.append('</tr>')
+    parts.append('</tbody></table></div></div>')
+    return "\n".join(parts)
+
+
+def _web_rich_recommend_table() -> str:
+    """生成推荐 TOP 10 完整 12 维数据 HTML 表格（Web 版）"""
+    data = _load_recommend_data()
+    recs = data.get("results", []) if data else []
+    if not recs:
+        return ""
+    from fund_scoring import SCORE_DIMS
+    dim_names = [d[0] for d in SCORE_DIMS]
+    dims_shown = dim_names[:10]  # 取前 10 个主要维度
+    parts = ['<div style="margin-top:16px;padding:0 10px;">'
+             '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP 10 \uff08\u5168\u7ef4\u5ea6\uff09</p>'
+             '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
+             '<thead><tr style="background:#2a2a2a;">'
+             '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;white-space:nowrap;">#</th>'
+             '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">总分</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">年化%</th>']
+    for dn in dims_shown:
+        parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
+    parts.append('</tr></thead><tbody>')
+    medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
+    for i, r in enumerate(recs[:10]):
+        badge = medals[i] if i < 3 else f'{i+1}.'
+        parts.append('<tr>')
+        parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("name","")))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;">{r.get("score",0):.1f}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
+        for dim_name in dims_shown:
+            val = _get_dim_value(r, dim_name)
+            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#bbb;">{val}</td>')
+        parts.append('</tr>')
+    parts.append('</tbody></table></div></div>')
+    return "\n".join(parts)
+
+
 def _save_briefing(rows: list[dict], alerts: list[str], today: str,
                    ranking_lines: list[str] | None = None) -> None:
     """保存晚报 HTML 到文件，供 Web 页面展示"""
@@ -205,14 +284,12 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         log.warning("email_template.html 不存在，跳过保存晚报")
         return
     try:
-        # 适配 iframe 展示：去掉外层黑底（与 iframe #1a1a1a 背景融合）
-        # 以及去掉 "Fund Monitor · 天天基金" footer
+        # 生成邮件版简报（基础表格）
         web = html
         web = web.replace("background:#000", "background:#1a1a1a")
         web = web.replace('bgcolor="#000000"', '')
         web = web.replace('padding:20px 10px;', 'padding:0;')
         web = re.sub(r'<tr><td[^>]*>Fund Monitor[^<]*</td></tr>', '', web)
-        # 去掉文档包装（<html>/<head>/<body> 等），纯片段更干净
         web = re.sub(r'^<!DOCTYPE[^>]*>', '', web)
         web = re.sub(r'<html[^>]*>', '', web)
         web = re.sub(r'</html>', '', web)
@@ -221,14 +298,46 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         web = re.sub(r'</body>', '', web)
         web = re.sub(r'<center>', '', web)
         web = re.sub(r'</center>', '', web)
-        # 去掉空行
+        # 追加完整数据表格
+        web += _web_rich_fund_table(rows)
+        web += _web_rich_recommend_table()
         web = re.sub(r'\n{3,}', '\n\n', web)
         web = web.strip()
         with open(_BRIEFING_FILE, "w", encoding="utf-8") as f:
             f.write(web)
-        log.info("晚报已保存到 %s", _BRIEFING_FILE)
+        log.info("晚报已保存到 %s (%d chars)", _BRIEFING_FILE, len(web))
     except OSError as e:
         log.warning("保存晚报失败: %s", e)
+
+
+def _fmt(v) -> str:
+    """格式化数值，None/空返回 '-'"""
+    if v is None or v == "":
+        return "-"
+    if isinstance(v, float):
+        return f"{v:.2f}"
+    return str(v)
+
+
+def _get_dim_value(r: dict, dim_name: str) -> str:
+    """根据维度名称从推荐结果中取值"""
+    mapping = {
+        "近1年收益": lambda: r.get("y1", ""),
+        "夏普比率": lambda: _fmt(r.get("sharpe")),
+        "上行胜率": lambda: _fmt(r.get("win_rate")),
+        "盈亏比": lambda: _fmt(r.get("profit_ratio")),
+        "索提诺比率": lambda: _fmt(r.get("sortino")),
+        "修复系数": lambda: _fmt(r.get("recovery")),
+        "近3年收益": lambda: _fmt(r.get("sy3")),
+        "近6月收益": lambda: r.get("m1", ""),  # 推荐结果无 sy6, 用 m1 近似
+        "费率": lambda: _fmt(r.get("rate")),
+        "最大回撤": lambda: _fmt(r.get("max_dd")),
+        "基金规模": lambda: _fmt(r.get("sc")),
+        "年化收益率": lambda: f'{r.get("annual_return", 0):.1f}' if isinstance(r.get("annual_return"), (int, float)) else str(r.get("annual_return", "")),
+        "机构持有比例": lambda: _fmt(r.get("inst")),
+    }
+    fn = mapping.get(dim_name)
+    return fn() if fn else "-"
 
 
 def _load_recommend_data() -> dict | None:
