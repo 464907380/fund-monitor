@@ -343,12 +343,12 @@ def check(code: str) -> tuple[dict, list[str]]:
     # ── 净值异常停滞 ──
     w = check_stagnation(navs)
     if w:
-        alerts.append(f"{w}({code})")
+        alerts.append(f"{w} {name}({code})")
 
     # ── 连跌趋势 ──
     w = check_consecutive_drop(navs)
     if w:
-        alerts.append(f"{w}({code})")
+        alerts.append(f"{w} {name}({code})")
 
     # ── 分红/拆分 ──
     w = check_dividend(navs)
