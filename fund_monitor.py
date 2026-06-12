@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG
-from fund_utils import fetch, log, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html
+from fund_utils import fetch, log, is_trading_day, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html
 from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
@@ -31,16 +31,6 @@ STOCK_ACCUM_JUMP_RED = CFG.get("fund_monitor", {}).get("stock_alert_accum_jump_r
 POLL_INTERVAL = CFG.get("fund_monitor", {}).get("poll_interval_seconds", 600)
 
 # ── 节假日检测 ────────────────────────────────
-# 固定日期节假日（公历）
-FIXED_HOLIDAYS = {
-    (1, 1),   # 元旦
-    (5, 1), (5, 2), (5, 3),   # 劳动节
-    (10, 1), (10, 2), (10, 3), (10, 4), (10, 5), (10, 6), (10, 7),  # 国庆
-}
-
-_HOLIDAY_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".holiday_cache.json")
-_HOLIDAY_CACHE_TTL = CFG.get("fund_monitor", {}).get("holiday_cache_ttl", 86400)
-
 # 连续几次无数据则判定为节假日
 MAX_EMPTY_ROUNDS = CFG.get("fund_monitor", {}).get("max_empty_rounds", 2)
 
@@ -51,79 +41,6 @@ _holdings_cache: dict[str, list[dict]] = {}
 _STATE_SNAPSHOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".monitor_state.json")
 
 # ── 辅助函数 ──────────────────────────────────
-
-def _load_holiday_cache() -> dict:
-    """加载已缓存的节假日数据"""
-    if os.path.exists(_HOLIDAY_CACHE_FILE):
-        try:
-            with open(_HOLIDAY_CACHE_FILE, encoding="utf-8") as f:
-                return json.load(f)  # type: ignore[no-any-return]
-        except (json.JSONDecodeError, OSError):
-            log.debug("节假日缓存读取失败，重新获取")
-    return {}
-
-
-def _save_holiday_cache(data: dict) -> None:
-    """持久化节假日数据"""
-    try:
-        with open(_HOLIDAY_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-    except Exception as e:
-        log.debug("保存节假日缓存失败: %s", e)
-
-
-def is_holiday_api(date_str: str) -> bool | None:
-    """
-    调用节假日 API 判断是否为非交易日。
-    返回 True=非交易日, False=交易日, None=API 不可用。
-    """
-    cache = _load_holiday_cache()
-    now_ts = time.time()
-
-    # 缓存命中且未过期
-    if date_str in cache:
-        entry = cache[date_str]
-        if now_ts - entry.get("ts", 0) < _HOLIDAY_CACHE_TTL:
-            return entry["holiday"]  # type: ignore[no-any-return]
-
-    # 调用公开节假日 API (https://timor.tech/api/holiday)
-    try:
-        data = fetch(f"https://timor.tech/api/holiday/info/{date_str}")
-        j = json.loads(data)
-        if j.get("code") == 0 and "type" in j.get("type", {}):
-            holiday = j["type"]["type"] != 0  # 0=工作日, 1=节假日, 2=调休日
-            log.debug("节假日 API: %s -> %s", date_str, "非交易日" if holiday else "交易日")
-            # 写入缓存
-            cache[date_str] = {"holiday": holiday, "ts": now_ts}
-            _save_holiday_cache(cache)
-            return holiday  # type: ignore[no-any-return]
-    except Exception as e:
-        log.debug("节假日 API 请求失败: %s", e)
-
-    return None  # API 不可用
-
-
-def is_trading_day(d: datetime.date) -> bool:
-    """
-    判断是否为交易日：
-    1. API 检测（优先）
-    2. 周末判断
-    3. 固定假日列表
-    """
-    date_str = d.isoformat()
-
-    # 优先使用 API（覆盖春节、清明等农历节日及调休）
-    api_result = is_holiday_api(date_str)
-    if api_result is not None:
-        return not api_result  # API 返回 True=非交易日
-
-    # API 不可用时的后备逻辑
-    if d.weekday() >= 5:
-        return False
-    if (d.month, d.day) in FIXED_HOLIDAYS:
-        return False
-    return True
-
 
 def is_trading_time(dt: datetime.datetime) -> bool:
     """判断是否在交易时段内（9:30-11:30, 13:00-15:00）"""
@@ -489,7 +406,7 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
     if _get_webhook():
         send_wechat(content)
     else:
-        # HTML 深色主题邮件
+        # HTML 深色主题邮件 - bgcolor 兼容 QQ 邮箱
         rows = []
         # 按基金分组渲染
         for fund_name, (fund_code, s_alerts) in sorted(stock_groups.items() if stock_groups else []):
@@ -524,14 +441,13 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
         html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#000;font-family:'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;font-size:13px;color:#ccc;">
-<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#000;"><tr><td align="center" style="padding:20px 10px;">
-<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#1a1a1a;border-radius:8px;overflow:hidden;">
-<tr><td style="text-align:center;padding:20px 12px 8px;">
+<body bgcolor="#000000" style="margin:0;padding:0;background:#000;font-family:'Helvetica Neue','PingFang SC','Microsoft YaHei',Arial,sans-serif;font-size:13px;color:#ccc;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#000000" style="background:#000;"><tr><td bgcolor="#000000" align="center" style="padding:20px 10px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#1a1a1a" style="max-width:600px;background:#1a1a1a;border-radius:8px;overflow:hidden;">
+<tr><td bgcolor="#1a1a1a" style="text-align:center;padding:20px 12px 8px;">
 <h1 style="margin:0;font-size:18px;color:#e0e0e0;">🚨 盘中警报</h1>
 </td></tr>
 {''.join(rows)}
-<tr><td style="text-align:center;padding:12px 10px;font-size:11px;color:#555;border-top:1px solid #333;">Fund Monitor · 天天基金</td></tr>
 </table>
 </td></tr></table>
 </body>

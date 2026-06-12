@@ -13,7 +13,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from config import CFG
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, _fetch_fund_estimate, \
+from fund_utils import fetch, log, HISTORY_DIR, is_trading_day, _fetch_fund_estimate, \
     _color_inline, _strip_html, _send_smtp, send_wechat
 
 # ── 基金列表 ──────────────────────────────────
@@ -953,8 +953,12 @@ def _compare_with_recommendations() -> list[str]:
 
 def main() -> None:
     _ensure_fund_list_loaded()
-    today = datetime.date.today().isoformat()
-    log.info("====== 基金晚报 %s 开始 ======", today)
+    today = datetime.date.today()
+    if not is_trading_day(today):
+        log.info("今天非交易日，跳过晚报")
+        return
+    today_str = today.isoformat()
+    log.info("====== 基金晚报 %s 开始 ======", today_str)
 
 
     # 第一遍：拉取所有基金原始数据
@@ -991,8 +995,8 @@ def main() -> None:
 
     # 推送（两条通道共用推荐对比数据）
     compare_lines = _compare_with_recommendations() if rows else None
-    push("📊 基金晚报", rows, all_alerts, today, compare_lines)
-    log.info("====== 基金晚报 %s 完成 ======", today)
+    push("📊 基金晚报", rows, all_alerts, today_str, compare_lines)
+    log.info("====== 基金晚报 %s 完成 ======", today_str)
 
 
 if __name__ == "__main__":

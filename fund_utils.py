@@ -2,6 +2,7 @@
 公共基础设施：网络请求、缓存、推送、日志
 从 fund_watch.py 提取，供 fund_monitor.py / global_briefing.py 复用
 """
+import datetime
 import json
 import logging
 import os
@@ -15,6 +16,69 @@ from email.mime.text import MIMEText
 import smtplib
 from logging.handlers import RotatingFileHandler
 from config import CFG, get_secret
+
+# ── 交易日检测 ──────────────────────────────────
+FIXED_HOLIDAYS = {
+    (1, 1),   # 元旦
+    (5, 1), (5, 2), (5, 3),   # 劳动节
+    (10, 1), (10, 2), (10, 3), (10, 4), (10, 5), (10, 6), (10, 7),  # 国庆
+}
+
+_HOLIDAY_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".holiday_cache.json")
+_HOLIDAY_CACHE_TTL = CFG.get("fund_monitor", {}).get("holiday_cache_ttl", 86400)
+
+
+def _load_holiday_cache() -> dict:
+    if os.path.exists(_HOLIDAY_CACHE_FILE):
+        try:
+            with open(_HOLIDAY_CACHE_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            log.debug("节假日缓存读取失败，重新获取")
+    return {}
+
+
+def _save_holiday_cache(data: dict) -> None:
+    try:
+        with open(_HOLIDAY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception as e:
+        log.debug("保存节假日缓存失败: %s", e)
+
+
+def is_holiday_api(date_str: str) -> bool | None:
+    """调用节假日 API 判断是否为非交易日。返回 True=非交易日, False=交易日, None=API 不可用。"""
+    cache = _load_holiday_cache()
+    now_ts = time.time()
+    if date_str in cache:
+        entry = cache[date_str]
+        if now_ts - entry.get("ts", 0) < _HOLIDAY_CACHE_TTL:
+            return entry["holiday"]
+    try:
+        data = fetch(f"https://timor.tech/api/holiday/info/{date_str}")
+        j = json.loads(data)
+        if j.get("code") == 0 and "type" in j.get("type", {}):
+            holiday = j["type"]["type"] != 0
+            log.debug("节假日 API: %s -> %s", date_str, "非交易日" if holiday else "交易日")
+            cache[date_str] = {"holiday": holiday, "ts": now_ts}
+            _save_holiday_cache(cache)
+            return holiday
+    except Exception as e:
+        log.debug("节假日 API 请求失败: %s", e)
+    return None
+
+
+def is_trading_day(d: datetime.date) -> bool:
+    """判断指定日期是否为交易日：1. API检测(优先) 2. 周末判断 3. 固定假日列表"""
+    api_result = is_holiday_api(d.isoformat())
+    if api_result is not None:
+        return not api_result
+    if d.weekday() >= 5:
+        return False
+    if (d.month, d.day) in FIXED_HOLIDAYS:
+        return False
+    return True
+
 
 # ── 路径 ──────────────────────────────────────
 HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
