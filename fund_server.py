@@ -9,13 +9,12 @@ import sys
 import subprocess
 import http.server
 import threading
-import datetime
 import urllib.parse
 import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR, is_trading_day
+from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
 from config import api_url
 
 # ── 后台任务管理 ──
@@ -373,9 +372,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/briefing":
             try:
-                if not is_trading_day(datetime.date.today()):
-                    self._send(*_json_response({"ok": False, "error": "今天非交易日，无需生成晚报"}))
-                    return
                 if _briefing_proc and _briefing_proc.poll() is None:
                     self._send(*_json_response({"ok": False, "error": "晚报生成任务正在运行中"}))
                     return

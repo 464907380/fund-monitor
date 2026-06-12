@@ -13,7 +13,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from config import CFG, api_url
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, \
+from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, \
     _color_inline, _strip_html, _send_smtp, send_wechat
 from fund_scoring import SCORE_DIMS, _calc_score, _rank_percentile_str
 from fund_metrics import _calc_nav_metrics
@@ -406,13 +406,10 @@ def check(code: str) -> tuple[dict, list[str]]:
 def main() -> None:
     _ensure_fund_list_loaded()
     today = datetime.date.today()
-    if not is_trading_day(today):
-        log.info("今天非交易日，跳过晚报")
-        return
+    today_str = today.isoformat()
+    log.info("====== 基金晚报 %s 开始 ======", today_str)
     write_heartbeat("fund_watch")
     try:
-        today_str = today.isoformat()
-        log.info("====== 基金晚报 %s 开始 ======", today_str)
 
         # 第一遍：拉取所有基金原始数据
         raw_rows: list[dict] = []
