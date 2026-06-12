@@ -331,9 +331,8 @@ def check(code: str) -> tuple[dict, list[str]]:
     navs = d.get("nav", [])
     if td is None and len(navs) >= 2:
         last_date = navs[-1].get("d", "")
-        # 仅在最新净值日期为今明两天时才显示（避免非交易日冒充当日涨跌）
-        _td = datetime.date.today()
-        if last_date in (_td.isoformat(), (_td - datetime.timedelta(days=1)).isoformat()):
+        # 最新净值日期为今天时才显示（避免用旧数据冒充当日涨跌）
+        if last_date == datetime.date.today().isoformat():
             td = (navs[-1]["v"] - navs[-2]["v"]) / navs[-2]["v"] * 100
     day_s = f"{td:+.2f}%" if td is not None else ""
 
