@@ -13,7 +13,6 @@ import urllib.parse
 import urllib.request
 
 # 同目录模块
-import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
 from config import api_url
@@ -114,7 +113,7 @@ def _search_funds(q: str, limit: int = 10) -> list[dict]:
     index = _load_fund_index()
     if not index:
         return []
-    results = []
+    results: list[dict] = []
     for f in index:
         if q == f["code"] or q == f["code"].lstrip("0"):
             # 精确匹配代码排最前
@@ -132,7 +131,7 @@ def _load() -> list[dict]:
     if os.path.exists(_FUND_LIST_PATH):
         try:
             with open(_FUND_LIST_PATH, encoding="utf-8") as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[no-any-return]
         except (json.JSONDecodeError, OSError):
             pass
     return []
@@ -177,7 +176,7 @@ def _check_task_status(taskname: str) -> dict:
                 val = line.split(":", 1)[1].strip()
                 if val and val != "N/A":
                     result["last_result"] = val
-        result["ok"] = result["last_result"] == "0" if result["last_result"] else None
+        result["ok"] = (result["last_result"] == "0") if result["last_result"] is not None else None  # type: ignore[assignment]
         return result
     except Exception as e:
         return {"status": f"查询失败: {e}"}
@@ -283,7 +282,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send_file(parsed.path.lstrip("/"))
 
     def _send_file(self, filename: str):
-        path = os.path.join(_SCRIPT_DIR, filename)
+        # 路径穿越防护：确保请求的文件在项目目录内
+        path = os.path.normpath(os.path.join(_SCRIPT_DIR, filename))
+        if not path.startswith(os.path.normpath(_SCRIPT_DIR) + os.sep) and path != os.path.normpath(_SCRIPT_DIR):
+            self._send(403, {"Content-Type": "text/plain"}, b"Forbidden")
+            return
         if not os.path.exists(path):
             self._send(404, {"Content-Type": "text/plain"}, b"Not Found")
             return

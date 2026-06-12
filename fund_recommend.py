@@ -17,6 +17,7 @@ import re
 import urllib.request
 import datetime
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
@@ -69,23 +70,42 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
 
 
 def _save_result(scored: list[tuple]) -> None:
-    """保存推荐结果到文件"""
-    data = {
-        "date": datetime.date.today().isoformat(),
-        "results": [
-            {"code": item[1], "name": item[2], "score": item[0],
-             "annual_return": item[3],
-             "m1": item[4], "m3": item[5], "y1": item[6],
-             "sharpe": item[7], "sortino": item[8],
-             "max_dd": item[9], "win_rate": item[10], "inst": item[11],
-             "sc": item[12], "rate": item[13], "profit_ratio": item[14],
-             "recovery": item[15], "sy3": item[16]}
-            for item in scored
-        ]
-    }
-    with open(_RESULT_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"\n📁 结果已保存到 {_RESULT_FILE}")
+    """保存推荐结果到文件（写锁保护）"""
+    lock_file = _RESULT_FILE + ".lock"
+    try:
+        # 写锁：创建 lock 文件，最多等待 30 秒
+        for _ in range(30):
+            try:
+                with open(lock_file, "x") as _:
+                    break
+            except FileExistsError:
+                time.sleep(1)
+        else:
+            print("⚠️ 无法获取文件锁，跳过保存")
+            return
+
+
+        data = {
+            "date": datetime.date.today().isoformat(),
+            "results": [
+                {"code": item[1], "name": item[2], "score": item[0],
+                 "annual_return": item[3],
+                 "m1": item[4], "m3": item[5], "y1": item[6],
+                 "sharpe": item[7], "sortino": item[8],
+                 "max_dd": item[9], "win_rate": item[10], "inst": item[11],
+                 "sc": item[12], "rate": item[13], "profit_ratio": item[14],
+                 "recovery": item[15], "sy3": item[16]}
+                for item in scored
+            ]
+        }
+        with open(_RESULT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"\n📁 结果已保存到 {_RESULT_FILE}")
+    finally:
+        try:
+            os.remove(lock_file)
+        except OSError:
+            pass
 
 
 def _load_result() -> list[dict] | None:

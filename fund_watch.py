@@ -300,16 +300,12 @@ ALERT_SCALE_2X = CFG.get("fund_watch", {}).get("alert_scale_2x", 2.0)
 ALERT_SCALE_1_5X = CFG.get("fund_watch", {}).get("alert_scale_1_5x", 1.5)
 
 STAGNATION_THRESHOLD = CFG.get("fund_watch", {}).get("stagnation_threshold", 0.05)
-def check(code: str) -> tuple[dict, list[str]]:
-    d = get(code)
-    h = load_hist(code)
+def _check_manager_and_scale(d: dict, h: dict, name: str, code: str) -> list[str]:
+    """检查经理变更和规模变化，返回警报列表"""
     alerts: list[str] = []
-    name = d.get("n", code)
-
     if h.get("m") and d.get("mgr") and h["m"] != d["mgr"]:
         alerts.append(f"🚩 <font color=\"warning\">{name}({code}) 经理: {h['m']}→{d['mgr']}</font>")
     h["m"] = d.get("mgr", "")
-
     if h.get("s") is not None and h["s"] > 0 and d.get("sc") is not None:
         r = d["sc"] / h["s"]
         if r >= ALERT_SCALE_2X:
@@ -317,28 +313,48 @@ def check(code: str) -> tuple[dict, list[str]]:
         elif r >= ALERT_SCALE_1_5X:
             alerts.append(f"🟡 {name}({code}) 规模增长 {h['s']:.1f}亿→{d['sc']:.1f}亿")
     h["s"] = d.get("sc", 0)
+    return alerts
 
+
+def _check_monthly_drop(d: dict, name: str, code: str) -> list[str]:
+    """检查近一月跌幅是否触发警报"""
+    alerts: list[str] = []
     m1 = d.get("m1")
     if m1 is not None:
         if m1 < ALERT_DROP_1M_RED:
             alerts.append(f"🚩 <font color=\"warning\">{name}({code}) 近一月亏 {m1:.1f}%</font>")
         elif m1 < ALERT_DROP_1M:
             alerts.append(f"🟡 {name}({code}) 近一月亏 {m1:.1f}%")
+    return alerts
 
+
+def _calc_day_change(navs: list[dict], td: float | None) -> tuple[str, str]:
+    """计算当日涨跌幅和近5日涨跌幅"""
+    day_s = ""
+    f5 = ""
+    if td is None and len(navs) >= 2:
+        last_date = navs[-1].get("d", "")
+        if last_date == datetime.date.today().isoformat():
+            td = (navs[-1]["v"] - navs[-2]["v"]) / navs[-2]["v"] * 100
+    day_s = f"{td:+.2f}%" if td is not None else ""
+    if len(navs) >= 5:
+        f5 = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"
+    return day_s, f5
+
+
+def check(code: str) -> tuple[dict, list[str]]:
+    d = get(code)
+    h = load_hist(code)
+    alerts: list[str] = []
+    name = d.get("n", code)
+
+    alerts += _check_manager_and_scale(d, h, name, code)
+    alerts += _check_monthly_drop(d, name, code)
     save_hist(code, h)
 
     td = d.get("td")
     navs = d.get("nav", [])
-    if td is None and len(navs) >= 2:
-        last_date = navs[-1].get("d", "")
-        # 最新净值日期为今天时才显示（避免用旧数据冒充当日涨跌）
-        if last_date == datetime.date.today().isoformat():
-            td = (navs[-1]["v"] - navs[-2]["v"]) / navs[-2]["v"] * 100
-    day_s = f"{td:+.2f}%" if td is not None else ""
-
-    f5 = ""
-    if len(navs) >= 5:
-        f5 = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"
+    day_s, f5 = _calc_day_change(navs, td)
 
     # ── 净值异常停滞 ──
     w = check_stagnation(navs)

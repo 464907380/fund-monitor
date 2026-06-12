@@ -55,6 +55,11 @@ def api_url(name: str, **kwargs) -> str:
     return url
 
 
+def api_timeout(name: str, default: int = 10) -> int:
+    """获取 API 超时配置，单位秒"""
+    return CFG.get("network", {}).get("timeout", {}).get(name, default)
+
+
 def _warn_missing_secrets() -> None:
     """启动时检查密钥配置，缺失时输出警告"""
     missing = []
@@ -124,6 +129,18 @@ _DEFAULTS = {
             "eastmoney_quote": "https://push2.eastmoney.com/api/qt/stock/get",
             "tencent_realtime": "http://qt.gtimg.cn/q={code}",
             "holiday": "https://timor.tech/api/holiday/info/{date}",
+            # 备份数据源
+            "fund_rank_fallback": "http://fund.eastmoney.com/data/rankhandler.aspx",
+            "fund_lsjz": "https://api.fund.eastmoney.com/f10/lsjz",
+            "sina_fund_quote": "http://hq.sinajs.cn/list=of{code}",
+        },
+        "timeout": {
+            "default": 10,
+            "fetch_fund_name": 10,
+            "load_fund_index": 15,
+            "fetch_rank": 15,
+            "request_with_retry": 15,
+            "backup_api": 10,
         },
         "retry_max": 3,
         "retry_backoff_seconds": [1, 3, 8],

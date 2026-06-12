@@ -474,9 +474,11 @@ def test_calc_score_transparent():
         "profit_ratio": 1.8,                    # 盈亏比好
         "recovery": 25.0,                       # 修复能力强
         "sy3": 80.0,                            # 近3年表现好
+        "m1": 15.0,                             # 近1月 +15%
+        "m3": 50.0,                             # 近3月 +50%
     }
     score = _calc_score(d)
-    assert 60 <= score <= 100  # 应该高分
+    assert 65 <= score <= 100  # 应该高分
 
     # 一只各项指标都差的基金
     d2 = {
@@ -493,6 +495,8 @@ def test_calc_score_transparent():
         "recovery": 0.5,                        # 修复能力差
         "sy3": -10.0,                           # 近3年亏损
         "internal": 0.0,                        # 经理自己都不买
+        "m1": -10.0,                            # 近1月亏
+        "m3": -20.0,                            # 近3月亏
     }
     score2 = _calc_score(d2)
     assert 0 <= score2 <= 30  # 应该低分

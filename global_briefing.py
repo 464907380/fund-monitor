@@ -565,7 +565,7 @@ def _save_breadth_history(data: dict) -> None:
 
 def _html_a_share_section(a_shares: list[dict] | None) -> list[str]:
     """渲染 A 股指数 HTML 行"""
-    rows = []
+    rows: list[str] = []
     if not a_shares:
         return rows
     rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">\U0001f1e8\U0001f1f3 A股</td></tr>')
@@ -584,7 +584,7 @@ def _html_a_share_section(a_shares: list[dict] | None) -> list[str]:
 
 def _html_volume_section(senti: dict | None) -> list[str]:
     """渲染成交额 HTML 行"""
-    rows = []
+    rows: list[str] = []
     if not senti:
         return rows
     rows.append('<tr><td style="padding:10px 12px 4px;" colspan="3"><p style="margin:0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 成交额</p></td></tr>')
@@ -617,7 +617,7 @@ def _html_breadth_section(breadth: dict | None) -> list[str]:
 
 def _html_global_section(globals_: list[dict] | None) -> list[str]:
     """渲染全球指数 HTML 行"""
-    rows = []
+    rows: list[str] = []
     if not globals_:
         return rows
     rows.append('<tr style="background:#2a2a2a;"><td style="padding:8px 12px;font-size:13px;font-weight:600;color:#ccc;" colspan="3">\U0001f30d 全球</td></tr>')
@@ -707,7 +707,7 @@ def build_briefing_html(a_shares: list[dict] | None = None,
     if breadth is None:
         breadth = _fetch_market_breadth()
 
-    rows = []
+    rows: list[str] = []
     rows.extend(_html_a_share_section(a_shares))
     rows.extend(_html_volume_section(senti))
     rows.extend(_html_breadth_section(breadth))
