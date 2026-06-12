@@ -160,6 +160,11 @@ h1 {
 .feature-status.ok { background: #66bb6a; box-shadow: 0 0 6px rgba(102,187,106,0.5); }
 .feature-status.fail { background: #ef5350; box-shadow: 0 0 6px rgba(239,83,80,0.5); }
 .feature-status.unknown { background: #555; }
+
+/* 推荐表格 */
+#recList table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#recList th { padding: 6px 4px; text-align: center; color: #888; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.06); white-space: nowrap; }
+#recList td { padding: 5px 4px; border-bottom: 1px solid rgba(255,255,255,0.03); white-space: nowrap; }
 .feature-row {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 4px;
@@ -270,7 +275,18 @@ h1 {
     <div id="list"></div>
   </div>
 
-  <div class="footer">FUND WATCH · 数据来自天天基金</div>
+  <div class="card">
+    <div class="list-header">
+      <span>🏆 基金推荐排行</span>
+      <span class="count" id="recCount">未运行</span>
+    </div>
+    <div class="divider"></div>
+    <div id="recInfo" style="font-size:12px;color:#555;padding:0 4px 8px;"></div>
+    <div id="recList"></div>
+    <div style="padding:12px 4px 0;text-align:center;">
+      <button onclick="runRecommend()" id="recBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;transition:all 0.15s;">▶ 运行推荐</button>
+    </div>
+  </div>
 </div>
 
 <!-- 确认弹窗 -->
@@ -500,6 +516,63 @@ async function loadHeartbeat() {
   });
 }
 setInterval(loadFeatures, 30000);
+
+// ── 基金推荐 ──
+async function loadRecommend() {
+  const r = await fetch(API + '/api/recommend');
+  const d = await r.json();
+  const btn = document.getElementById('recBtn');
+  if (btn) btn.disabled = false;
+  if (!d.ok) return;
+  const el = document.getElementById('recList');
+  const info = document.getElementById('recInfo');
+  const cnt = document.getElementById('recCount');
+  if (!d.results || !d.results.length) {
+    el.innerHTML = '<div class="empty">尚未运行推荐，点击下方按钮开始</div>';
+    info.textContent = '';
+    cnt.textContent = '未运行';
+    return;
+  }
+  cnt.textContent = d.date ? d.date + ' · ' + d.results.length + ' 只' : d.results.length + ' 只';
+  info.textContent = d.date ? '上次更新：' + d.date + '（运行约 4 分钟）' : '';
+  const medals = ['🥇', '🥈', '🥉'];
+  el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:1px solid rgba(255,255,255,0.06);">'
+    + '<th style="padding:6px 4px;text-align:center;color:#888;">排名</th>'
+    + '<th style="padding:6px 4px;text-align:left;color:#888;">基金</th>'
+    + '<th style="padding:6px 4px;text-align:right;color:#888;">评分</th>'
+    + '<th style="padding:6px 4px;text-align:right;color:#888;">年化</th>'
+    + '<th style="padding:6px 4px;text-align:right;color:#888;">近1月</th>'
+    + '<th style="padding:6px 4px;text-align:right;color:#888;">近1年</th>'
+    + '<th style="padding:6px 4px;text-align:right;color:#888;">夏普</th>'
+    + '</tr></thead><tbody>'
+    + d.results.slice(0, 10).map((r, i) => {
+        const badge = medals[i] || ' ' + (i + 1) + '.';
+        return '<tr style="border-bottom:1px solid rgba(255,255,255,0.03);">'
+          + '<td style="padding:5px 4px;text-align:center;font-size:13px;">' + badge + '</td>'
+          + '<td style="padding:5px 4px;color:#e0e0e0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">' + r.name + '</td>'
+          + '<td style="padding:5px 4px;text-align:right;font-weight:600;color:#66bb6a;">' + r.score.toFixed(1) + '</td>'
+          + '<td style="padding:5px 4px;text-align:right;color:#ccc;">' + r.annual_return.toFixed(1) + '%</td>'
+          + '<td style="padding:5px 4px;text-align:right;' + (r.m1 && r.m1.startsWith('+') ? 'color:#ef5350;' : r.m1 && r.m1.startsWith('-') ? 'color:#66bb6a;' : '') + '">' + (r.m1 || '') + '</td>'
+          + '<td style="padding:5px 4px;text-align:right;' + (r.y1 && r.y1.startsWith('+') ? 'color:#ef5350;' : r.y1 && r.y1.startsWith('-') ? 'color:#66bb6a;' : '') + '">' + (r.y1 || '') + '</td>'
+          + '<td style="padding:5px 4px;text-align:right;color:#ccc;">' + r.sharpe.toFixed(2) + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+async function runRecommend() {
+  const btn = document.getElementById('recBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 4 分钟）'; }
+  const r = await fetch(API + '/api/recommend', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) {
+    setTimeout(loadRecommend, 5000);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+  }
+}
+
+loadRecommend();
 </script>
 </body>
 </html>

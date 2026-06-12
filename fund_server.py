@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 import http.server
 import urllib.parse
 import urllib.request
@@ -195,6 +196,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(*_json_response({"ok": True, "heartbeats": hb}))
             return
 
+        if parsed.path == "/api/recommend":
+            path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
+            if os.path.exists(path):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                    self._send(*_json_response({"ok": True, "date": data.get("date", ""), "results": data.get("results", [])}))
+                except Exception as e:
+                    self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            else:
+                self._send(*_json_response({"ok": True, "date": "", "results": []}))
+            return
+
         if parsed.path == "/" or parsed.path == "/index.html":
             self._send_file("fund_manage.html")
             return
@@ -271,6 +285,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "removed": removed,
                 "total": len(funds),
             }))
+            return
+
+        if self.path == "/api/recommend":
+            try:
+                script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
+                subprocess.Popen([sys.executable, script],
+                                 cwd=_SCRIPT_DIR,
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+                self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 4 分钟"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         self._send(*_json_response({"ok": False, "error": "未知接口"}, 404))
