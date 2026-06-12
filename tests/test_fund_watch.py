@@ -208,13 +208,13 @@ def test_consecutive_drop_yellow():
 
 
 def test_consecutive_drop_red():
-    """连跌 3 天且累计超 -3% → 🚩"""
+    """连跌 3 天且累计超 -5% → 📉"""
     from fund_watch import check_consecutive_drop
 
     navs = make_nav([1.0, 0.97, 0.95, 0.93])
     result = check_consecutive_drop(navs)
     assert result is not None
-    assert "🚩" in result
+    assert "📉" in result
 
 
 # ── 分红/拆分检测 ──

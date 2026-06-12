@@ -44,7 +44,7 @@ def check_consecutive_drop(navs: list[dict]) -> str | None:
     start_date = navs[-drop_count]["d"]
     end_date = navs[-1]["d"]
     if total_chg <= CONSECUTIVE_DROP_TOTAL:
-        return f"🚩 <font color=\"warning\">连跌{drop_count}天 ({start_date}→{end_date}) 累计{total_chg:.1f}%</font>"
+        return f"📉 <font color=\"warning\">连跌{drop_count}天 ({start_date}→{end_date}) 累计{total_chg:.1f}%</font>"
     return f"🟡 连跌{drop_count}天 ({start_date}→{end_date}) 累计{total_chg:.1f}%"
 
 
