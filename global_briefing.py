@@ -10,7 +10,7 @@ import re
 import datetime
 import os
 import urllib.request
-from fund_utils import send_wechat, log, fetch_bytes, send_mail_html, parse_sina_csv
+from fund_utils import send_wechat, log, fetch_bytes, send_mail_html, parse_sina_csv, write_heartbeat, clear_heartbeat
 from config import get_secret as _get_secret
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
@@ -723,22 +723,25 @@ def build_briefing_html(a_shares: list[dict] | None = None,
 
 
 def main() -> None:
-    log.info("====== 全球股市简报 开始 ======")
-    # 数据只取一次，三个 builder 共用
-    a_shares = get_a_share()
-    globals_ = get_global()
-    senti = _fetch_sentiment()
-    breadth = _fetch_market_breadth()
-    brief_md = build_briefing_md(a_shares, globals_, senti, breadth)
-    brief_html = build_briefing_html(a_shares, globals_, senti, breadth)
+    write_heartbeat("global_briefing")
+    try:
+        log.info("====== 全球股市简报 开始 ======")
+        a_shares = get_a_share()
+        globals_ = get_global()
+        senti = _fetch_sentiment()
+        breadth = _fetch_market_breadth()
+        brief_md = build_briefing_md(a_shares, globals_, senti, breadth)
+        brief_html = build_briefing_html(a_shares, globals_, senti, breadth)
 
-    webhook = _get_secret("WECHAT_WEBHOOK")
-    if webhook:
-        send_wechat(brief_md)
-    else:
-        send_mail_html("🌏 全球股市简报", brief_html)
+        webhook = _get_secret("WECHAT_WEBHOOK")
+        if webhook:
+            send_wechat(brief_md)
+        else:
+            send_mail_html("🌏 全球股市简报", brief_html)
 
-    log.info("====== 全球股市简报 完成 ======")
+        log.info("====== 全球股市简报 完成 ======")
+    finally:
+        clear_heartbeat("global_briefing")
 
 
 if __name__ == "__main__":

@@ -199,7 +199,7 @@ def main() -> None:
         badge = medals[i - 1] if i <= 3 else f" {i}."
         print(f"{badge} {item[2]} ({item[1]}) — {item[0]:.1f}分  年化{item[3]:.1f}%")
 
-    # 详细对比表 — 12 维评分全透明
+    # 详细评分表 — 12 维评分全透明
     print()
     parts = [f"{name} {int(w*100)}%" for name, _, w, _ in SCORE_DIMS]
     print("  评分维度说明: " + " | ".join(parts))

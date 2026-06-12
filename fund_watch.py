@@ -13,7 +13,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from config import CFG
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, is_trading_day, _fetch_fund_estimate, \
+from fund_utils import fetch, log, HISTORY_DIR, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, \
     _color_inline, _strip_html, _send_smtp, send_wechat
 
 # ── 基金列表 ──────────────────────────────────
@@ -71,13 +71,13 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 # ── 推送 ──────────────────────────────────────
 
-def _pipe_table_to_html(compare_lines: list[str]) -> str:
+def _pipe_table_to_html(ranking_lines: list[str]) -> str:
     """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
     cp = '<tr><td style="padding:12px 14px;background:#0f3460;border:1px solid #333;border-radius:6px;">'
     cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#e0e0e0;">🏆 市场优选基金 TOP 10 （12 维评分）</p>'
     in_table = False
     header_done = False
-    for line in compare_lines:
+    for line in ranking_lines:
         clean = line.strip()
         if clean.startswith("🏆"):
             continue
@@ -115,7 +115,7 @@ def _pipe_table_to_html(compare_lines: list[str]) -> str:
 
 
 def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str,
-                   compare_lines: list[str] | None = None) -> None:
+                   ranking_lines: list[str] | None = None) -> None:
     """通过 QQ 邮箱发送邮件（MJML 编译渲染）"""
     qq_email = _get_email_user()
     qq_auth = _get_email_auth()
@@ -153,11 +153,11 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
     # 警报区块
     extra_parts = []
 
-    # 持仓对比（将管道表转为 HTML）
-    if compare_lines is None:
-        compare_lines = _compare_with_recommendations()
-    if compare_lines:
-        cp = _pipe_table_to_html(compare_lines)
+    # 推荐排行（将管道表转为 HTML）
+    if ranking_lines is None:
+        ranking_lines = _format_recommend_rankings()
+    if ranking_lines:
+        cp = _pipe_table_to_html(ranking_lines)
         extra_parts.append(cp)
 
     # 警报
@@ -177,17 +177,17 @@ def send_mail_html(subject: str, rows: list[dict], alerts: list[str], today: str
 
 
 def push(subject: str, rows: list[dict], alerts: list[str], today: str,
-         compare_lines: list[str] | None = None) -> None:
-    # 预计算推荐对比，两个推送通道共用
-    if compare_lines is None:
-        compare_lines = _compare_with_recommendations()
-    sent = send_wechat(md_content(rows, alerts, today, compare_lines))
+         ranking_lines: list[str] | None = None) -> None:
+    # 预计算推荐排行，两个推送通道共用
+    if ranking_lines is None:
+        ranking_lines = _format_recommend_rankings()
+    sent = send_wechat(md_content(rows, alerts, today, ranking_lines))
     if not sent:
-        send_mail_html(subject, rows, alerts, today, compare_lines)
+        send_mail_html(subject, rows, alerts, today, ranking_lines)
 
 
 def md_content(rows: list[dict], alerts: list[str], today: str,
-               compare_lines: list[str] | None = None) -> str:
+               ranking_lines: list[str] | None = None) -> str:
     """构造 Markdown 内容（企业微信推送用）"""
     md_lines = [
         f"📊 **基金晚报 {today}**",
@@ -200,12 +200,12 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
             f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r['mgr']}|"
         )
 
-    # 持仓 vs 推荐对比
-    if compare_lines is None:
-        compare_lines = _compare_with_recommendations()
-    if compare_lines:
+    # 推荐排行
+    if ranking_lines is None:
+        ranking_lines = _format_recommend_rankings()
+    if ranking_lines:
         md_lines.append("")
-        md_lines.extend(compare_lines)
+        md_lines.extend(ranking_lines)
 
     if alerts:
         md_lines.append("")
@@ -356,7 +356,7 @@ def _parse_holdings(code: str) -> list[dict] | None:
             last_err = e
             continue
     if last_err:
-        log.debug("拉取持仓失败 %s: %s", code, last_err)
+        log.debug("拉取重仓股失败 %s: %s", code, last_err)
     return None
 
 
@@ -870,7 +870,7 @@ def check(code: str) -> tuple[dict, list[str]]:
     return row, alerts
 
 
-# ── 持仓 vs 推荐对比 ──────────────────────────
+# ── 推荐排行 ────────────────────────────────────
 
 def _load_recommend_data() -> dict | None:
     """加载推荐结果完整数据（含日期和结果列表），合并文件读取"""
@@ -885,10 +885,8 @@ def _load_recommend_data() -> dict | None:
 
 
 
-def _compare_with_recommendations() -> list[str]:
-    """
-    展示市场优选基金排行（来自上次推荐结果）。
-    """
+def _format_recommend_rankings() -> list[str]:
+    """展示市场优选基金排行（来自上次推荐结果）"""
     data = _load_recommend_data()
     recs = data.get("results", []) if data else None
     lines: list[str] = []
@@ -957,7 +955,9 @@ def main() -> None:
     if not is_trading_day(today):
         log.info("今天非交易日，跳过晚报")
         return
-    today_str = today.isoformat()
+    write_heartbeat("fund_watch")
+    try:
+        today_str = today.isoformat()
     log.info("====== 基金晚报 %s 开始 ======", today_str)
 
 
@@ -973,7 +973,7 @@ def main() -> None:
         except Exception as e:
             log.error("❌ %s: %s", f["code"], e)
 
-    # 计算评分（供持仓对比使用）
+    # 计算评分（供展示使用）
     for r in raw_rows:
         d = {
             "annual_return": r.get("_annual_return"),
@@ -993,10 +993,12 @@ def main() -> None:
 
     rows = raw_rows
 
-    # 推送（两条通道共用推荐对比数据）
-    compare_lines = _compare_with_recommendations() if rows else None
-    push("📊 基金晚报", rows, all_alerts, today_str, compare_lines)
+    # 推送（两条通道共用推荐排行数据）
+    ranking_lines = _format_recommend_rankings() if rows else None
+    push("📊 基金晚报", rows, all_alerts, today_str, ranking_lines)
     log.info("====== 基金晚报 %s 完成 ======", today_str)
+    finally:
+        clear_heartbeat("fund_watch")
 
 
 if __name__ == "__main__":

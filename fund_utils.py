@@ -296,3 +296,59 @@ def send_mail_html(subject: str, html: str) -> None:
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
     msg["From"] = msg["To"] = qq_email
     _send_smtp(msg)
+
+# ── 心跳监控（运行状态追踪） ──────────────────
+_HEARTBEAT_DIR = os.path.join(HISTORY_DIR, ".heartbeats")
+
+
+def _ensure_heartbeat_dir() -> None:
+    os.makedirs(_HEARTBEAT_DIR, exist_ok=True)
+
+
+def write_heartbeat(name: str) -> None:
+    _ensure_heartbeat_dir()
+    path = os.path.join(_HEARTBEAT_DIR, f"{name}.json")
+    try:
+        hb = {"name": name, "start": time.time(),
+              "start_str": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+              "pid": os.getpid()}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(hb, f)
+    except Exception as e:
+        log.debug("写入心跳失败 %s: %s", name, e)
+
+
+def clear_heartbeat(name: str) -> None:
+    path = os.path.join(_HEARTBEAT_DIR, f"{name}.json")
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception as e:
+        log.debug("清除心跳失败 %s: %s", name, e)
+
+
+def read_heartbeat(name: str) -> dict | None:
+    path = os.path.join(_HEARTBEAT_DIR, f"{name}.json")
+    try:
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
+def read_all_heartbeats() -> dict[str, dict]:
+    _ensure_heartbeat_dir()
+    result = {}
+    try:
+        for fname in os.listdir(_HEARTBEAT_DIR):
+            if fname.endswith(".json"):
+                name = fname[:-5]
+                hb = read_heartbeat(name)
+                if hb:
+                    result[name] = hb
+    except Exception:
+        pass
+    return result
+
