@@ -187,15 +187,15 @@ def main() -> None:
 
 
 def _filter_candidates(rows: list) -> list:
-    """剔除近1年收益为负或低于5%的基金（多为债券基金混入）"""
+    """剔除近1年收益为负或低于20%的基金"""
     candidates = []
     for r in rows:
         try:
             y1 = float(r[11]) if len(r) > 11 and r[11] else 0
             if y1 <= 0:
                 continue
-            # 年化收益低于 5% 的不适合推荐（多为债券基金，收益不足以覆盖风险）
-            if y1 < 5:
+            # 年化收益低于 20% 的不适合推荐（多为债券基金或表现不佳的混合基金）
+            if y1 < 20:
                 continue
             candidates.append(r)
         except (ValueError, IndexError):
