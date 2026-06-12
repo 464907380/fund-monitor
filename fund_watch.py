@@ -425,6 +425,9 @@ def main() -> None:
                 "recovery": r.get("_recovery"),
                 "y1": r.get("_y1_raw"),
                 "sy3": r.get("_sy3"),  # 无近3年数据不评分（不回退到近6月）
+                "m1": r.get("m1"),      # 近1月收益（字符串 "+3.45%"）
+                "m3": r.get("m3"),      # 近3月收益（字符串）
+                "sy6": r.get("_sy6"),   # 近6月收益
             }
             r["score"] = _calc_score(d)
     
