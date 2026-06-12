@@ -20,7 +20,8 @@ from config import api_url
 
 # ── 后台任务管理 ──
 _recommend_proc: subprocess.Popen | None = None
-"""推荐子进程引用，防止被 GC/僵尸，同时用于判断是否正在运行"""
+_briefing_proc: subprocess.Popen | None = None
+"""晚报子进程引用"""
 
 
 def _spawn_recommend() -> None:
@@ -40,6 +41,26 @@ def _spawn_recommend() -> None:
         clear_heartbeat("fund_recommend")
 
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
+
+
+def _spawn_briefing() -> None:
+    """启动晚报生成，完成后自动清理心跳"""
+    global _briefing_proc
+    script = os.path.join(_SCRIPT_DIR, "fund_watch.py")
+    write_heartbeat("fund_briefing")
+    _briefing_proc = subprocess.Popen(
+        [sys.executable, script],
+        cwd=_SCRIPT_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    def _wait_and_cleanup() -> None:
+        _briefing_proc.wait()
+        clear_heartbeat("fund_briefing")
+
+    threading.Thread(target=_wait_and_cleanup, daemon=True).start()
+
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
@@ -343,6 +364,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
             except Exception as e:
                 clear_heartbeat("fund_recommend")
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/briefing":
+            try:
+                if _briefing_proc and _briefing_proc.poll() is None:
+                    self._send(*_json_response({"ok": False, "error": "晚报生成任务正在运行中"}))
+                    return
+                _spawn_briefing()
+                self._send(*_json_response({"ok": True, "message": "晚报生成已启动，约需 2 分钟"}))
+            except Exception as e:
+                clear_heartbeat("fund_briefing")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 

@@ -297,6 +297,9 @@ h1 {
     <div id="briefContent" style="padding:0;">
       <iframe id="briefFrame" src="/api/briefing" style="width:100%;border:none;border-radius:4px;background:#1a1a1a;min-height:200px;" onload="resizeBriefFrame()"></iframe>
     </div>
+    <div style="padding:12px 4px 0;text-align:center;">
+      <button onclick="runBriefing()" id="briefBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;transition:all 0.15s;">📊 生成晚报</button>
+    </div>
   </div>
 </div>
 
@@ -598,6 +601,35 @@ function resizeBriefFrame() {
     frame.style.height = frame.contentWindow.document.body.scrollHeight + 50 + 'px';
   } catch(e) {}
 }
+
+async function runBriefing() {
+  const btn = document.getElementById('briefBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中（约 2 分钟）'; }
+  const r = await fetch(API + '/api/briefing', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) {
+    // 轮询心跳，生成完后刷新 iframe
+    const poll = setInterval(async () => {
+      const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
+      if (!hb.alive || !hb.alive['fund_briefing']) {
+        clearInterval(poll);
+        document.getElementById('briefFrame').src = '/api/briefing?' + Date.now();
+        if (btn) { btn.disabled = false; btn.textContent = '📊 生成晚报'; }
+      }
+    }, 5000);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '📊 生成晚报'; }
+  }
+}
+
+// 页面加载时检查晚报是否正在生成
+(async function checkBriefRunning() {
+  const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
+  if (hb.alive && hb.alive['fund_briefing']) {
+    const btn = document.getElementById('briefBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中（约 2 分钟）'; }
+  }
+})();
 
 loadRecommend();
 </script>
