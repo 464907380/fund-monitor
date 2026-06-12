@@ -45,8 +45,8 @@ _BRIEFING_FILE = os.path.join(HISTORY_DIR, ".briefing_fund.html")
 
 def _pipe_table_to_html(ranking_lines: list[str]) -> str:
     """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
-    cp = '<tr><td style="padding:12px 14px;background:#0f3460;border:1px solid #333;border-radius:6px;">'
-    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#e0e0e0;">🏆 市场优选基金 TOP 10 （12 维评分）</p>'
+    cp = '<tr><td style="padding:12px 14px;background:#222;border:1px solid #333;border-radius:6px;">'
+    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ccc;">🏆 市场优选基金 TOP 10 （12 维评分）</p>'
     in_table = False
     header_done = False
     for line in ranking_lines:
