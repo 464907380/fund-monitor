@@ -440,7 +440,7 @@ async function loadFeatures() {
   const el = document.getElementById('features');
   el.innerHTML = d.tasks.map(t => {
     const statusClass = t.ok === true ? 'ok' : t.ok === false ? 'fail' : 'unknown';
-    const lastInfo = t.last_run ? (t.ok ? '上次成功' : '上次失败') : '尚未运行';
+    const lastInfo = t.ok === true ? '上次成功' : t.ok === false ? '上次失败' : (t.last_run ? '上次 ' + t.last_run.substring(0, 16) : '尚未运行');
     return `
       <div class="feature-row" data-task-id="${t.id}">
         <div class="feature-icon">${t.icon}</div>

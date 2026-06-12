@@ -131,6 +131,15 @@ def _check_task_status(taskname: str) -> dict:
                 if val and val != "N/A":
                     result["last_result"] = val
         result["ok"] = result["last_result"] == "0" if result["last_result"] else None
+        # 如果上次运行不是今天，状态算"未知"而非"成功"
+        if result["last_run"]:
+            import datetime as _dt
+            try:
+                last_dt = _dt.datetime.strptime(result["last_run"][:10].strip(), "%Y/%m/%d")
+                if last_dt.date() != _dt.date.today():
+                    result["ok"] = None  # 不是今天的运行结果，不算数
+            except ValueError:
+                pass
         return result
     except Exception as e:
         return {"status": f"查询失败: {e}"}
