@@ -17,6 +17,15 @@ fund_watch.log
 # 监控状态快照（自动生成）
 .monitor_state.json
 
+# 全球指数缓存（自动生成）
+.global_cache.json
+
+# 涨跌家数历史（自动生成）
+.breadth_history.json
+
+# 心跳监控文件（自动生成）
+.heartbeats/
+
 # 基金推荐结果缓存（自动生成）
 .fund_recommend_result.json
 
@@ -30,6 +39,7 @@ fund_watch.log
 /test_*.py
 /preview_*.py
 /preview_*.html
+/_*.py
 
 # 操作系统
 Thumbs.db
