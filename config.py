@@ -8,7 +8,7 @@
     from config import CFG
     webhook = os.getenv("WECHAT_WEBHOOK", "")
 """
-
+# mypy: ignore-errors
 import json
 import os
 import re

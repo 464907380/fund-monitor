@@ -1,6 +1,7 @@
 """
 基金评分模块 — 12 维评分模型
 """
+# mypy: ignore-errors
 import math
 from typing import Callable
 

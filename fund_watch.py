@@ -11,7 +11,7 @@ import html as _html
 from typing import Callable
 from email.header import Header
 from email.mime.text import MIMEText
-from config import CFG
+from config import CFG, api_url
 from config import get_secret as _get_secret
 from fund_utils import fetch, log, HISTORY_DIR, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, \
     _color_inline, _strip_html, _send_smtp, send_wechat

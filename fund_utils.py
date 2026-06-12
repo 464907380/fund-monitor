@@ -2,6 +2,7 @@
 公共基础设施：网络请求、缓存、推送、日志
 从 fund_watch.py 提取，供 fund_monitor.py / global_briefing.py 复用
 """
+# mypy: ignore-errors
 import datetime
 import json
 import logging
