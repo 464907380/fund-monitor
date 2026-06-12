@@ -268,6 +268,17 @@ h1 {
     <div id="features"></div>
   </div>
 
+  <div class="card">
+    <div class="list-header">
+      <span>⚙️ 评分维度</span>
+    </div>
+    <div class="divider"></div>
+    <div id="dimsList" style="font-size:12px;"></div>
+    <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;">
+      <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;">保存</button>
+    </div>
+  </div>
+
 </div>
 
 <!-- 确认弹窗 -->
@@ -542,6 +553,8 @@ async function checkBriefRunning() {
 }
 
 checkBriefRunning();
+loadDims();
+loadDims();
 
 loadBriefing();
 </script>

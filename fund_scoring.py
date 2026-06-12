@@ -3,6 +3,7 @@
 """
 # mypy: ignore-errors
 import math
+from config import CFG
 from typing import Callable
 
 
@@ -201,25 +202,70 @@ def _score_rate(d: dict) -> float:
     else:              return 0
 
 
-SCORE_DIMS: list[tuple[str, Callable, float, str]] = [
-    ("近1年收益",    _score_y1,             0.09, "最近一年的表现，反映基金近期赚钱能力"),
-    ("近3月收益",    _score_m3,             0.12, "近三个月涨跌幅，中期趋势"),
-    ("夏普比率",     _score_sharpe,         0.06, "每承受 1 份波动能换来多少超额收益"),
-    ("上行胜率",     _score_win_rate,       0.07, "赚钱天数占总交易天数的比例"),
-    ("盈亏比",       _score_profit_ratio,   0.07, "平均盈利÷平均亏损，>1说明赚比亏多"),
-    ("索提诺比率",   _score_sortino,        0.06, "只考虑下跌波动，更贴近真实风险感受"),
-    ("修复系数",     _score_recovery,       0.04, "总收益÷最大回撤，衡量跌下去能不能涨回来"),
-    ("近6月收益",    _score_sy6,            0.06, "近六个月表现，补充近1年的中短期维度"),
-    ("近3年收益",    _score_sy3,            0.07, "从净值数据取约750个交易日精确计算，看穿越牛熊能力"),
-    ("近1月收益",    _score_m1,             0.15, "近一个月涨跌幅，捕捉短期动量"),
-    ("最大回撤",     _score_max_dd,         0.10, "历史最大跌幅"),
-    ("费率",         _score_rate,           0.03, "申购费越低越好"),
-    ("基金规模",     _score_scale,          0.02, "1~50亿最理想，太小不灵活、太大难操作"),
-    ("年化收益率",    _score_annual_return,  0.04, "基金成立以来年化回报"),
-    ("机构持有比例", _score_institutional,  0.02, "专业机构认可度，小幅参考"),
+# ── 评分维度注册表 ─────────────────────────────
+_SCORE_FUNCS: dict[str, Callable] = {
+    "y1": _score_y1,
+    "m3": _score_m3,
+    "m1": _score_m1,
+    "sharpe": _score_sharpe,
+    "win_rate": _score_win_rate,
+    "profit_ratio": _score_profit_ratio,
+    "sortino": _score_sortino,
+    "recovery": _score_recovery,
+    "sy6": _score_sy6,
+    "sy3": _score_sy3,
+    "max_dd": _score_max_dd,
+    "rate": _score_rate,
+    "scale": _score_scale,
+    "annual_return": _score_annual_return,
+    "institutional": _score_institutional,
+}
+
+
+_DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
+    ("\u8fd11\u5e74\u6536\u76ca",    _score_y1,             0.10, "\u6700\u8fd1\u4e00\u5e74\u7684\u8868\u73b0\uff0c\u53cd\u6620\u57fa\u91d1\u8fd1\u671f\u8d5a\u94b1\u80fd\u529b"),
+    ("\u8fd13\u6708\u6536\u76ca",    _score_m3,             0.15, "\u8fd1\u4e09\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u4e2d\u671f\u8d8b\u52bf"),
+    ("\u590f\u666e\u6bd4\u7387",     _score_sharpe,         0.08, "\u6bcf\u627f\u53d7 1 \u4efd\u6ce2\u52a8\u80fd\u6362\u6765\u591a\u5c11\u989d\u5916\u6536\u76ca"),
+    ("\u4e0a\u884c\u80dc\u7387",     _score_win_rate,       0.07, "\u8d5a\u94b1\u5929\u6570\u5360\u603b\u4ea4\u6613\u5929\u6570\u7684\u6bd4\u4f8b"),
+    ("\u76c8\u4e8f\u6bd4",       _score_profit_ratio,   0.07, "\u5e73\u5747\u76c8\u5229\u00f7\u5e73\u5747\u4e8f\u635f\uff0c>1\u8bf4\u660e\u8d5a\u6bd4\u4e8f\u591a"),
+    ("\u7d22\u63d0\u8bfa\u6bd4\u7387",   _score_sortino,        0.08, "\u53ea\u8003\u8651\u4e0b\u8dcc\u6ce2\u52a8\uff0c\u66f4\u8d34\u8fd1\u771f\u5b9e\u98ce\u9669\u611f\u53d7"),
+    ("\u4fee\u590d\u7cfb\u6570",     _score_recovery,       0.06, "\u603b\u6536\u76ca\u00f7\u6700\u5927\u56de\u64a4\uff0c\u8861\u91cf\u8dcc\u4e0b\u53bb\u80fd\u4e0d\u80fd\u6da8\u56de\u6765"),
+    ("\u8fd16\u6708\u6536\u76ca",    _score_sy6,            0.06, "\u8fd1\u516d\u4e2a\u6708\u8868\u73b0\uff0c\u8865\u5145\u8fd11\u5e74\u7684\u4e2d\u77ed\u671f\u7ef4\u5ea6"),
+    ("\u8fd13\u5e74\u6536\u76ca",    _score_sy3,            0.07, "\u4ece\u51c0\u503c\u6570\u636e\u53d6\u7ea7750\u4e2a\u4ea4\u6613\u65e5\u7cbe\u786e\u8ba1\u7b97\uff0c\u770b\u7a7f\u8d8a\u725b\u718a\u80fd\u529b"),
+    ("\u8fd11\u6708\u6536\u76ca",    _score_m1,             0.10, "\u8fd1\u4e00\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u6355\u6349\u77ed\u671f\u52a8\u91cf"),
+    ("\u6700\u5927\u56de\u64a4",     _score_max_dd,         0.05, "\u5386\u53f2\u6700\u5927\u8dcc\u5e45"),
+    ("\u8d39\u7387",         _score_rate,           0.03, "\u7533\u8d2d\u8d39\u8d8a\u4f4e\u8d8a\u597d"),
+    ("\u57fa\u91d1\u89c4\u6a21",     _score_scale,          0.02, "1~50\u4ebf\u6700\u7406\u60f3\uff0c\u592a\u5c0f\u4e0d\u7075\u6d3b\u3001\u592a\u5927\u96be\u64cd\u4f5c"),
+    ("\u5e74\u5316\u6536\u76ca\u7387",    _score_annual_return,  0.04, "\u57fa\u91d1\u6210\u7acb\u4ee5\u6765\u5e74\u5316\u56de\u62a5"),
+    ("\u673a\u6784\u6301\u6709\u6bd4\u4f8b", _score_institutional,  0.02, "\u4e13\u4e1a\u673a\u6784\u8ba4\u53ef\u5ea6\uff0c\u5c0f\u5e45\u53c2\u8003"),
 ]
 
 
+def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
+    """"""
+    cfg_dims = CFG.get("scoring", {}).get("dims", [])
+    if not cfg_dims:
+        return _DEFAULT_DIMS
+    result = []
+    for d in cfg_dims:
+        if not d.get("enabled", True):
+            continue
+        name = d.get("name", "")
+        key = d.get("key", "")
+        weight = d.get("weight", 0)
+        desc = d.get("desc", "")
+        func = _SCORE_FUNCS.get(key)
+        if func and weight > 0:
+            result.append((name, func, weight, desc))
+    if not result:
+        return _DEFAULT_DIMS
+    total = sum(w for _,_,w,_ in result)
+    if abs(total - 1.0) > 0.001:
+        result = [(n, f, w/total, d) for n,f,w,d in result]
+    return result
+
+
+SCORE_DIMS = _load_score_dims()
 def _calc_score(d: dict) -> float:
     """
     计算基金综合评分 (0-100)

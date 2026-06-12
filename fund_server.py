@@ -15,6 +15,7 @@ import urllib.request
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
+from config import CFG
 from config import api_url
 
 # ── 后台任务管理 ──
@@ -63,6 +64,7 @@ def _spawn_briefing() -> None:
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
+_CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
 _PORT = 8080
 
 
@@ -243,6 +245,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive}))
             return
 
+        if parsed.path == "/api/dims":
+            dims = CFG.get("scoring", {}).get("dims", [])
+            self._send(*_json_response({"ok": True, "dims": dims}))
+            return
+
         if parsed.path == "/api/briefing":
             path = os.path.join(HISTORY_DIR, ".briefing_fund.html")
             if os.path.exists(path):
@@ -356,6 +363,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "removed": removed,
                 "total": len(funds),
             }))
+            return
+
+        if self.path == "/api/dims":
+            try:
+                dims = body.get("dims", [])
+                if not dims:
+                    self._send(*_json_response({"ok": False, "error": "dims 不能为空"}, 400))
+                    return
+                cfg = json.load(open(_CONFIG_PATH, encoding="utf-8"))
+                if "scoring" not in cfg:
+                    cfg["scoring"] = {}
+                cfg["scoring"]["dims"] = dims
+                json.dump(cfg, open(_CONFIG_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+                # 重新加载评分模块使新配置生效
+                import importlib
+                import fund_scoring
+                importlib.reload(fund_scoring)
+                self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if self.path == "/api/recommend":
