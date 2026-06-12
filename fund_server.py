@@ -234,11 +234,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
-        try:
-            body = json.loads(raw)
-        except json.JSONDecodeError:
-            self._send(*_json_response({"ok": False, "error": "JSON 格式错误"}, 400))
-            return
+        body = {}
+        if raw:
+            try:
+                body = json.loads(raw)
+            except json.JSONDecodeError:
+                self._send(*_json_response({"ok": False, "error": "JSON 格式错误"}, 400))
+                return
 
         if self.path == "/api/add":
             codes = body.get("codes", [])
