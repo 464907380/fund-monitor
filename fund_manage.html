@@ -512,7 +512,7 @@ async function loadBriefing() {
 
 async function runBriefing() {
   const btn = document.getElementById('briefBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中（约 2 分钟）'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中'; }
   const r = await fetch(API + '/api/briefing', { method: 'POST' });
   const d = await r.json();
   if (d.ok) {
@@ -531,13 +531,17 @@ async function runBriefing() {
 }
 
 // 页面加载时检查晚报是否正在生成
-(async function checkBriefRunning() {
+async function checkBriefRunning() {
   const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
   if (hb.alive && hb.alive['fund_briefing']) {
     const btn = document.getElementById('briefBtn');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中（约 2 分钟）'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中'; }
+    // 仍在运行，30 秒后自动刷新状态
+    setTimeout(checkBriefRunning, 30000);
   }
-})();
+}
+
+checkBriefRunning();
 
 loadBriefing();
 </script>
