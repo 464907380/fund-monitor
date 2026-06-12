@@ -186,12 +186,8 @@ def main() -> None:
         print("  推荐任务完成")
 
 
-if __name__ == "__main__":
-    main()
-
-
 def _filter_candidates(rows: list) -> list:
-    """剔除近1年收益为负的基金以及收益过低（<5%）的债券型基金"""
+    """剔除近1年收益为负或低于5%的基金（多为债券基金混入）"""
     candidates = []
     for r in rows:
         try:
@@ -250,3 +246,7 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return scored
+
+
+if __name__ == "__main__":
+    main()
