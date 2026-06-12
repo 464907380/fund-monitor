@@ -401,7 +401,7 @@ def _format_recommend_rankings() -> list[str]:
     lines.append("  ── 排名依据：从全市场 200 只基金中精选 TOP 10 ──")
     lines.append("  📡 数据源：天天基金排行 API（https://fund.eastmoney.com）")
     lines.append("     拉取全市场近 1 年收益排行前 200 名（不限类型），")
-    lines.append("     剔除年化 <20% 的基金，其余全部进入深度评分。")
+    lines.append("     剔除近 1 年收益 <20% 的基金，其余全部进入深度评分。")
     lines.append("     每只基金独立拉取净值数据，从净值数组真实计算各项指标。")
     num = len(SCORE_DIMS)
     lines.append(f"  🧮 评分方式：{num} 个维度加权打分（0-100 分），权重合计 100%")
