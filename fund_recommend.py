@@ -50,8 +50,11 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}",
     ]
     for url in urls:
-        data = fetch(url)
-        if not data:
+        try:
+            req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                data = r.read().decode("utf-8")
+        except Exception:
             continue
         try:
             raw = data.replace("var rankData = ", "", 1).rstrip(";")
