@@ -255,9 +255,7 @@ h1 {
       <span class="count" id="briefDate" style="font-size:12px;">未生成</span>
     </div>
     <div class="divider"></div>
-    <div id="briefContent" style="padding:0;">
-      <iframe id="briefFrame" src="/api/briefing" style="width:100%;border:none;border-radius:4px;background:#1a1a1a;min-height:200px;" onload="resizeBriefFrame()"></iframe>
-    </div>
+    <div id="briefContent" style="padding:0;font-size:12px;color:#ccc;"></div>
     <div style="padding:12px 4px 0;text-align:center;">
       <button onclick="runBriefing()" id="briefBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;transition:all 0.15s;">📊 生成晚报</button>
     </div>
@@ -516,11 +514,16 @@ async function loadHeartbeat() {
 }
 setInterval(loadFeatures, 30000);
 
-function resizeBriefFrame() {
-  const frame = document.getElementById('briefFrame');
-  try {
-    frame.style.height = frame.contentWindow.document.body.scrollHeight + 50 + 'px';
-  } catch(e) {}
+async function loadBriefing() {
+  const r = await fetch(API + '/api/briefing', { method: 'GET' });
+  if (!r.ok) return;
+  const html = await r.text();
+  const el = document.getElementById('briefContent');
+  if (el) el.innerHTML = html;
+  // 从内容中提取日期更新右上角
+  const dateMatch = html.match(/(\d{4}-\d{2}-\d{2})/);
+  const dateEl = document.getElementById('briefDate');
+  if (dateEl) dateEl.textContent = dateMatch ? dateMatch[1] : '已生成';
 }
 
 async function runBriefing() {
@@ -529,12 +532,12 @@ async function runBriefing() {
   const r = await fetch(API + '/api/briefing', { method: 'POST' });
   const d = await r.json();
   if (d.ok) {
-    // 轮询心跳，生成完后刷新 iframe
+    // 轮询心跳，生成完后刷新展示
     const poll = setInterval(async () => {
       const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
       if (!hb.alive || !hb.alive['fund_briefing']) {
         clearInterval(poll);
-        document.getElementById('briefFrame').src = '/api/briefing?' + Date.now();
+        loadBriefing();
         if (btn) { btn.disabled = false; btn.textContent = '📊 生成晚报'; }
       }
     }, 5000);
@@ -552,6 +555,7 @@ async function runBriefing() {
   }
 })();
 
+loadBriefing();
 </script>
 </body>
 </html>

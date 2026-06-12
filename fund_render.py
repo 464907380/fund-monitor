@@ -212,6 +212,18 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         web = web.replace('bgcolor="#000000"', '')
         web = web.replace('padding:20px 10px;', 'padding:0;')
         web = re.sub(r'<tr><td[^>]*>Fund Monitor[^<]*</td></tr>', '', web)
+        # 去掉文档包装（<html>/<head>/<body> 等），纯片段更干净
+        web = re.sub(r'^<!DOCTYPE[^>]*>', '', web)
+        web = re.sub(r'<html[^>]*>', '', web)
+        web = re.sub(r'</html>', '', web)
+        web = re.sub(r'<head>.*?</head>', '', web, flags=re.DOTALL)
+        web = re.sub(r'<body[^>]*>', '', web)
+        web = re.sub(r'</body>', '', web)
+        web = re.sub(r'<center>', '', web)
+        web = re.sub(r'</center>', '', web)
+        # 去掉空行
+        web = re.sub(r'\n{3,}', '\n\n', web)
+        web = web.strip()
         with open(_BRIEFING_FILE, "w", encoding="utf-8") as f:
             f.write(web)
         log.info("晚报已保存到 %s", _BRIEFING_FILE)
