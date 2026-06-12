@@ -14,7 +14,7 @@ import urllib.request
 # 同目录模块
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, is_heartbeat_alive
+from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat
 from config import api_url
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -194,7 +194,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/heartbeat":
             hb = read_all_heartbeats()
-            self._send(*_json_response({"ok": True, "heartbeats": hb}))
+            # 附加 alive 状态（含超时判断），供前端使用
+            alive = {k: is_heartbeat_alive(k, 1800) for k in hb}
+            self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive}))
+            return
             return
 
         if parsed.path == "/api/recommend":
@@ -293,12 +296,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path == "/api/recommend":
             try:
                 script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
+                # 先写心跳确保前端刷新时能检测到，子进程启动后也会覆盖此文件
+                write_heartbeat("fund_recommend")
                 subprocess.Popen([sys.executable, script],
                                  cwd=_SCRIPT_DIR,
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL)
-                self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 4 分钟"}))
+                self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
             except Exception as e:
+                clear_heartbeat("fund_recommend")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 

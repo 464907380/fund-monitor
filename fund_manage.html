@@ -524,9 +524,11 @@ async function loadRecommend() {
   const btn = document.getElementById('recBtn');
   // 检查心跳是否存活（推荐正在运行中）
   const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
-  const running = hb.heartbeats && hb.heartbeats['fund_recommend'];
+  const running = hb.alive && hb.alive['fund_recommend'];
   if (running) {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 16 分钟）'; }
+    // 仍在运行，30 秒后自动刷新状态
+    setTimeout(loadRecommend, 30000);
   } else {
     if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
   }
