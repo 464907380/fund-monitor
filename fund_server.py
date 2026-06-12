@@ -9,6 +9,7 @@ import sys
 import subprocess
 import http.server
 import threading
+import time
 import urllib.parse
 import urllib.request
 
@@ -37,6 +38,7 @@ def _spawn_recommend() -> None:
 
     def _wait_and_cleanup() -> None:
         _recommend_proc.wait()
+        time.sleep(30)
         clear_heartbeat("fund_recommend")
 
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
@@ -56,6 +58,8 @@ def _spawn_briefing() -> None:
 
     def _wait_and_cleanup() -> None:
         _briefing_proc.wait()
+        # 至少保持 30 秒心跳，防止非交易日进程快速退出导致前端刷新检测不到
+        time.sleep(30)
         clear_heartbeat("fund_briefing")
 
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
