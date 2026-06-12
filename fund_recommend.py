@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from fund_watch import get, log, _calc_score, SCORE_DIMS, fetch
+    from fund_utils import write_heartbeat, clear_heartbeat
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
     sys.exit(1)
@@ -142,82 +143,50 @@ def _print_results(results: list[dict], show_detail: bool = True) -> None:
 
 
 def main() -> None:
-    # ── --load: 查看上次结果 ──
-    if "--load" in sys.argv:
-        results = _load_result()
-        if results:
-            _print_results(results)
-            print("\n💡 加入监控: python fund_recommend.py --add 基金代码")
-        else:
-            print("❌ 没有找到上次推荐结果，请先运行 python fund_recommend.py")
-        return
-
-    # ── --add: 一键加入监控 ──
-    if "--add" in sys.argv:
-        try:
-            idx = sys.argv.index("--add")
-            code = sys.argv[idx + 1]
-            if not re.fullmatch(r"\d{6}", code):
-                print("❌ 基金代码格式错误，应为6位数字")
-                return
-            results = _load_result()
-            name = ""
-            if results:
-                for r in results:
-                    if r["code"] == code:
-                        name = r["name"]
-                        break
-            _add_to_fund_list(code, name)
-        except (IndexError, ValueError):
-            print("用法: python fund_recommend.py --add 基金代码")
-        return
-
     # ── 正常推荐流程 ──
-    print("=" * 60)
-    print("🔍 基金优选推荐工具 — 全市场 TOP 200 深度评分")
-    print("=" * 60)
+    write_heartbeat("fund_recommend")
+    try:
+        print("=" * 60)
+        print("🔍 基金优选推荐工具 — 全市场 TOP 200 深度评分")
+        print("=" * 60)
 
-    est_min = _TOP * 2 // 60
+        est_min = _TOP * 2 // 60
 
-    print(f"\n📥 获取全市场基金排行 (TOP {_TOP})...")
-    rows = _fetch_rank_list(_TOP)
-    print(f"   获取到 {len(rows)} 只基金")
+        print(f"\n📥 获取全市场基金排行 (TOP {_TOP})...")
+        rows = _fetch_rank_list(_TOP)
+        print(f"   获取到 {len(rows)} 只基金")
 
-    candidates = _filter_candidates(rows)
-    print(f"   剔除负收益后: {len(candidates)} 只全部进入深度评分")
-    print(f"   ⏱ 预计耗时约 {est_min} 分钟\n")
+        candidates = _filter_candidates(rows)
+        print(f"   剔除负收益后: {len(candidates)} 只全部进入深度评分")
+        print(f"   ⏱ 预计耗时约 {est_min} 分钟\n")
 
-    scored = _run_scoring_pipeline(candidates)
+        scored = _run_scoring_pipeline(candidates)
 
-    # ── 保存并输出 ──
-    _save_result(scored)
-    print(f"\n🏆 基金推荐 TOP {SHOW_TOP}  (12 维评分)")
-    print("=" * 90)
+        # ── 保存并输出 ──
+        _save_result(scored)
+        print(f"\n🏆 基金推荐 TOP {SHOW_TOP}  (12 维评分)")
+        print("=" * 90)
 
-    medals = ["🥇", "🥈", "🥉"]
-    for i, item in enumerate(scored[:SHOW_TOP], 1):
-        badge = medals[i - 1] if i <= 3 else f" {i}."
-        print(f"{badge} {item[2]} ({item[1]}) — {item[0]:.1f}分  年化{item[3]:.1f}%")
+        medals = ["🥇", "🥈", "🥉"]
+        for i, item in enumerate(scored[:SHOW_TOP], 1):
+            badge = medals[i - 1] if i <= 3 else f" {i}."
+            print(f"{badge} {item[2]} ({item[1]}) — {item[0]:.1f}分  年化{item[3]:.1f}%")
 
-    # 详细评分表 — 12 维评分全透明
-    print()
-    parts = [f"{name} {int(w*100)}%" for name, _, w, _ in SCORE_DIMS]
-    print("  评分维度说明: " + " | ".join(parts))
-    print()
-    h = (f"{'排名':<4} {'代码':<7} {'评分':<6} {'年化%':<7} {'近1月':<8} {'近3月':<8} {'近1年':<8} "
-         f"{'夏普':<6} {'索提诺':<6} {'回撤':<6}")
-    print(h)
-    print("-" * 72)
-    medals2 = ["🥇", "🥈", "🥉"]
-    for i, item in enumerate(scored[:SHOW_TOP], 1):
-        b = medals2[i-1] if i <= 3 else f" {i}."
-        print(f"{b:<4} {item[1]:<7} {item[0]:<6.1f} {item[3]:<7.1f} "
-              f"{item[4]:<8s} {item[5]:<8s} {item[6]:<8s} "
-              f"{item[7]:<6.2f} {item[8]:<6.2f} {item[9]:<6.1f}")
+        # 详细评分表
+        print()
+        parts = [f"{name} {int(w*100)}%" for name, _, w, _ in SCORE_DIMS]
+        print("  " + " | ".join(parts))
+        print()
+        for i, (name, _, weight, desc) in enumerate(SCORE_DIMS):
+            print(f"  {i+1}. {name} ({int(weight*100)}%)")
+            print(f"      -> {desc}")
 
-    print()
-    print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
-    print("   查看上次结果: python fund_recommend.py --load")
+        print()
+        print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
+        print("   查看上次结果: python fund_recommend.py --load")
+    finally:
+        clear_heartbeat("fund_recommend")
+        clear_heartbeat("fund_recommend")
 
 
 if __name__ == "__main__":

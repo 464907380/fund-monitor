@@ -522,7 +522,14 @@ async function loadRecommend() {
   const r = await fetch(API + '/api/recommend');
   const d = await r.json();
   const btn = document.getElementById('recBtn');
-  if (btn) btn.disabled = false;
+  // 检查心跳是否存活（推荐正在运行中）
+  const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
+  const running = hb.heartbeats && hb.heartbeats['fund_recommend'];
+  if (running) {
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 4 分钟）'; }
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+  }
   if (!d.ok) return;
   const el = document.getElementById('recList');
   const info = document.getElementById('recInfo');
