@@ -11,7 +11,7 @@ import datetime
 import os
 import urllib.request
 from fund_utils import send_wechat, log, fetch_bytes, send_mail_html, parse_sina_csv, write_heartbeat, clear_heartbeat
-from config import get_secret as _get_secret
+from config import get_secret as _get_secret, api_url
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
 _VOLUME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".volume_history.json")
@@ -73,7 +73,7 @@ _GLOBAL_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".
 
 def fetch_sina(code: str) -> dict | None:
     """从新浪财经获取A股指数"""
-    url = f"https://hq.sinajs.cn/list={code}"
+    url = api_url("sina_hq", code=code)
     data = fetch_bytes(url, headers={
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://finance.sina.com.cn",
@@ -419,7 +419,7 @@ def build_briefing() -> str:
 def _fetch_sentiment() -> dict | None:
     """获取市场成交额（含历史对比数据），不足7天时从腾讯回填"""
     try:
-        url = "https://hq.sinajs.cn/list=sh000001,sz399001"
+        url = api_url("sina_volume")
         data = fetch_bytes(url, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://finance.sina.com.cn",
@@ -484,7 +484,7 @@ def _fetch_sentiment() -> dict | None:
 def _backfill_volume_history(history: dict, today_amount: float) -> None:
     """从腾讯K线API回填历史成交额（用成交量估算）"""
     try:
-        url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,10,qfq"
+        url = api_url("tencent_kline")
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
         resp = urllib.request.urlopen(req, timeout=10).read()
         j = json.loads(resp)
@@ -566,7 +566,7 @@ def _fetch_market_breadth() -> dict | None:
     """获取涨跌家数（沪深两市合计），收盘后展示上次缓存值"""
     # 先试新浪fields 28/29（交易时段有效）
     try:
-        url = "https://hq.sinajs.cn/list=sh000001"
+        url = api_url("sina_hq", code="sh000001")
         data = fetch_bytes(url, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://finance.sina.com.cn",

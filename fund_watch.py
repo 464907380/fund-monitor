@@ -331,8 +331,8 @@ def _parse_real_time(code: str) -> float | None:
 def _parse_holdings(code: str) -> list[dict] | None:
     """获取前5大持仓明细（使用 csv.reader 处理名称含逗号的情况）"""
     urls = [
-        f"https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=5&year=&month=&rt=0.1",
-        f"https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=5",
+        api_url("fund_holdings", code=code),
+        api_url("fund_holdings", code=code),
     ]
     last_err = None
     for url in urls:
@@ -395,7 +395,7 @@ def _parse_fund_rate(data: str) -> float | None:
 def get(code: str) -> dict:
     """拉取一只基金的全量数据并组装返回"""
     d: dict = {"code": code}
-    data = fetch(f"https://fund.eastmoney.com/pingzhongdata/{code}.js")
+    data = fetch(api_url("fund_pingzhongdata", code=code))
 
     if name := _parse_name(data):
         d["n"] = name

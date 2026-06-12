@@ -15,6 +15,7 @@ import urllib.request
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, is_heartbeat_alive
+from config import api_url
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
@@ -24,7 +25,7 @@ _PORT = 8080
 def _fetch_fund_name(code: str) -> str:
     """从天天基金获取基金名称"""
     try:
-        url = f"https://fund.eastmoney.com/pingzhongdata/{code}.js"
+        url = api_url("fund_pingzhongdata", code=code)
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
             data = r.read().decode("utf-8")
@@ -44,7 +45,7 @@ def _load_fund_index() -> list[dict]:
     if _FUND_INDEX is not None:
         return _FUND_INDEX
     try:
-        url = "https://fund.eastmoney.com/js/fundcode_search.js"
+        url = api_url("fund_search_index")
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15) as r:
             data = r.read().decode("utf-8")

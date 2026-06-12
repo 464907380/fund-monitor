@@ -23,6 +23,7 @@ try:
     from fund_watch import get, log, fetch
     from fund_scoring import _calc_score, SCORE_DIMS
     from fund_utils import write_heartbeat, clear_heartbeat
+    from config import api_url
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
     sys.exit(1)
@@ -39,12 +40,10 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
     sd = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
     ed = datetime.date.today().isoformat()
     urls = [
-        (f"https://fund.eastmoney.com/data/rankhandler.aspx"
-         f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
-         f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1"),
-        (f"https://fund.eastmoney.com/data/rankhandler.aspx"
-         f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
-         f"&sd={sd}&ed={ed}&pi=1&pn={pn}"),
+        api_url("fund_rank") + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
+                              f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1",
+        api_url("fund_rank") + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
+                              f"&sd={sd}&ed={ed}&pi=1&pn={pn}",
     ]
     for url in urls:
         data = fetch(url)

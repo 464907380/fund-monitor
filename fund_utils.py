@@ -15,7 +15,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 import smtplib
 from logging.handlers import RotatingFileHandler
-from config import CFG, get_secret
+from config import CFG, get_secret, api_url
 
 # ── 交易日检测 ──────────────────────────────────
 FIXED_HOLIDAYS = {
@@ -55,7 +55,7 @@ def is_holiday_api(date_str: str) -> bool | None:
         if now_ts - entry.get("ts", 0) < _HOLIDAY_CACHE_TTL:
             return entry["holiday"]
     try:
-        data = fetch(f"https://timor.tech/api/holiday/info/{date_str}")
+        data = fetch(api_url("holiday", date=date_str))
         j = json.loads(data)
         if j.get("code") == 0 and "type" in j.get("type", {}):
             holiday = j["type"]["type"] != 0
@@ -214,8 +214,8 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
     """获取基金实时估算涨跌幅，返回 (基金名, 估算涨跌幅%)"""
     # 主数据源：天天基金
     urls = [
-        f"https://fundgz.1234567.com.cn/js/{code}.js",
-        f"http://fundgz.1234567.com.cn/js/{code}.js",
+        api_url("fund_estimate", code=code),
+        api_url("fund_estimate_fallback", code=code),
     ]
     for url in urls:
         try:

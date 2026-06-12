@@ -47,6 +47,14 @@ def get_secret(name: str, default: str = "") -> str:
     return os.getenv(name, default)
 
 
+def api_url(name: str, **kwargs) -> str:
+    """获取 API URL，支持 {key} 占位符替换"""
+    url = CFG.get("network", {}).get("api", {}).get(name, "")
+    if kwargs:
+        url = url.format(**kwargs)
+    return url
+
+
 def _warn_missing_secrets() -> None:
     """启动时检查密钥配置，缺失时输出警告"""
     missing = []
@@ -102,6 +110,21 @@ _DEFAULTS = {
         "holiday_cache_ttl": 86400,
     },
     "network": {
+        "api": {
+            "fund_pingzhongdata": "https://fund.eastmoney.com/pingzhongdata/{code}.js",
+            "fund_estimate": "https://fundgz.1234567.com.cn/js/{code}.js",
+            "fund_estimate_fallback": "http://fundgz.1234567.com.cn/js/{code}.js",
+            "fund_holdings": "https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=5&year=&month=&rt=0.1",
+            "fund_rank": "https://fund.eastmoney.com/data/rankhandler.aspx",
+            "fund_search_index": "https://fund.eastmoney.com/js/fundcode_search.js",
+            "sina_hq": "https://hq.sinajs.cn/list={code}",
+            "sina_volume": "https://hq.sinajs.cn/list=sh000001,sz399001",
+            "sina_market": "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData",
+            "tencent_kline": "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,10,qfq",
+            "eastmoney_quote": "https://push2.eastmoney.com/api/qt/stock/get",
+            "tencent_realtime": "http://qt.gtimg.cn/q={code}",
+            "holiday": "https://timor.tech/api/holiday/info/{date}",
+        },
         "retry_max": 3,
         "retry_backoff_seconds": [1, 3, 8],
         "cache_ttl_seconds": 300,

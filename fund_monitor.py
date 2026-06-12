@@ -11,7 +11,7 @@ import json
 import os
 import time
 import re
-from config import CFG
+from config import CFG, api_url
 from fund_utils import fetch, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html
 from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
 
@@ -160,7 +160,7 @@ def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
     返回 (股票名称, 涨跌幅%)，失败返回 None。
     """
     # 主数据源：新浪
-    url = f"https://hq.sinajs.cn/list={sina_code}"
+    url = api_url("sina_hq", code=sina_code)
     try:
         data = fetch(url)
         parts = parse_sina_csv(data)
@@ -176,7 +176,7 @@ def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
 
     # 备选：腾讯财经
     try:
-        data = fetch(f"http://qt.gtimg.cn/q={sina_code}")
+        data = fetch(api_url("tencent_realtime", code=sina_code))
         parts = data.split("~")
         if len(parts) > 32 and parts[3]:
             name = parts[1]
