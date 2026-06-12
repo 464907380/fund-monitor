@@ -22,7 +22,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from fund_watch import get, log, fetch
     from fund_scoring import _calc_score, SCORE_DIMS
-    from fund_utils import write_heartbeat, clear_heartbeat
     from config import api_url
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
@@ -144,7 +143,6 @@ def _print_results(results: list[dict], show_detail: bool = True) -> None:
 
 def main() -> None:
     # ── 正常推荐流程 ──
-    write_heartbeat("fund_recommend")
     try:
         print("=" * 60)
         print("🔍 基金优选推荐工具 — 全市场 TOP 500 深度评分")
@@ -185,8 +183,7 @@ def main() -> None:
         print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
         print("   查看上次结果: python fund_recommend.py --load")
     finally:
-        clear_heartbeat("fund_recommend")
-        clear_heartbeat("fund_recommend")
+        print("  推荐任务完成")
 
 
 if __name__ == "__main__":

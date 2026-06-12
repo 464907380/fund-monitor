@@ -8,6 +8,7 @@ import re
 import sys
 import subprocess
 import http.server
+import threading
 import urllib.parse
 import urllib.request
 
@@ -16,6 +17,29 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat
 from config import api_url
+
+# ── 后台任务管理 ──
+_recommend_proc: subprocess.Popen | None = None
+"""推荐子进程引用，防止被 GC/僵尸，同时用于判断是否正在运行"""
+
+
+def _spawn_recommend() -> None:
+    """启动推荐任务，完成后自动清理心跳"""
+    global _recommend_proc
+    script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
+    write_heartbeat("fund_recommend")
+    _recommend_proc = subprocess.Popen(
+        [sys.executable, script],
+        cwd=_SCRIPT_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    def _wait_and_cleanup() -> None:
+        _recommend_proc.wait()
+        clear_heartbeat("fund_recommend")
+
+    threading.Thread(target=_wait_and_cleanup, daemon=True).start()
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
@@ -295,13 +319,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/recommend":
             try:
-                script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
-                # 先写心跳确保前端刷新时能检测到，子进程启动后也会覆盖此文件
-                write_heartbeat("fund_recommend")
-                subprocess.Popen([sys.executable, script],
-                                 cwd=_SCRIPT_DIR,
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL)
+                if _recommend_proc and _recommend_proc.poll() is None:
+                    self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
+                    return
+                _spawn_recommend()
                 self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
             except Exception as e:
                 clear_heartbeat("fund_recommend")
