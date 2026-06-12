@@ -8,7 +8,7 @@ STAGNATION_THRESHOLD = CFG.get("fund_watch", {}).get("stagnation_threshold", 0.0
 STAGNATION_DAYS = CFG.get("fund_watch", {}).get("stagnation_days", 3)
 CONSECUTIVE_DROP_DAYS = CFG.get("fund_watch", {}).get("consecutive_drop_days", 3)
 CONSECUTIVE_DROP_TOTAL = CFG.get("fund_watch", {}).get("consecutive_drop_total", -5)
-DIVIDEND_DROP = CFG.get("fund_watch", {}).get("dividend_drop", -4)
+DIVIDEND_DROP = CFG.get("fund_watch", {}).get("dividend_drop", -5)
 
 
 def check_stagnation(navs: list[dict]) -> str | None:
