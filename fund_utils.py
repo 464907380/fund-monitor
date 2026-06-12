@@ -352,3 +352,14 @@ def read_all_heartbeats() -> dict[str, dict]:
         pass
     return result
 
+
+def is_heartbeat_alive(name: str, timeout: int = 1800) -> bool:
+    """判断心跳是否存活（未超时），timeout=30分钟"""
+    hb = read_heartbeat(name)
+    if hb is None:
+        return False
+    start = hb.get("start")
+    if not start:
+        return False
+    return time.time() - start < timeout
+

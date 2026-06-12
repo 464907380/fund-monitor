@@ -13,7 +13,7 @@ import urllib.request
 # 同目录模块
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats
+from fund_utils import read_all_heartbeats, is_heartbeat_alive
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
@@ -137,13 +137,13 @@ def _check_task_status(taskname: str) -> dict:
 
 
 TASK_DEFS = [
-    {"id": "briefing", "taskname": "全球股市简报", "icon": "🌏", "label": "全球股市简报",
+    {"id": "global_briefing", "taskname": "全球股市简报", "icon": "🌏", "label": "全球股市简报",
      "desc": "A 股：上证指数 · 深证成指 · 创业板指 · 沪深300 · 成交额 · 涨跌家数 | 全球：道琼斯 · 纳斯达克 · 标普500 · 恒生指数 · 日经225 · 韩国KOSPI · 英国富时100 · 德国DAX · 法国CAC40 · 瑞士SMI",
      "time": "交易日 09:30"},
-    {"id": "watch", "taskname": "基金晚报", "icon": "📊", "label": "基金晚报",
+    {"id": "fund_watch", "taskname": "基金晚报", "icon": "📊", "label": "基金晚报",
      "desc": "每只监控基金：当日涨跌 · 近5日 · 近1月/3月/1年收益 | 警报：经理变更 · 规模翻倍 · 净值停滞 · 连跌趋势 · 分红除权 | 附：市场优选基金 TOP 10 排行（12 维评分）",
      "time": "交易日 15:30"},
-    {"id": "monitor", "taskname": "基金盘中监控", "icon": "🔔", "label": "盘中监控",
+    {"id": "fund_monitor", "taskname": "基金盘中监控", "icon": "🔔", "label": "盘中监控",
      "desc": "交易日 9:30–15:00 每 10 分钟轮询 | 基金实时估算涨跌幅 · 基金前 5 大重仓个股实时涨跌 | 双重警报：单次急涨急跌 + 当日累计涨跌（红/黄双阈值）| 节假日自动检测 · 进程崩溃恢复",
      "time": "交易日 9:25 启动"},
 ]
@@ -185,7 +185,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             tasks = []
             for t in TASK_DEFS:
                 info = _check_task_status(t["taskname"])
-                tasks.append({**t, **info})
+                running = is_heartbeat_alive(t["id"], 1800)
+                tasks.append({**t, **info, "running": running})
             self._send(*_json_response({"ok": True, "tasks": tasks}))
             return
 

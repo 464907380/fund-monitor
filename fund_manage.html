@@ -439,15 +439,16 @@ async function loadFeatures() {
   if (!d.ok) return;
   const el = document.getElementById('features');
   el.innerHTML = d.tasks.map(t => {
-    const statusClass = t.ok === true ? 'ok' : t.ok === false ? 'fail' : 'unknown';
-    const lastInfo = t.last_run ? (t.ok ? '上次成功' : '上次失败') : '尚未运行';
+    const running = t.running;
+    const statusClass = running ? 'ok' : 'unknown';
+    const statusText = running ? '运行中' : (t.last_result === '0' ? '上次成功' : t.last_result ? '上次失败' : '');
     return `
       <div class="feature-row" data-task-id="${t.id}">
         <div class="feature-icon">${t.icon}</div>
         <div class="feature-body">
-          <div class="feature-name">${t.label} <span class="feature-running" style="display:none;font-size:11px;color:#66bb6a;font-weight:600;"></span></div>
+          <div class="feature-name">${t.label}</div>
           <div class="feature-desc">${t.desc || ''}</div>
-          <div class="feature-info">${lastInfo}${t.next_run ? ' · 下次 ' + t.next_run : ''}</div>
+          <div class="feature-info">${statusText}${t.next_run ? ' · 下次 ' + t.next_run : ''}</div>
         </div>
         <div class="feature-meta">
           <span class="feature-time">${t.time}</span>
