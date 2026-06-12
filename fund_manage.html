@@ -526,7 +526,7 @@ async function loadRecommend() {
   const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
   const running = hb.heartbeats && hb.heartbeats['fund_recommend'];
   if (running) {
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 4 分钟）'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 16 分钟）'; }
   } else {
     if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
   }
@@ -541,7 +541,7 @@ async function loadRecommend() {
     return;
   }
   cnt.textContent = d.date ? d.date + ' · ' + d.results.length + ' 只' : d.results.length + ' 只';
-  info.textContent = d.date ? '上次更新：' + d.date + '（运行约 4 分钟）' : '';
+  info.textContent = d.date ? '上次更新：' + d.date + '（运行约 16 分钟）' : '';
   const medals = ['🥇', '🥈', '🥉'];
   el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:1px solid rgba(255,255,255,0.06);">'
     + '<th style="padding:6px 4px;text-align:center;color:#888;">排名</th>'
@@ -569,7 +569,7 @@ async function loadRecommend() {
 
 async function runRecommend() {
   const btn = document.getElementById('recBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 4 分钟）'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 16 分钟）'; }
   const r = await fetch(API + '/api/recommend', { method: 'POST' });
   const d = await r.json();
   if (d.ok) {
