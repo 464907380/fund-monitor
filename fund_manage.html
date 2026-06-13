@@ -733,7 +733,7 @@ async function resetDims() {
   }
 }
 
-(async function checkRecRunning() {
+(async function() {
   const hb2 = await fetch(API + '/api/heartbeat').then(r => r.json());
   if (hb2.alive && hb2.alive['fund_recommend']) {
     document.getElementById('recBtn2').disabled = true;
