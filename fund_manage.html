@@ -282,9 +282,9 @@ h1 {
   </div>
 
   <div class="card" style="padding:12px 20px;display:flex;align-items:center;gap:12px;">
-    <span style="font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009</span>
-    <span style="font-size:12px;color:#666;flex:1;">\u63a8\u8350\u7ed3\u679c\u5df2\u7f13\u5b58\uff0c\u70b9\u201c\u8fd0\u884c\u63a8\u8350\u201d\u91cd\u65b0\u8ba1\u7b97</span>
-    <button onclick="runRecommend()" id="recBtn2" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;transition:all 0.15s;">\u25b6 \u8fd0\u884c\u63a8\u8350</button>
+    <span style="font-size:13px;font-weight:600;color:#ccc;">🏆 市场优选</span>
+    <span style="font-size:12px;color:#666;flex:1;">推荐结果已缓存，点“运行推荐”重新计算</span>
+    <button onclick="runRecommend()" id="recBtn2" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;transition:all 0.15s;">▶ 运行推荐</button>
   </div>
 
 </div>
@@ -693,31 +693,31 @@ async function saveDims() {
   const d = await r.json();
   if (d.ok) {
     document.getElementById('dimsSaveBtn').style.background = 'linear-gradient(135deg,#66bb6a,#43a047)';
-    showMsg('\u2714 \u6743\u91cd\u5df2\u66f4\u65b0', 'ok');
+    showMsg('✔ 权重已更新', 'ok');
     loadDims();
   } else {
-    showMsg('\u2716 ' + (d.error || '\u4fdd\u5b58\u5931\u8d25'), 'fail');
+    showMsg('✖ ' + (d.error || '保存失败'), 'fail');
   }
 }
 
 async function resetDims() {
-  if (!confirm('\u786e\u5b9a\u91cd\u7f6e\u4e3a\u9ed8\u8ba4\u6743\u91cd\u914d\u7f6e\uff1f')) return;
+  if (!confirm('确定重置为默认权重配置？')) return;
   const defaults = [
-    {name:'\u8fd13\u6708\u6536\u76ca',key:'m3',weight:0.12,enabled:true,desc:'\u8fd1\u4e09\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u4e2d\u671f\u8d8b\u52bf'},
-    {name:'\u8fd11\u6708\u6536\u76ca',key:'m1',weight:0.15,enabled:true,desc:'\u8fd1\u4e00\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u6355\u6349\u77ed\u671f\u52a8\u91cf'},
-    {name:'\u8fd11\u5e74\u6536\u76ca',key:'y1',weight:0.09,enabled:true,desc:'\u6700\u8fd1\u4e00\u5e74\u7684\u8868\u73b0\uff0c\u53cd\u6620\u57fa\u91d1\u8fd1\u671f\u8d5a\u94b1\u80fd\u529b'},
-    {name:'\u4e0a\u884c\u80dc\u7387',key:'win_rate',weight:0.07,enabled:true,desc:'\u8d5a\u94b1\u5929\u6570\u5360\u603b\u4ea4\u6613\u5929\u6570\u7684\u6bd4\u4f8b'},
-    {name:'\u76c8\u4e8f\u6bd4',key:'profit_ratio',weight:0.07,enabled:true,desc:'\u5e73\u5747\u76c8\u5229\u00f7\u5e73\u5747\u4e8f\u635f\uff0c>1\u8bf4\u660e\u8d5a\u6bd4\u4e8f\u591a'},
-    {name:'\u590f\u666e\u6bd4\u7387',key:'sharpe',weight:0.06,enabled:true,desc:'\u6bcf\u627f\u53d7 1 \u4efd\u6ce2\u52a8\u80fd\u6362\u6765\u591a\u5c11\u989d\u5916\u6536\u76ca'},
-    {name:'\u7d22\u63d0\u8bfa\u6bd4\u7387',key:'sortino',weight:0.06,enabled:true,desc:'\u53ea\u8003\u8651\u4e0b\u8dcc\u6ce2\u52a8\uff0c\u66f4\u8d34\u8fd1\u771f\u5b9e\u98ce\u9669\u611f\u53d7'},
-    {name:'\u8fd13\u5e74\u6536\u76ca',key:'sy3',weight:0.07,enabled:true,desc:'\u4ece\u51c0\u503c\u6570\u636e\u53d6\u7ea7750\u4e2a\u4ea4\u6613\u65e5\u7cbe\u786e\u8ba1\u7b97\uff0c\u770b\u7a7f\u8d8a\u725b\u718a\u80fd\u529b'},
-    {name:'\u8fd16\u6708\u6536\u76ca',key:'sy6',weight:0.06,enabled:true,desc:'\u8fd1\u516d\u4e2a\u6708\u8868\u73b0\uff0c\u8865\u5145\u8fd11\u5e74\u7684\u4e2d\u77ed\u671f\u7ef4\u5ea6'},
-    {name:'\u6700\u5927\u56de\u64a4',key:'max_dd',weight:0.10,enabled:true,desc:'\u5386\u53f2\u6700\u5927\u8dcc\u5e45'},
-    {name:'\u4fee\u590d\u7cfb\u6570',key:'recovery',weight:0.04,enabled:true,desc:'\u603b\u6536\u76ca\u00f7\u6700\u5927\u56de\u64a4\uff0c\u8861\u91cf\u8dcc\u4e0b\u53bb\u80fd\u4e0d\u80fd\u6da8\u56de\u6765'},
-    {name:'\u8d39\u7387',key:'rate',weight:0.03,enabled:true,desc:'\u7533\u8d2d\u8d39\u8d8a\u4f4e\u8d8a\u597d'},
-    {name:'\u57fa\u91d1\u89c4\u6a21',key:'scale',weight:0.02,enabled:true,desc:'1~50\u4ebf\u6700\u7406\u60f3\uff0c\u592a\u5c0f\u4e0d\u7075\u6d3b\u3001\u592a\u5927\u96be\u64cd\u4f5c'},
-    {name:'\u5e74\u5316\u6536\u76ca\u7387',key:'annual_return',weight:0.04,enabled:true,desc:'\u57fa\u91d1\u6210\u7acb\u4ee5\u6765\u5e74\u5316\u56de\u62a5'},
-    {name:'\u673a\u6784\u6301\u6709\u6bd4\u4f8b',key:'institutional',weight:0.02,enabled:true,desc:'\u4e13\u4e1a\u673a\u6784\u8ba4\u53ef\u5ea6\uff0c\u5c0f\u5e45\u53c2\u8003'},
+    {name:'近3月收益',key:'m3',weight:0.12,enabled:true,desc:'近三个月涨跌幅，中期趋势'},
+    {name:'近1月收益',key:'m1',weight:0.15,enabled:true,desc:'近一个月涨跌幅，捕捉短期动量'},
+    {name:'近1年收益',key:'y1',weight:0.09,enabled:true,desc:'最近一年的表现，反映基金近期赚钱能力'},
+    {name:'上行胜率',key:'win_rate',weight:0.07,enabled:true,desc:'赚钱天数占总交易天数的比例'},
+    {name:'盈亏比',key:'profit_ratio',weight:0.07,enabled:true,desc:'平均盈利÷平均亏损，>1说明赚比亏多'},
+    {name:'夏普比率',key:'sharpe',weight:0.06,enabled:true,desc:'每承受 1 份波动能换来多少额外收益'},
+    {name:'索提诺比率',key:'sortino',weight:0.06,enabled:true,desc:'只考虑下跌波动，更贴近真实风险感受'},
+    {name:'近3年收益',key:'sy3',weight:0.07,enabled:true,desc:'从净值数据取级750个交易日精确计算，看穿越牛熊能力'},
+    {name:'近6月收益',key:'sy6',weight:0.06,enabled:true,desc:'近六个月表现，补充近1年的中短期维度'},
+    {name:'最大回撤',key:'max_dd',weight:0.10,enabled:true,desc:'历史最大跌幅'},
+    {name:'修复系数',key:'recovery',weight:0.04,enabled:true,desc:'总收益÷最大回撤，衡量跌下去能不能涨回来'},
+    {name:'费率',key:'rate',weight:0.03,enabled:true,desc:'申购费越低越好'},
+    {name:'基金规模',key:'scale',weight:0.02,enabled:true,desc:'1~50亿最理想，太小不灵活、太大难操作'},
+    {name:'年化收益率',key:'annual_return',weight:0.04,enabled:true,desc:'基金成立以来年化回报'},
+    {name:'机构持有比例',key:'institutional',weight:0.02,enabled:true,desc:'专业机构认可度，小幅参考'},
   ];
   const r = await fetch(API + '/api/dims', {
     method: 'POST',
@@ -726,10 +726,10 @@ async function resetDims() {
   });
   const d = await r.json();
   if (d.ok) {
-    showMsg('\u2714 \u5df2\u91cd\u7f6e\u4e3a\u9ed8\u8ba4\u914d\u7f6e', 'ok');
+    showMsg('✔ 已重置为默认配置', 'ok');
     loadDims();
   } else {
-    showMsg('\u2716 ' + (d.error || '\u91cd\u7f6e\u5931\u8d25'), 'fail');
+    showMsg('✖ ' + (d.error || '重置失败'), 'fail');
   }
 }
 
