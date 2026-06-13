@@ -795,7 +795,7 @@ function showScoreDetail(items) {
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u5f97\u5206</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u6743\u91cd</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u8d21\u732e</th></tr></thead><tbody>';
-  var total = 0;
+  var total = 0, weightSum = 0;
   items.forEach(function(item){
     var name = item[0], score = item[1], weight = item[2], value = item[3];
     if (score === null) {
@@ -808,6 +808,7 @@ function showScoreDetail(items) {
     }
     var contrib = (score * weight).toFixed(1);
     total += score * weight;
+    weightSum += weight;
     var valStr = value !== null && value !== undefined ? value : '-';
     if (typeof valStr === 'number') valStr = valStr.toFixed(2);
     html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + name + '</td>'
@@ -816,9 +817,10 @@ function showScoreDetail(items) {
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib + '</td></tr>';
   });
+  var normTotal = weightSum > 0 ? (total / weightSum).toFixed(1) : '0.0';
   html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;" colspan="2">\u5408\u8ba1</td>'
-    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + total.toFixed(1) + '</td>'
-    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">100%</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + normTotal + '</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + (weightSum * 100).toFixed(0) + '%</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + total.toFixed(1) + '</td></tr>'
     + '</tbody></table>'
     + '<button id="__closeScoreBtn" style="margin-top:10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 12px;cursor:pointer;">\u5173\u95ed</button></div>';
