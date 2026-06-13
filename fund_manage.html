@@ -606,8 +606,22 @@ async function loadDims() {
     + '</tbody></table></div>'
     + '<div id="addDimArea" style="padding:8px 4px;text-align:center;"></div>';
   renderAddDimBtn();
+  updateDimsTotal();
 }
 
+function updateDimsTotal() {
+  var total = 0;
+  document.querySelectorAll('#dimsTable tbody input[type=number]').forEach(function(n){ total += parseInt(n.value) || 0; });
+  var el = document.getElementById('dimsTotal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dimsTotal';
+    el.style.cssText = 'text-align:right;padding:4px 4px 8px;font-size:12px;';
+    document.getElementById('addDimArea').before(el);
+  }
+  var color = total === 100 ? '#66bb6a' : '#ef5350';
+  el.innerHTML = '合计: <span style="font-weight:600;color:' + color + ';">' + total + '%</span>';
+}
 function renderAddDimBtn() {
   const area = document.getElementById('addDimArea');
   if (!area) return;
@@ -640,6 +654,7 @@ function doAddDim() {
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
   tbody.appendChild(tr);
   renderAddDimBtn();
+  updateDimsTotal();
   markDimsDirty();
 }
 function removeDim(btn) {
@@ -648,6 +663,7 @@ function removeDim(btn) {
 }
 
 function markDimsDirty() {
+  updateDimsTotal();
   document.getElementById('dimsSaveBtn').style.background = 'linear-gradient(135deg,#ef5350,#e53935)';
 }
 

@@ -248,6 +248,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/api/dims":
             try:
                 dims = json.load(open(_CONFIG_PATH, encoding="utf-8")).get("scoring", {}).get("dims", [])
+                # 归一化权重，让页面展示实际生效的值
+                total = sum(d.get("weight", 0) for d in dims)
+                if total > 0 and abs(total - 1.0) > 0.001:
+                    for d in dims:
+                        d["weight"] = round(d["weight"] / total, 4)
                 self._send(*_json_response({"ok": True, "dims": dims}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))

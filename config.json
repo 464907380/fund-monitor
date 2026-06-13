@@ -116,13 +116,6 @@
         "desc": "历史最大跌幅"
       },
       {
-        "name": "基金规模",
-        "key": "scale",
-        "weight": 0.02,
-        "enabled": true,
-        "desc": "1~50亿最理想，太小不灵活、太大难操作"
-      },
-      {
         "name": "年化收益率",
         "key": "annual_return",
         "weight": 0.04,
@@ -135,6 +128,20 @@
         "weight": 0.02,
         "enabled": true,
         "desc": "专业机构认可度，小幅参考"
+      },
+      {
+        "name": "基金规模",
+        "key": "scale",
+        "weight": 0.05,
+        "enabled": true,
+        "desc": "1~50亿最理想"
+      },
+      {
+        "name": "费率",
+        "key": "rate",
+        "weight": 0.05,
+        "enabled": true,
+        "desc": "申购费"
       }
     ]
   }
