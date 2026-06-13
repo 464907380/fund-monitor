@@ -341,7 +341,7 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
         "索提诺比率": lambda: _fmt(r.get("sortino")),
         "修复系数": lambda: _fmt(r.get("recovery")),
         "近3年收益": lambda: f'{r.get("sy3", 0):.1f}' if isinstance(r.get("sy3"), (int, float)) else str(r.get("sy3", "")),
-        "近6月收益": lambda: r.get("m1", ""),
+        "近6月收益": lambda: f'{r.get("sy6", 0):.1f}' if isinstance(r.get("sy6"), (int, float)) else str(r.get("sy6", "")),
         "波动率": lambda: _fmt(r.get("volatility")),
         "卡玛比率": lambda: _fmt(r.get("calmar")),
         "最大连跌天数": lambda: _fmt(r.get("max_loss_days")),
@@ -375,6 +375,12 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                 d = get(code)
                 if not d.get("n"):
                     continue
+                # 补充日涨跌/近一周收益（get 不计算这些字段）
+                navs = d.get("nav", [])
+                td = d.get("td")
+                if navs and len(navs) >= 2:
+                    if len(navs) >= 5:
+                        d["f5"] = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"
                 score_d = {
                     "annual_return": d.get("annual_return"),
                     "sharpe": d.get("sharpe"),
