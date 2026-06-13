@@ -47,7 +47,8 @@ _BRIEFING_FILE = os.path.join(HISTORY_DIR, ".briefing_fund.html")
 def _pipe_table_to_html(ranking_lines: list[str]) -> str:
     """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
     cp = '<tr><td style="padding:12px 14px;background:#222;border:1px solid #333;border-radius:6px;">'
-    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ccc;">🏆 市场优选基金 TOP 10 （19 维评分）</p>'
+    num_dims = len(SCORE_DIMS)
+    cp += f'<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ccc;">🏆 市场优选基金 TOP 10 （{num_dims} 维评分）</p>'
     in_table = False
     header_done = False
     for line in ranking_lines:
@@ -241,7 +242,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
 
 
 def _web_rich_recommend_table() -> str:
-    """生成推荐 TOP 10 完整 19 维数据 HTML 表格（Web 版）"""
+    """生成推荐 TOP 10 完整维度数据 HTML 表格（Web 版）"""
     data = _load_recommend_data()
     recs = data.get("results", []) if data else []
     if not recs:
@@ -389,7 +390,8 @@ def _format_recommend_rankings() -> list[str]:
             pass
 
     lines.append("")
-    lines.append("🏆 **市场优选基金 TOP 10**  （19 维评分）")
+    num_dims = len(SCORE_DIMS)
+    lines.append(f"🏆 **市场优选基金 TOP 10**  （{num_dims} 维评分）")
     lines.append("")
     lines.append(f"|{'排名':<4}|{'代码':<7}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
     lines.append(f"|:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
