@@ -798,6 +798,14 @@ function showScoreDetail(items) {
   var total = 0;
   items.forEach(function(item){
     var name = item[0], score = item[1], weight = item[2], value = item[3];
+    if (score === null) {
+      html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#888;">' + name + '</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">-</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">\u65e0\u6570\u636e</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">-</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">-</td></tr>';
+      return;
+    }
     var contrib = (score * weight).toFixed(1);
     total += score * weight;
     var valStr = value !== null && value !== undefined ? value : '-';
