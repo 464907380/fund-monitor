@@ -558,6 +558,25 @@ checkBriefRunning();
 
 loadBriefing();
 
+
+var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
+var DIM_INFO = {
+  'y1': {name:'近1年收益',desc:'最近一年的表现'},
+  'm3': {name:'近3月收益',desc:'近三个月涨跌幅'},
+  'm1': {name:'近1月收益',desc:'近一个月涨跌幅'},
+  'sharpe': {name:'夏普比率',desc:'每承受 1 份波动能换来的收益'},
+  'win_rate': {name:'上行胜率',desc:'赚钱天数比例'},
+  'profit_ratio': {name:'盈亏比',desc:'平均盈利/亏损'},
+  'sortino': {name:'索提诺比率',desc:'只考虑下跌波动'},
+  'recovery': {name:'修复系数',desc:'总收益/最大回撤'},
+  'sy6': {name:'近6月收益',desc:'近六个月表现'},
+  'sy3': {name:'近3年收益',desc:'近3年精确计算'},
+  'max_dd': {name:'最大回撤',desc:'历史最大跌幅'},
+  'rate': {name:'费率',desc:'申购费'},
+  'scale': {name:'基金规模',desc:'1~50亿最理想'},
+  'annual_return': {name:'年化收益率',desc:'基金成立以来年化回报'},
+  'institutional': {name:'机构持有比例',desc:'专业机构认可度'},
+};
 async function loadDims() {
   const r = await fetch(API + '/api/dims');
   const d = await r.json();
@@ -566,7 +585,7 @@ async function loadDims() {
   if (!el) return;
   const allKeys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
   const usedKeys = d.dims.map(function(x){ return x.key; });
-  const availKeys = allKeys.filter(function(k){ return usedKeys.indexOf(k) < 0; });
+  
   el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;" id="dimsTable"><thead><tr style="background:#2a2a2a;">'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">开关</th>'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">维度</th>'
@@ -585,34 +604,44 @@ async function loadDims() {
           + '</tr>';
       }).join('')
     + '</tbody></table></div>'
-    + (availKeys.length > 0 ? '<div style="padding:8px 4px;text-align:center;"><button onclick="addDim()" style="background:rgba(255,255,255,0.05);border:1px dashed rgba(255,255,255,0.2);border-radius:6px;color:#888;padding:6px 16px;font-size:12px;cursor:pointer;">+ 添加维度</button></div>' : '');
+    + '<div id="addDimArea" style="padding:8px 4px;text-align:center;"></div>';
+  renderAddDimBtn();
 }
 
-function addDim() {
-  const keys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
-  const names = ['\u8fd11\u5e74\u6536\u76ca','\u8fd13\u6708\u6536\u76ca','\u8fd11\u6708\u6536\u76ca','\u590f\u666e\u6bd4\u7387','\u4e0a\u884c\u80dc\u7387','\u76c8\u4e8f\u6bd4','\u7d22\u63d0\u8bfa\u6bd4\u7387','\u4fee\u590d\u7cfb\u6570','\u8fd16\u6708\u6536\u76ca','\u8fd13\u5e74\u6536\u76ca','\u6700\u5927\u56de\u64a4','\u8d39\u7387','\u57fa\u91d1\u89c4\u6a21','\u5e74\u5316\u6536\u76ca\u7387','\u673a\u6784\u6301\u6709\u6bd4\u4f8b'];
-  const descs = ['\u6700\u8fd1\u4e00\u5e74\u7684\u8868\u73b0','\u8fd1\u4e09\u4e2a\u6708\u6da8\u8dcc\u5e45','\u8fd1\u4e00\u4e2a\u6708\u6da8\u8dcc\u5e45','\u6bcf\u627f\u53d7 1 \u4efd\u6ce2\u52a8\u80fd\u6362\u6765\u7684\u6536\u76ca','\u8d5a\u94b1\u5929\u6570\u6bd4\u4f8b','\u5e73\u5747\u76c8\u5229/\u4e8f\u635f','\u53ea\u8003\u8651\u4e0b\u8dcc\u6ce2\u52a8','\u603b\u6536\u76ca/\u6700\u5927\u56de\u64a4','\u8fd1\u516d\u4e2a\u6708\u8868\u73b0','\u8fd13\u5e74\u7cbe\u786e\u8ba1\u7b97','\u5386\u53f2\u6700\u5927\u8dcc\u5e45','\u7533\u8d2d\u8d39','1~50\u4ebf\u6700\u7406\u60f3',
-'\u57fa\u91d1\u6210\u7acb\u4ee5\u6765\u5e74\u5316\u56de\u62a5','\u4e13\u4e1a\u673a\u6784\u8ba4\u53ef\u5ea6'];
-  var sel = prompt('\u9009\u62e9\u8981\u6dfb\u52a0\u7684\u7ef4\u5ea6:\n' + availKeys.join(', '));
-  if (!sel) return;
-  const allKeys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
+function renderAddDimBtn() {
+  const area = document.getElementById('addDimArea');
+  if (!area) return;
   const rows = document.querySelectorAll('#dimsTable tbody tr');
   const used = [];
-  rows.forEach(function(r){ used.push(r.querySelector('td:nth-child(2) span').textContent); });
-  if (used.indexOf(sel) >= 0) { showMsg('\u8be5\u7ef4\u5ea6\u5df2\u5728\u5217\u8868\u4e2d', 'fail'); return; }
-  var idx2 = allKeys.indexOf(sel);
-  if (idx2 < 0) { showMsg('\u672a\u77e5\u7ef4\u5ea6: ' + sel, 'fail'); return; }
+  rows.forEach(function(r){ const s=r.querySelector('td:nth-child(2) span'); if(s) used.push(s.textContent); });
+  const avail = ALL_DIM_KEYS.filter(function(k){ return used.indexOf(k) < 0; });
+  if (avail.length === 0) {
+    area.innerHTML = '<span style="font-size:11px;color:#555;">已包含所有维度</span>';
+    return;
+  }
+  area.innerHTML = '<select id="addDimSelect" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ccc;padding:4px 8px;font-size:12px;">'
+    + avail.map(function(k){ return '<option value="' + k + '">' + DIM_INFO[k].name + ' (' + k + ')</option>'; }).join('')
+    + '</select> '
+    + '<button onclick="doAddDim()" style="background:rgba(255,255,255,0.05);border:1px dashed rgba(255,255,255,0.2);border-radius:6px;color:#888;padding:6px 16px;font-size:12px;cursor:pointer;">+ 添加</button>';
+}
+
+function doAddDim() {
+  const sel = document.getElementById('addDimSelect');
+  if (!sel) return;
+  const key = sel.value;
+  const info = DIM_INFO[key];
+  if (!info) return;
   const tbody = document.querySelector('#dimsTable tbody');
   const tr = document.createElement('tr');
   tr.innerHTML = '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" checked onchange="markDimsDirty()"></td>'
-    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + names[idx2] + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + sel + '</span></td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + info.name + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + key + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
-    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + descs[idx2] + '</td>'
-    + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">\u2716</button></td>';
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + info.desc + '</td>'
+    + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
   tbody.appendChild(tr);
+  renderAddDimBtn();
   markDimsDirty();
 }
-
 function removeDim(btn) {
   btn.closest('tr').remove();
   markDimsDirty();
