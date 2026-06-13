@@ -81,7 +81,7 @@ def _parse_period_returns(data: str) -> dict:
 
 
 
-def _calc_period_return(full_nav: list[dict], lookback_days: int) -> float | None:
+def _calc_period_return(full_nav: list[dict] | None, lookback_days: int) -> float | None:
     """从净值数据计算指定区间收益(%)，lookback_days≈交易日数"""
     if not full_nav or len(full_nav) < 2:
         return None
@@ -350,6 +350,7 @@ def check(code: str) -> tuple[dict, list[str]]:
     h = load_hist(code)
     alerts: list[str] = []
     name = d.get("n", code)
+    data_ok = "n" in d  # 是否成功获取到网络数据
 
     alerts += _check_manager_and_scale(d, h, name, code)
     alerts += _check_monthly_drop(d, name, code)
@@ -378,6 +379,7 @@ def check(code: str) -> tuple[dict, list[str]]:
         "code": code,
         "name": name,
         "name_short": name[:12],
+        "_nodata": not data_ok,
         "day": day_s,
         "f5": f5,
         "m1": f"{_v:+.1f}%" if (_v := d.get("m1")) is not None else "",

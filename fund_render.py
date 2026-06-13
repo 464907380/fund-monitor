@@ -191,7 +191,7 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
         md_lines.append("")
         md_lines.append("**🚨 警报:**")
         for a in alerts:
-            md_lines.append(f"> {a}")
+            md_lines.append(f"> {_strip_html(a)}")
     return "\n".join(md_lines)
 
 # ── 数据获取 ──────────────────────────────────
