@@ -22,8 +22,9 @@ RUN groupadd -r fundmon && useradd -r -g fundmon -d /app -s /sbin/nologin fundmo
 
 WORKDIR /app
 
-# 复制所有源文件
+# 复制所有源文件（基础监控+评分推荐+管理服务器）
 COPY config.py fund_watch.py fund_monitor.py global_briefing.py fund_utils.py ./
+COPY fund_alerts.py fund_manage.py fund_metrics.py fund_recommend.py fund_render.py fund_scoring.py fund_server.py ./
 COPY config.json fund_list.json ./
 COPY email_template.html ./
 

@@ -21,7 +21,7 @@ from config import api_url
 # ── 后台任务管理 ──
 _recommend_proc: subprocess.Popen | None = None
 _briefing_proc: subprocess.Popen | None = None
-"""晚报子进程引用"""
+_proc_lock = threading.Lock()
 
 
 def _spawn_recommend() -> None:
@@ -29,15 +29,17 @@ def _spawn_recommend() -> None:
     global _recommend_proc
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
     write_heartbeat("fund_recommend")
-    _recommend_proc = subprocess.Popen(
+    proc = subprocess.Popen(
         [sys.executable, script],
         cwd=_SCRIPT_DIR,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    with _proc_lock:
+        _recommend_proc = proc
 
-    def _wait_and_cleanup() -> None:
-        _recommend_proc.wait()
+    def _wait_and_cleanup(p=proc) -> None:
+        p.wait()
         clear_heartbeat("fund_recommend")
 
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
@@ -48,15 +50,17 @@ def _spawn_recommend_and_briefing() -> None:
     global _recommend_proc
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
     write_heartbeat("fund_recommend")
-    _recommend_proc = subprocess.Popen(
+    proc = subprocess.Popen(
         [sys.executable, script],
         cwd=_SCRIPT_DIR,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    with _proc_lock:
+        _recommend_proc = proc
 
-    def _chain() -> None:
-        _recommend_proc.wait()
+    def _chain(p=proc) -> None:
+        p.wait()
         clear_heartbeat("fund_recommend")
         # 推荐完成后自动触发晚报生成（使新权重应用到简报）
         _spawn_briefing()
@@ -69,15 +73,17 @@ def _spawn_briefing() -> None:
     global _briefing_proc
     script = os.path.join(_SCRIPT_DIR, "fund_watch.py")
     write_heartbeat("fund_briefing")
-    _briefing_proc = subprocess.Popen(
+    proc = subprocess.Popen(
         [sys.executable, script],
         cwd=_SCRIPT_DIR,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    with _proc_lock:
+        _briefing_proc = proc
 
-    def _wait_and_cleanup() -> None:
-        _briefing_proc.wait()
+    def _wait_and_cleanup(p=proc) -> None:
+        p.wait()
         clear_heartbeat("fund_briefing")
 
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
@@ -240,31 +246,43 @@ class Handler(http.server.BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(parsed.query)
 
         if parsed.path == "/api/list":
-            funds = _load()
-            self._send(*_json_response({"ok": True, "funds": funds}))
+            try:
+                funds = _load()
+                self._send(*_json_response({"ok": True, "funds": funds}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/api/search":
-            q = params.get("q", [""])[0]
-            results = _search_funds(q)
-            self._send(*_json_response({"ok": True, "results": results}))
+            try:
+                q = params.get("q", [""])[0]
+                results = _search_funds(q)
+                self._send(*_json_response({"ok": True, "results": results}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/api/tasks":
-            tasks = []
-            for t in TASK_DEFS:
-                info = _check_task_status(t["taskname"])
-                running = is_heartbeat_alive(t["id"], 1800)
-                tasks.append({**t, **info, "running": running})
-            self._send(*_json_response({"ok": True, "tasks": tasks}))
+            try:
+                tasks = []
+                for t in TASK_DEFS:
+                    info = _check_task_status(t["taskname"])
+                    running = is_heartbeat_alive(t["id"], 1800)
+                    tasks.append({**t, **info, "running": running})
+                self._send(*_json_response({"ok": True, "tasks": tasks}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/api/heartbeat":
-            hb = read_all_heartbeats()
-            alive = {k: is_heartbeat_alive(k, 1800) for k in hb}
-            brief_path = os.path.join(_SCRIPT_DIR, ".briefing_fund.html")
-            brief_mtime = os.path.getmtime(brief_path) if os.path.exists(brief_path) else 0
-            self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive, "briefing_mtime": brief_mtime}))
+            try:
+                hb = read_all_heartbeats()
+                alive = {k: is_heartbeat_alive(k, 1800) for k in hb}
+                brief_path = os.path.join(_SCRIPT_DIR, ".briefing_fund.html")
+                brief_mtime = os.path.getmtime(brief_path) if os.path.exists(brief_path) else 0
+                self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive, "briefing_mtime": brief_mtime}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/api/dims":
@@ -328,8 +346,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not os.path.exists(path):
             self._send(404, {"Content-Type": "text/plain"}, b"Not Found")
             return
-        with open(path, "rb") as f:
-            data = f.read()
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError as e:
+            self._send(500, {"Content-Type": "text/plain"}, f"Internal error: {e}".encode())
+            return
         ext = os.path.splitext(filename)[1]
         ctype = {
             ".html": "text/html; charset=utf-8",
@@ -339,7 +361,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(200, {"Content-Type": ctype}, data)
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
+        length = 0
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            pass
         raw = self.rfile.read(length)
         body = {}
         if raw:
@@ -350,50 +376,56 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
 
         if self.path == "/api/add":
-            codes = body.get("codes", [])
-            if not isinstance(codes, list):
-                codes = [codes]
-            funds = _load()
-            existing = {f["code"] for f in funds}
-            added = []
-            skipped = []
-            invalid = []
-            for code in codes:
-                code = code.strip()
-                if not re.fullmatch(r"\d{6}", code):
-                    invalid.append(code)
-                elif code in existing:
-                    skipped.append(code)
-                else:
-                    name = _fetch_fund_name(code)
-                    funds.append({"code": code, "name": name})
-                    existing.add(code)
-                    added.append(code)
-            _save(funds)
-            self._send(*_json_response({
-                "ok": True,
-                "added": added,
-                "skipped": skipped,
-                "invalid": invalid,
-                "total": len(funds),
-            }))
+            try:
+                codes = body.get("codes", [])
+                if not isinstance(codes, list):
+                    codes = [codes]
+                funds = _load()
+                existing = {f["code"] for f in funds}
+                added = []
+                skipped = []
+                invalid = []
+                for code in codes:
+                    code = code.strip()
+                    if not re.fullmatch(r"\d{6}", code):
+                        invalid.append(code)
+                    elif code in existing:
+                        skipped.append(code)
+                    else:
+                        name = _fetch_fund_name(code)
+                        funds.append({"code": code, "name": name})
+                        existing.add(code)
+                        added.append(code)
+                _save(funds)
+                self._send(*_json_response({
+                    "ok": True,
+                    "added": added,
+                    "skipped": skipped,
+                    "invalid": invalid,
+                    "total": len(funds),
+                }))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if self.path == "/api/remove":
-            codes = body.get("codes", [])
-            if not isinstance(codes, list):
-                codes = [codes]
-            funds = _load()
-            before = len(funds)
-            remove_set = set(codes)
-            removed = [f["code"] for f in funds if f["code"] in remove_set]
-            funds = [f for f in funds if f["code"] not in remove_set]
-            _save(funds)
-            self._send(*_json_response({
-                "ok": True,
-                "removed": removed,
-                "total": len(funds),
-            }))
+            try:
+                codes = body.get("codes", [])
+                if not isinstance(codes, list):
+                    codes = [codes]
+                funds = _load()
+                before = len(funds)
+                remove_set = set(codes)
+                removed = [f["code"] for f in funds if f["code"] in remove_set]
+                funds = [f for f in funds if f["code"] not in remove_set]
+                _save(funds)
+                self._send(*_json_response({
+                    "ok": True,
+                    "removed": removed,
+                    "total": len(funds),
+                }))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if self.path == "/api/dims":
@@ -420,9 +452,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/recommend":
             try:
-                if _recommend_proc and _recommend_proc.poll() is None:
-                    self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
-                    return
+                with _proc_lock:
+                    if _recommend_proc and _recommend_proc.poll() is None:
+                        self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
+                        return
                 _spawn_recommend()
                 self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
             except Exception as e:
@@ -432,9 +465,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/briefing":
             try:
-                if _briefing_proc and _briefing_proc.poll() is None:
-                    self._send(*_json_response({"ok": False, "error": "晚报生成任务正在运行中"}))
-                    return
+                with _proc_lock:
+                    if _briefing_proc and _briefing_proc.poll() is None:
+                        self._send(*_json_response({"ok": False, "error": "晚报生成任务正在运行中"}))
+                        return
                 _spawn_briefing()
                 self._send(*_json_response({"ok": True, "message": "晚报生成已启动，约需 2 分钟"}))
             except Exception as e:

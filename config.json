@@ -62,14 +62,14 @@
       {
         "name": "上行胜率",
         "key": "win_rate",
-        "weight": 0.06,
+        "weight": 0.05,
         "enabled": true,
         "desc": "赚钱天数占总交易天数的比例"
       },
       {
         "name": "盈亏比",
         "key": "profit_ratio",
-        "weight": 0.06,
+        "weight": 0.05,
         "enabled": true,
         "desc": "平均盈利÷平均亏损，>1说明赚比亏多"
       },
@@ -111,7 +111,7 @@
       {
         "name": "最大回撤",
         "key": "max_dd",
-        "weight": 0.08,
+        "weight": 0.1,
         "enabled": true,
         "desc": "历史最大跌幅"
       },
@@ -132,14 +132,14 @@
       {
         "name": "基金规模",
         "key": "scale",
-        "weight": 0.05,
+        "weight": 0.03,
         "enabled": true,
         "desc": "1~50亿最理想"
       },
       {
         "name": "费率",
         "key": "rate",
-        "weight": 0.03,
+        "weight": 0.02,
         "enabled": true,
         "desc": "申购费"
       },
@@ -153,7 +153,7 @@
       {
         "name": "近2年收益",
         "key": "sy2",
-        "weight": 0.04,
+        "weight": 0.03,
         "enabled": true,
         "desc": "近两年精确收益，填补中期维度"
       },

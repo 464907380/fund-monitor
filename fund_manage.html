@@ -317,6 +317,11 @@ function showMsg(text, type) {
   setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 
+function htmlEscape(s) {
+  if (typeof s !== 'string') return s;
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 async function loadList() {
   const r = await fetch(API + '/api/list');
   const d = await r.json();
@@ -331,15 +336,17 @@ function render() {
     el.innerHTML = '<div class="empty">暂无监控基金</div>';
     return;
   }
-  el.innerHTML = funds.map(f => `
-    <div class="fund-row">
+  el.innerHTML = funds.map(f => {
+    const name = htmlEscape(f.name || '');
+    const code = htmlEscape(f.code || '');
+    return `<div class="fund-row">
       <div class="info">
-        <span class="name">${f.name || f.code}</span>
-        <span class="code">${f.name ? f.code : ''}</span>
+        <span class="name">${name || code}</span>
+        <span class="code">${name ? code : ''}</span>
       </div>
-      <button class="del-btn" onclick="openModal('${f.code}', '${(f.name || '').replace(/'/g,"\\'")}')">删除</button>
-    </div>
-  `).join('');
+      <button class="del-btn" onclick="openModal('${htmlEscape(f.code)}', '${htmlEscape(f.name || '')}')">删除</button>
+    </div>`;
+  }).join('');
 }
 
 async function addFunds() {
@@ -614,9 +621,9 @@ async function loadDims() {
         const pct = Math.round(dim.weight * 100);
         return '<tr>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" ' + (dim.enabled !== false ? 'checked' : '') + ' onchange="markDimsDirty()"></td>'
-          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + dim.name + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + dim.key + '</span></td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + htmlEscape(dim.key) + '</span></td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
-          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + dim.desc + '</td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(dim.desc) + '</td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
           + '</tr>';
       }).join('')
@@ -665,9 +672,9 @@ function doAddDim() {
   const tbody = document.querySelector('#dimsTable tbody');
   const tr = document.createElement('tr');
   tr.innerHTML = '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" checked onchange="markDimsDirty()"></td>'
-    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + info.name + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + key + '</span></td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(info.name) + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + htmlEscape(key) + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
-    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + info.desc + '</td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(info.desc) + '</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
   tbody.appendChild(tr);
   renderAddDimBtn();
