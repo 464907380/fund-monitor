@@ -414,11 +414,11 @@ def _format_recommend_rankings() -> list[str]:
     num = len(SCORE_DIMS)
     lines.append(f"  🧮 评分方式：{num} 个维度加权打分（0-100 分），权重合计 100%")
     lines.append("")
-    medals_cn = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟","1️⃣1️⃣","1️⃣2️⃣","1️⃣3️⃣","1️⃣4️⃣","1️⃣5️⃣"]
+    medals_cn = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟",
+                 "1️⃣1️⃣","1️⃣2️⃣","1️⃣3️⃣","1️⃣4️⃣","1️⃣5️⃣","1️⃣6️⃣","1️⃣7️⃣","1️⃣8️⃣","1️⃣9️⃣","2️⃣0️⃣"]
     for i, (name, fn, weight, desc) in enumerate(SCORE_DIMS):
         badge = medals_cn[i] if i < len(medals_cn) else f"  {i+1}."
-        lines.append(f"  {badge} {name}（权重 {int(weight*100)}%）")
-        lines.append(f"      → {desc}")
+        lines.append(f"  {badge} {name}（{int(weight*100)}%）— {desc}")
 
     return lines
 
