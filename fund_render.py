@@ -309,46 +309,6 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         web = re.sub(r'\n{3,}', '\n\n', web)
         web = web.strip()
         # 注入评分明细弹窗 JS
-        modal_js = '''
-<script>
-function showScoreDetail(items) {
-  var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;">'
-    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">\u7ef4\u5ea6\u8bc4\u5206\u660e\u7ec6</div>'
-    + '<table style="width:100%;border-collapse:collapse;">'
-    + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">\u7ef4\u5ea6</th>'
-    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u5f97\u5206</th>'
-    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u6743\u91cd</th>'
-    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u8d21\u732e</th></tr></thead><tbody>';
-  var total = 0;
-  items.forEach(function(item){
-    var name = item[0], score = item[1], weight = item[2];
-    var contrib = (score * weight).toFixed(1);
-    total += score * weight;
-    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + name + '</td>'
-      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350') + ';">' + score.toFixed(1) + '</td>'
-      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
-      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib + '</td></tr>';
-  });
-  html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;">\u5408\u8ba1</td>'
-    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + total.toFixed(1) + '</td>'
-    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">100%</td>'
-    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + total.toFixed(1) + '</td></tr>'
-    + '</tbody></table>'
-    + '<button id="__closeScoreBtn" style="margin-top:10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 12px;cursor:pointer;">\u5173\u95ed</button></div>';
-  var el = document.getElementById("scoreDetailModal");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "scoreDetailModal";
-    document.body.appendChild(el);
-  }
-  el.innerHTML = html;
-  var btn = document.getElementById('__closeScoreBtn');
-  if (btn) btn.onclick = function(){ el.style.display = 'none'; };
-  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;max-width:500px;width:90%;";
-}
-</script>
-'''
-        web += modal_js
         tmp_path = _BRIEFING_FILE + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(web)
