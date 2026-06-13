@@ -458,7 +458,7 @@ def test_calc_nav_metrics():
 
 def test_calc_score_transparent():
     """透明评分系统计算（12 维度）"""
-    from fund_watch import _calc_score
+    from fund_scoring import _calc_score
 
     # 一只各项指标都比较优秀的基金
     d = {

@@ -15,7 +15,7 @@ from config import CFG, api_url
 from config import get_secret as _get_secret
 from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, \
     _color_inline, _strip_html, _send_smtp, send_wechat
-from fund_scoring import SCORE_DIMS, _calc_score, calc_score_detail, _rank_percentile_str
+from fund_scoring import SCORE_DIMS, calc_score_detail, _rank_percentile_str
 from fund_metrics import _calc_nav_metrics
 from fund_alerts import check_stagnation, check_consecutive_drop, check_dividend, \
     STAGNATION_THRESHOLD, STAGNATION_DAYS, CONSECUTIVE_DROP_DAYS, CONSECUTIVE_DROP_TOTAL, DIVIDEND_DROP
@@ -456,7 +456,7 @@ def main() -> None:
                 "calmar": r.get("_calmar"),
                 "max_loss_days": r.get("_max_loss_days"),
             }
-            r["score"], r["_score_detail"] = calc_score_detail(d)
+            r["score"], r["_score_detail"], r["_skipped_weight"] = calc_score_detail(d)
     
         rows = raw_rows
     
