@@ -303,8 +303,10 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         web += _web_rich_recommend_table()
         web = re.sub(r'\n{3,}', '\n\n', web)
         web = web.strip()
-        with open(_BRIEFING_FILE, "w", encoding="utf-8") as f:
+        tmp_path = _BRIEFING_FILE + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(web)
+        os.replace(tmp_path, _BRIEFING_FILE)
         log.info("晚报已保存到 %s (%d chars)", _BRIEFING_FILE, len(web))
     except OSError as e:
         log.warning("保存晚报失败: %s", e)

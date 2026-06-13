@@ -286,9 +286,11 @@ def load_hist(code: str) -> dict:
 def save_hist(code: str, h: dict) -> None:
     _validate_fund_code(code)
     path = os.path.join(HISTORY_DIR, f".fw_{code}.json")
+    tmp_path = path + ".tmp"
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(h, f, ensure_ascii=False)
+        os.replace(tmp_path, path)
     except OSError as e:
         log.warning("保存历史数据失败 %s: %s", code, e)
 

@@ -2,9 +2,12 @@
 基金评分模块 — 12 维评分模型
 """
 # mypy: ignore-errors
+import logging
 import math
 from config import CFG
 from typing import Callable
+
+log = logging.getLogger(__name__)
 
 
 # ── 单项评分函数（每项 0-100 分） ──────────────
@@ -14,7 +17,7 @@ def _score_annual_return(d: dict) -> float:
     ann_ret = d.get("annual_return")
     if ann_ret is None:
         return 0.0
-    if ann_ret >= 30:   return 90 + (ann_ret - 30) / 30 * 10
+    if ann_ret >= 30:   return min(100, 90 + (ann_ret - 30) / 30 * 10)
     elif ann_ret >= 15:  return 60 + (ann_ret - 15) / 15 * 30
     elif ann_ret >= 5:   return 20 + (ann_ret - 5) / 10 * 40
     elif ann_ret >= 0:   return ann_ret / 5 * 20
@@ -103,7 +106,7 @@ def _score_sy6(d: dict) -> float:
     sy6 = d.get("sy6")
     if sy6 is None:
         return 0.0
-    if sy6 >= 50:   sy6_score = 90 + (sy6 - 50) / 50 * 10
+    if sy6 >= 50:   sy6_score = min(100, 90 + (sy6 - 50) / 50 * 10)
     elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 30
     elif sy6 >= 0:   sy6_score = 10 + sy6 / 20 * 50
     else:            sy6_score = 0
@@ -329,6 +332,8 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
         weight = d.get("weight", 0)
         desc = d.get("desc", "")
         func = _SCORE_FUNCS.get(key)
+        if func is None and d.get("enabled", True):
+            log.warning("评分维度 key='%s' (%s) 在评分函数中未找到，已跳过", key, name)
         if func and weight > 0:
             result.append((name, func, weight, desc))
     if not result:
