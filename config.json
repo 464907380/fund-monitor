@@ -48,7 +48,7 @@
       {
         "name": "近3月收益",
         "key": "m3",
-        "weight": 0.12,
+        "weight": 0.11,
         "enabled": true,
         "desc": "近三个月涨跌幅，中期趋势"
       },
@@ -104,7 +104,7 @@
       {
         "name": "近1月收益",
         "key": "m1",
-        "weight": 0.15,
+        "weight": 0.14,
         "enabled": true,
         "desc": "近一个月涨跌幅，捕捉短期动量"
       },
@@ -132,14 +132,14 @@
       {
         "name": "基金规模",
         "key": "scale",
-        "weight": 0.05,
+        "weight": 0.06,
         "enabled": true,
         "desc": "1~50亿最理想"
       },
       {
         "name": "费率",
         "key": "rate",
-        "weight": 0.05,
+        "weight": 0.03,
         "enabled": true,
         "desc": "申购费"
       }

@@ -277,8 +277,14 @@ h1 {
     <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;">
       <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;">保存</button>
       <button onclick="resetDims()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;">重置</button>
-      <span style="font-size:11px;color:#555;">· 取消勾选 = 关闭维度，保存后下次评分生效</span>
+      <span style="font-size:11px;color:#555;">\u00b7 \u53d6\u6d88\u52fe\u9009 = \u5173\u95ed\u7ef4\u5ea6\uff0c\u4fdd\u5b58\u540e\u4e0b\u6b21\u8bc4\u5206\u751f\u6548</span>
     </div>
+  </div>
+
+  <div class="card" style="padding:12px 20px;display:flex;align-items:center;gap:12px;">
+    <span style="font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009</span>
+    <span style="font-size:12px;color:#666;flex:1;">\u63a8\u8350\u7ed3\u679c\u5df2\u7f13\u5b58\uff0c\u70b9\u201c\u8fd0\u884c\u63a8\u8350\u201d\u91cd\u65b0\u8ba1\u7b97</span>
+    <button onclick="runRecommend()" id="recBtn2" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;font-weight:600;transition:all 0.15s;">\u25b6 \u8fd0\u884c\u63a8\u8350</button>
   </div>
 
 </div>
@@ -724,6 +730,34 @@ async function resetDims() {
     loadDims();
   } else {
     showMsg('\u2716 ' + (d.error || '\u91cd\u7f6e\u5931\u8d25'), 'fail');
+  }
+}
+
+(async function checkRecRunning() {
+  const hb2 = await fetch(API + '/api/heartbeat').then(r => r.json());
+  if (hb2.alive && hb2.alive['fund_recommend']) {
+    document.getElementById('recBtn2').disabled = true;
+    document.getElementById('recBtn2').textContent = '⏳ 运行中（约 4 分钟）';
+  }
+})();
+
+async function runRecommend() {
+  const btn = document.getElementById('recBtn2');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 运行中（约 4 分钟）'; }
+  const r = await fetch(API + '/api/recommend', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) {
+    const poll = setInterval(async () => {
+      const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
+      if (!hb.alive || !hb.alive['fund_recommend']) {
+        clearInterval(poll);
+        if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+        showMsg('✔ 推荐完成', 'ok');
+      }
+    }, 10000);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+    showMsg('✖ ' + (d.error || '发起失败'), 'fail');
   }
 }
 
