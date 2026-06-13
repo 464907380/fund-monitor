@@ -798,12 +798,14 @@ function showScoreDetail(items) {
   var total = 0, weightSum = 0;
   items.forEach(function(item){
     var name = item[0], score = item[1], weight = item[2], value = item[3];
-    if (score === null) {
+    if (value === null || value === undefined) {
       html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#888;">' + name + '</td>'
         + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">-</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">\u65e0\u6570\u636e</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">-</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">-</td></tr>';
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#ffa726;">50.0</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (score * weight).toFixed(1) + '</td></tr>';
+      total += score * weight;
+      weightSum += weight;
       return;
     }
     var contrib = (score * weight).toFixed(1);

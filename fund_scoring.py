@@ -373,7 +373,7 @@ def _calc_score(d: dict) -> float:
     计算基金综合评分 (0-100)
 
     从 SCORE_DIMS 注册表动态读取维度和权重。
-    无数据的维度自动跳过，只按有数据的维度归一化。
+    无数据的维度得中性分 50（既不惩罚也不奖励）。
     """
     total = 0.0
     weight_sum = 0.0
@@ -382,9 +382,10 @@ def _calc_score(d: dict) -> float:
             continue
         key = _DIM_VALUE_KEYS.get(name)
         if key and d.get(key) is None:
-            continue
-        s = fn(d)
-        total += s * weight
+            total += 50.0 * weight
+        else:
+            s = fn(d)
+            total += s * weight
         weight_sum += weight
     return round(total / weight_sum, 1) if weight_sum > 0 else 0.0
 
@@ -393,12 +394,12 @@ def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float | None, flo
     """
     计算基金综合评分并返回各维度明细
 
-    返回: (总分, [(维度名, 单项得分或None, 权重, 原始值, 说明), ...], 跳过的权重和)
-    无数据的维度得分为 None，权重不计入 normalization。
+    返回: (总分, [(维度名, 单项得分或None, 权重, 原始值, 说明), ...], 中性分处理的权重和)
+    无数据的维度得中性分 50，不跳过。
     """
     total = 0.0
     weight_sum = 0.0
-    skipped_weight = 0.0
+    neutral_weight = 0.0
     details: list[tuple[str, float | None, float, object, str]] = []
     for name, fn, weight, desc in SCORE_DIMS:
         if weight <= 0:
@@ -406,15 +407,16 @@ def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float | None, flo
         key = _DIM_VALUE_KEYS.get(name)
         raw = d.get(key) if key else None
         if raw is None:
-            details.append((name, None, weight, None, desc))
-            skipped_weight += weight
-            continue
-        s = fn(d)
-        details.append((name, round(s, 1), weight, raw, desc))
-        total += s * weight
+            details.append((name, 50.0, weight, None, desc + "（无原始数据，取中性分50）"))
+            total += 50.0 * weight
+            neutral_weight += weight
+        else:
+            s = fn(d)
+            details.append((name, round(s, 1), weight, raw, desc))
+            total += s * weight
         weight_sum += weight
     score = round(total / weight_sum, 1) if weight_sum > 0 else 0.0
-    return score, details, round(skipped_weight, 4)
+    return score, details, round(neutral_weight, 4)
 
 
 def _rank_percentile_str(d: dict) -> str:
