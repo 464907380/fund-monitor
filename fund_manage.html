@@ -284,7 +284,7 @@ h1 {
       <div class="btn-progress" id="recProgress"></div>
     </div>
     <div class="toolbar-btn-wrap">
-      <button onclick="saveDims()" id="dimsSaveBtn" class="toolbar-btn green">💾 保存</button>
+      <button onclick="saveDims()" id="dimsSaveBtn" class="toolbar-btn green">💾 保存权重</button>
       <div class="btn-progress" id="saveProgress"></div>
     </div>
   </div>
@@ -811,17 +811,17 @@ async function saveDims() {
       loadDims();
       // 保存触发推荐->晚报，切换进度条到推荐按钮
       if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存'; }
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
       _watchRecommend(); // 直接轮询推荐心跳，不再 POST
     } else {
       showMsg('✖ ' + (d.error || '保存失败'), 'fail');
       if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存'; }
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
     }
   } catch(e) {
     showMsg('✖ 保存失败', 'fail');
     if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-    if (btn) { btn.disabled = false; btn.textContent = '💾 保存'; }
+    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
   }
 }
 
