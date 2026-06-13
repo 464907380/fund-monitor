@@ -622,8 +622,8 @@ async function runBriefing() {
           if (btn) btn.textContent = `⏳ 晚报 ${data.status||''} ${pct}%`;
           if (prog) prog.style.width = pct + '%';
         } else if (alive) {
-          if (btn) btn.textContent = '⏳ 晚报 启动中';
-          if (prog) prog.style.width = '10%';
+          if (btn) btn.textContent = `⏳ 晚报 ${data?.status||'启动中'}`;
+          if (prog) prog.style.width = data?.status ? '10%' : '5%';
         }
         if (!alive) {
           clearInterval(poll);
@@ -891,8 +891,8 @@ async function runRecommend() {
           if (btn) btn.textContent = `⏳ 推荐 ${data.status||''} ${pct}%`;
           if (prog) prog.style.width = pct + '%';
         } else if (alive) {
-          if (btn) btn.textContent = '⏳ 推荐 启动中';
-          if (prog) prog.style.width = '5%';
+          if (btn) btn.textContent = `⏳ 推荐 ${data?.status||'启动中'}`;
+          if (prog) prog.style.width = data?.status ? '10%' : '5%';
         }
         if (!alive) {
           clearInterval(poll);

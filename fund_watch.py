@@ -418,6 +418,7 @@ def main() -> None:
     today_str = today.isoformat()
     log.info("====== 基金晚报 %s 开始 ======", today_str)
     write_heartbeat("fund_watch")
+    update_heartbeat("fund_briefing", progress=0, total=0, status="启动中...")
     try:
 
         # 第一遍：拉取所有基金原始数据
@@ -433,7 +434,7 @@ def main() -> None:
                 log.info("  %s(%s) %s | 近1月%s | 近3月%s | 近1年%s", name, r["code"], r["day"], r["m1"], r["m3"], r["y1"])
             except Exception as e:
                 log.error("❌ %s: %s", f["code"], e)
-            update_heartbeat("fund_watch", progress=len(raw_rows), total=len(FUND_LIST),
+            update_heartbeat("fund_briefing", progress=len(raw_rows), total=len(FUND_LIST),
                              status=f"取数据 {name}({f['code']})")
     
         # 计算评分（供展示使用）
@@ -461,7 +462,7 @@ def main() -> None:
                 "max_loss_days": r.get("_max_loss_days"),
             }
             r["score"], r["_score_detail"], r["_skipped_weight"] = calc_score_detail(d)
-        update_heartbeat("fund_watch", progress=len(FUND_LIST), total=len(FUND_LIST), status="推送中")
+        update_heartbeat("fund_briefing", progress=len(FUND_LIST), total=len(FUND_LIST), status="推送中")
     
         rows = raw_rows
     
