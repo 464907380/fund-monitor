@@ -111,9 +111,11 @@ def _build_briefing_html(rows: list[dict], alerts: list[str], today: str,
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-family:Consolas;font-size:12px;color:#888;white-space:nowrap;">{_code}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-size:13px;color:#ccc;white-space:nowrap;">{_name}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["day"])}">{_day}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["f5"])}">{_html.escape(str(r.get("f5","")))}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m1"])}">{_m1}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m3"])}">{_m3}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["y1"])}">{_y1}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-size:12px;font-weight:600;color:#66bb6a;white-space:nowrap;">{r.get("score","")}</td>'
             + "</tr>"
         )
     html = tpl_html.replace("{{ROWS}}", "\n".join(row_htmls))
@@ -173,12 +175,12 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
     md_lines = [
         f"📊 **基金晚报 {today}**",
         "",
-        "|代码|基金名|涨跌|近5日|近1月|近3月|近1年|经理|",
-        "|:---|:---|---:|----:|----:|----:|----:|:---|",
+        "|代码|基金名|涨跌|近5日|近1月|近3月|近1年|评分|经理|",
+        "|:---|:---|---:|----:|----:|----:|----:|:---:|:---|",
     ]
     for r in rows:
         md_lines.append(
-            f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r['mgr']}|"
+            f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r.get('score','')}|{r['mgr']}|"
         )
 
     # 推荐排行

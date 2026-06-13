@@ -81,7 +81,7 @@ class TestBuildBriefingHtml(unittest.TestCase):
     def test_builds_html(self, mock_exists, mock_file):
         from fund_render import _build_briefing_html
         rows = [{"code": "000001", "name_short": "测试A", "day": "+1.23%",
-                 "m1": "+3.4%", "m3": "+5.6%", "y1": "+10.0%"}]
+                 "f5": "+2.1%", "m1": "+3.4%", "m3": "+5.6%", "y1": "+10.0%", "score": 72.5}]
         result = _build_briefing_html(rows, [], "2026-06-13")
         self.assertIsNotNone(result)
         self.assertIn("2026-06-13", result)  # DATE 替换
