@@ -261,9 +261,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/heartbeat":
             hb = read_all_heartbeats()
-            # 附加 alive 状态（含超时判断），供前端使用
             alive = {k: is_heartbeat_alive(k, 1800) for k in hb}
-            self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive}))
+            brief_path = os.path.join(_SCRIPT_DIR, ".briefing_fund.html")
+            brief_mtime = os.path.getmtime(brief_path) if os.path.exists(brief_path) else 0
+            self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive, "briefing_mtime": brief_mtime}))
             return
 
         if parsed.path == "/api/dims":
@@ -285,7 +286,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 try:
                     with open(path, encoding="utf-8") as f:
                         html = f.read()
-                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
+                    mtime = os.path.getmtime(path)
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8", "X-Last-Modified": str(mtime)}, html.encode("utf-8"))
                 except Exception as e:
                     body = ("<html><body style='background:#1a1a1a;color:#666;padding:40px;text-align:center;font-family:sans-serif;'>"
                             "<p>读取晚报失败</p></body></html>")

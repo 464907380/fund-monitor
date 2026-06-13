@@ -476,6 +476,7 @@ async function loadFeatures() {
 }
 
 
+var lastBriefingMtime = 0;
 function updateHeartbeat() {
   fetch(API + '/api/heartbeat').then(r => r.json()).then(d => {
     if (!d.ok) return;
@@ -491,6 +492,11 @@ function updateHeartbeat() {
         el.style.display = 'none';
       }
     });
+    
+    if (lastBriefingMtime > 0 && d.briefing_mtime && d.briefing_mtime !== lastBriefingMtime) {
+      loadBriefing();
+    }
+    if (d.briefing_mtime) { lastBriefingMtime = d.briefing_mtime; }
   });
 }
 
