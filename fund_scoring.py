@@ -292,6 +292,29 @@ _SCORE_FUNCS: dict[str, Callable] = {
     "max_loss_days": _score_max_loss_days,
 }
 
+# 维度名称 → 数据字典 key 映射（用于取值展示）
+_DIM_VALUE_KEYS: dict[str, str] = {
+    "近1年收益": "y1",
+    "近3月收益": "m3",
+    "近1月收益": "m1",
+    "近一周收益": "f5",
+    "近2年收益": "sy2",
+    "夏普比率": "sharpe",
+    "上行胜率": "win_rate",
+    "盈亏比": "profit_ratio",
+    "索提诺比率": "sortino",
+    "修复系数": "recovery",
+    "近3年收益": "sy3",
+    "近6月收益": "sy6",
+    "波动率": "volatility",
+    "卡玛比率": "calmar",
+    "最大连跌天数": "max_loss_days",
+    "费率": "rate",
+    "最大回撤": "max_dd",
+    "基金规模": "sc",
+    "年化收益率": "annual_return",
+    "机构持有比例": "inst",
+}
 
 _DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
     ("\u8fd11\u5e74\u6536\u76ca",    _score_y1,             0.10, "\u6700\u8fd1\u4e00\u5e74\u7684\u8868\u73b0\uff0c\u53cd\u6620\u57fa\u91d1\u8fd1\u671f\u8d5a\u94b1\u80fd\u529b"),
@@ -363,20 +386,21 @@ def _calc_score(d: dict) -> float:
     return round(total / weight_sum, 1) if weight_sum > 0 else 0.0
 
 
-def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float, float, str]]]:
+def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float, float, object, str]]]:
     """
     计算基金综合评分并返回各维度明细
 
-    返回: (总分, [(维度名, 单项得分, 权重, 说明), ...])
+    返回: (总分, [(维度名, 单项得分, 权重, 原始值, 说明), ...])
     """
     total = 0.0
     weight_sum = 0.0
-    details: list[tuple[str, float, float, str]] = []
+    details: list[tuple[str, float, float, object, str]] = []
     for name, fn, weight, desc in SCORE_DIMS:
         if weight <= 0:
             continue
         s = fn(d)
-        details.append((name, round(s, 1), weight, desc))
+        val = d.get(_DIM_VALUE_KEYS.get(name, ""))
+        details.append((name, round(s, 1), weight, val, desc))
         total += s * weight
         weight_sum += weight
     score = round(total / weight_sum, 1) if weight_sum > 0 else 0.0

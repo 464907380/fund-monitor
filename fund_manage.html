@@ -791,20 +791,24 @@ function showScoreDetail(items) {
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">\u7ef4\u5ea6\u8bc4\u5206\u660e\u7ec6</div>'
     + '<table style="width:100%;border-collapse:collapse;">'
     + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">\u7ef4\u5ea6</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u503c</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u5f97\u5206</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u6743\u91cd</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u8d21\u732e</th></tr></thead><tbody>';
   var total = 0;
   items.forEach(function(item){
-    var name = item[0], score = item[1], weight = item[2];
+    var name = item[0], score = item[1], weight = item[2], value = item[3];
     var contrib = (score * weight).toFixed(1);
     total += score * weight;
+    var valStr = value !== null && value !== undefined ? value : '-';
+    if (typeof valStr === 'number') valStr = valStr.toFixed(2);
     html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + name + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + valStr + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350') + ';">' + score.toFixed(1) + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib + '</td></tr>';
   });
-  html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;">\u5408\u8ba1</td>'
+  html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;" colspan="2">\u5408\u8ba1</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + total.toFixed(1) + '</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">100%</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + total.toFixed(1) + '</td></tr>'
