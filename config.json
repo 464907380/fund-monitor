@@ -142,6 +142,41 @@
         "weight": 0.03,
         "enabled": true,
         "desc": "申购费"
+      },
+      {
+        "name": "近一周收益",
+        "key": "f5",
+        "weight": 0.03,
+        "enabled": true,
+        "desc": "近五个交易日涨跌幅，捕捉短期动量"
+      },
+      {
+        "name": "近2年收益",
+        "key": "sy2",
+        "weight": 0.05,
+        "enabled": true,
+        "desc": "近两年精确收益，填补中期维度"
+      },
+      {
+        "name": "波动率",
+        "key": "volatility",
+        "weight": 0.03,
+        "enabled": true,
+        "desc": "年化波动率，衡量基金震荡幅度"
+      },
+      {
+        "name": "卡玛比率",
+        "key": "calmar",
+        "weight": 0.03,
+        "enabled": true,
+        "desc": "年化收益÷最大回撤，衡量收益/风险比"
+      },
+      {
+        "name": "最大连跌天数",
+        "key": "max_loss_days",
+        "weight": 0.02,
+        "enabled": true,
+        "desc": "历史最长连续下跌天数"
       }
     ]
   }

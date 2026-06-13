@@ -143,6 +143,69 @@ def _score_m3(d: dict) -> float:
     else:            return 0
 
 
+def _score_f5(d: dict) -> float:
+    """近一周收益评分"""
+    raw = d.get("f5", "")
+    if isinstance(raw, str) and raw.endswith("%"):
+        f5 = float(raw.rstrip("%").lstrip("+"))
+    elif isinstance(raw, (int, float)):
+        f5 = float(raw)
+    else:
+        return 0.0
+    if f5 >= 10:    return 100
+    elif f5 >= 5:   return 70 + (f5 - 5) / 5 * 30
+    elif f5 >= 0:   return f5 / 5 * 70
+    else:            return 0
+
+
+def _score_sy2(d: dict) -> float:
+    """近2年收益评分"""
+    sy2 = d.get("sy2")
+    if sy2 is None:
+        return 0.0
+    if sy2 >= 150:   return 100
+    elif sy2 >= 80:  return 70 + (sy2 - 80) / 70 * 30
+    elif sy2 >= 30:  return 40 + (sy2 - 30) / 50 * 30
+    elif sy2 >= 0:   return sy2 / 30 * 40
+    else:            return 0
+
+
+def _score_volatility(d: dict) -> float:
+    """波动率评分（越低越好）"""
+    v = d.get("volatility")
+    if v is None:
+        return 0.0
+    if v <= 10:     return 100
+    elif v <= 20:   return 80 + (20 - v) / 10 * 20
+    elif v <= 40:   return 40 + (40 - v) / 20 * 40
+    elif v <= 60:   return (60 - v) / 20 * 40
+    else:           return 0
+
+
+def _score_calmar(d: dict) -> float:
+    """卡玛比率评分（年化收益/最大回撤，越高越好）"""
+    c = d.get("calmar")
+    if c is None:
+        return 0.0
+    if c >= 3:      return 100
+    elif c >= 1:    return 60 + (c - 1) / 2 * 40
+    elif c >= 0.3:  return 20 + (c - 0.3) / 0.7 * 40
+    elif c >= 0:    return c / 0.3 * 20
+    else:           return 0
+
+
+def _score_max_loss_days(d: dict) -> float:
+    """最大连跌天数评分（越短越好）"""
+    m = d.get("max_loss_days")
+    if m is None:
+        return 0.0
+    if m <= 3:      return 100
+    elif m <= 7:    return 80 + (7 - m) / 4 * 20
+    elif m <= 15:   return 40 + (15 - m) / 8 * 40
+    elif m <= 30:   return (30 - m) / 15 * 40
+    else:           return 0
+
+
 def _score_max_dd(d: dict) -> float:
     """最大回撤评分"""
     max_dd = d.get("max_dd")
@@ -219,6 +282,11 @@ _SCORE_FUNCS: dict[str, Callable] = {
     "scale": _score_scale,
     "annual_return": _score_annual_return,
     "institutional": _score_institutional,
+    "f5": _score_f5,
+    "sy2": _score_sy2,
+    "volatility": _score_volatility,
+    "calmar": _score_calmar,
+    "max_loss_days": _score_max_loss_days,
 }
 
 

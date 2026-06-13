@@ -243,6 +243,13 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
         """单只基金评分（供并行使用）"""
         try:
             d = get(code)
+            # 计算近一周涨跌幅
+            navs = d.get("nav", [])
+            f5_val = ""
+            if len(navs) >= 5:
+                pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
+                f5_val = f"{pct:+.1f}%"
+            d["f5"] = f5_val
             score = _calc_score(d)
             ar = d.get("annual_return", 0)
             return (score, code, name, ar,

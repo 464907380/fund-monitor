@@ -246,6 +246,7 @@ def get(code: str) -> dict:
         d.update(metrics)
         # 从净值数据计算近3年收益
         d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3年（约250个交易日/年 × 3）
+        d["sy2"] = _calc_period_return(full_nav, 500)  # ≈2年
     else:
         if nav := _parse_net_trend(data):
             d["nav"] = nav
@@ -396,6 +397,10 @@ def check(code: str) -> tuple[dict, list[str]]:
         "_profit_ratio": d.get("profit_ratio"),
         "_recovery": d.get("recovery"),
         "_sy3": d.get("sy3"),
+        "_sy2": d.get("sy2"),
+        "_volatility": d.get("volatility"),
+        "_calmar": d.get("calmar"),
+        "_max_loss_days": d.get("max_loss_days"),
         "_sy6": d.get("sy6"),
     }
     return row, alerts
@@ -441,6 +446,11 @@ def main() -> None:
                 "m1": r.get("m1"),      # 近1月收益（字符串 "+3.45%"）
                 "m3": r.get("m3"),      # 近3月收益（字符串）
                 "sy6": r.get("_sy6"),   # 近6月收益
+                "f5": r.get("f5"),      # 近一周收益（字符串 "+2.1%"）
+                "sy2": r.get("_sy2"),   # 近2年收益
+                "volatility": r.get("_volatility"),
+                "calmar": r.get("_calmar"),
+                "max_loss_days": r.get("_max_loss_days"),
             }
             r["score"] = _calc_score(d)
     
