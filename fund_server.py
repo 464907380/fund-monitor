@@ -246,8 +246,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/dims":
-            dims = CFG.get("scoring", {}).get("dims", [])
-            self._send(*_json_response({"ok": True, "dims": dims}))
+            try:
+                dims = json.load(open(_CONFIG_PATH, encoding="utf-8")).get("scoring", {}).get("dims", [])
+                self._send(*_json_response({"ok": True, "dims": dims}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/api/briefing":

@@ -243,7 +243,13 @@ _DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
 
 def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
     """"""
-    cfg_dims = CFG.get("scoring", {}).get("dims", [])
+    import json, os
+    try:
+        cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        cfg = json.load(open(cfg_path, encoding="utf-8"))
+        cfg_dims = cfg.get("scoring", {}).get("dims", [])
+    except Exception:
+        cfg_dims = []
     if not cfg_dims:
         return _DEFAULT_DIMS
     result = []
