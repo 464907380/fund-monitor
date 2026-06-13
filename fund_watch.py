@@ -424,6 +424,7 @@ def main() -> None:
         # 第一遍：拉取所有基金原始数据
         raw_rows: list[dict] = []
         all_alerts: list[str] = []
+        total_steps = len(FUND_LIST) * 2 + 2  # 取数据N + 评分N + 市场优选 + 推送
         for f in FUND_LIST:
             name = "?"
             try:
@@ -434,11 +435,11 @@ def main() -> None:
                 log.info("  %s(%s) %s | 近1月%s | 近3月%s | 近1年%s", name, r["code"], r["day"], r["m1"], r["m3"], r["y1"])
             except Exception as e:
                 log.error("❌ %s: %s", f["code"], e)
-            update_heartbeat("fund_briefing", progress=len(raw_rows), total=len(FUND_LIST),
+            update_heartbeat("fund_briefing", progress=len(raw_rows), total=total_steps,
                              status=f"取数据 {name}({f['code']})")
     
         # 计算评分（供展示使用）
-        for r in raw_rows:
+        for i, r in enumerate(raw_rows, 1):
             d = {
                 "annual_return": r.get("_annual_return"),
                 "sharpe": r.get("_sharpe"),
@@ -462,12 +463,14 @@ def main() -> None:
                 "max_loss_days": r.get("_max_loss_days"),
             }
             r["score"], r["_score_detail"], r["_skipped_weight"] = calc_score_detail(d)
-        update_heartbeat("fund_briefing", progress=len(FUND_LIST), total=len(FUND_LIST), status="推送中")
-    
+            update_heartbeat("fund_briefing", progress=len(FUND_LIST) + i, total=total_steps,
+                             status=f"评分 {r.get('name_short','?')}({r['code']})")
+        update_heartbeat("fund_briefing", progress=len(FUND_LIST) + len(raw_rows) + 1, total=total_steps, status="获取市场优选")
         rows = raw_rows
-    
+
         # 推送（两条通道共用推荐排行数据）
         ranking_lines = _format_recommend_rankings() if rows else None
+        update_heartbeat("fund_briefing", progress=total_steps, total=total_steps, status="推送中")
         push("📊 基金晚报", rows, all_alerts, today_str, ranking_lines)
         log.info("====== 基金晚报 %s 完成 ======", today_str)
     finally:
