@@ -170,6 +170,13 @@
         "weight": 0.03,
         "enabled": true,
         "desc": "年化收益÷最大回撤，衡量收益/风险比"
+      },
+      {
+        "name": "最大连跌天数",
+        "key": "max_loss_days",
+        "weight": 0.05,
+        "enabled": true,
+        "desc": "历史最长连续下跌天数"
       }
     ]
   }
