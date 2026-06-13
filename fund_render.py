@@ -334,7 +334,7 @@ function showScoreDetail(items) {
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">100%</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + total.toFixed(1) + '</td></tr>'
     + '</tbody></table>'
-    + '<button onclick="this.parentElement.style.display=\'none\'" style="margin-top:10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 12px;cursor:pointer;">\u5173\u95ed</button></div>';
+    + '<button id="__closeScoreBtn" style="margin-top:10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 12px;cursor:pointer;">\u5173\u95ed</button></div>';
   var el = document.getElementById("scoreDetailModal");
   if (!el) {
     el = document.createElement("div");
@@ -342,6 +342,8 @@ function showScoreDetail(items) {
     document.body.appendChild(el);
   }
   el.innerHTML = html;
+  var btn = document.getElementById('__closeScoreBtn');
+  if (btn) btn.onclick = function(){ el.style.display = 'none'; };
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;max-width:500px;width:90%;";
 }
 </script>
