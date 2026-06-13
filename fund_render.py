@@ -47,7 +47,7 @@ _BRIEFING_FILE = os.path.join(HISTORY_DIR, ".briefing_fund.html")
 def _pipe_table_to_html(ranking_lines: list[str]) -> str:
     """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
     cp = '<tr><td style="padding:12px 14px;background:#222;border:1px solid #333;border-radius:6px;">'
-    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ccc;">🏆 市场优选基金 TOP 10 （12 维评分）</p>'
+    cp += '<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ccc;">🏆 市场优选基金 TOP 10 （19 维评分）</p>'
     in_table = False
     header_done = False
     for line in ranking_lines:
@@ -241,14 +241,14 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
 
 
 def _web_rich_recommend_table() -> str:
-    """生成推荐 TOP 10 完整 12 维数据 HTML 表格（Web 版）"""
+    """生成推荐 TOP 10 完整 19 维数据 HTML 表格（Web 版）"""
     data = _load_recommend_data()
     recs = data.get("results", []) if data else []
     if not recs:
         return ""
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in SCORE_DIMS]
-    dims_shown = dim_names[:10]  # 取前 10 个主要维度
+    dims_shown = dim_names  # 取前 10 个主要维度
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP 10 \uff08\u5168\u7ef4\u5ea6\uff09</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
@@ -325,13 +325,18 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
         "近1年收益": lambda: f'{r.get("y1", 0):.1f}' if isinstance(r.get("y1"), (int, float)) else str(r.get("y1", "")),
         "近3月收益": lambda: f'{r.get("m3", 0):.1f}' if isinstance(r.get("m3"), (int, float)) else str(r.get("m3", "")),
         "近1月收益": lambda: f'{r.get("m1", 0):.1f}' if isinstance(r.get("m1"), (int, float)) else str(r.get("m1", "")),
+        "近一周收益": lambda: str(r.get("f5", "")),
+        "近2年收益": lambda: f'{r.get("sy2", 0):.1f}' if isinstance(r.get("sy2"), (int, float)) else str(r.get("sy2", "")),
         "夏普比率": lambda: _fmt(r.get("sharpe")),
         "上行胜率": lambda: _fmt(r.get("win_rate")),
         "盈亏比": lambda: _fmt(r.get("profit_ratio")),
         "索提诺比率": lambda: _fmt(r.get("sortino")),
         "修复系数": lambda: _fmt(r.get("recovery")),
         "近3年收益": lambda: f'{r.get("sy3", 0):.1f}' if isinstance(r.get("sy3"), (int, float)) else str(r.get("sy3", "")),
-        "近6月收益": lambda: r.get("m1", ""),  # 推荐结果无 sy6, 用 m1 近似
+        "近6月收益": lambda: r.get("m1", ""),
+        "波动率": lambda: _fmt(r.get("volatility")),
+        "卡玛比率": lambda: _fmt(r.get("calmar")),
+        "最大连跌天数": lambda: _fmt(r.get("max_loss_days")),
         "费率": lambda: _fmt(r.get("rate")),
         "最大回撤": lambda: _fmt(r.get("max_dd")),
         "基金规模": lambda: _fmt(r.get("sc")),
@@ -382,7 +387,7 @@ def _format_recommend_rankings() -> list[str]:
             pass
 
     lines.append("")
-    lines.append("🏆 **市场优选基金 TOP 10**  （12 维评分）")
+    lines.append("🏆 **市场优选基金 TOP 10**  （19 维评分）")
     lines.append("")
     lines.append(f"|{'排名':<4}|{'代码':<7}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
     lines.append(f"|:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")

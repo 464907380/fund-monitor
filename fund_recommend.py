@@ -94,7 +94,12 @@ def _save_result(scored: list[tuple]) -> None:
                  "sharpe": item[7], "sortino": item[8],
                  "max_dd": item[9], "win_rate": item[10], "inst": item[11],
                  "sc": item[12], "rate": item[13], "profit_ratio": item[14],
-                 "recovery": item[15], "sy3": item[16]}
+                 "recovery": item[15], "sy3": item[16],
+                 "f5": item[17] if len(item) > 17 else "",
+                 "sy2": item[18] if len(item) > 18 else None,
+                 "volatility": item[19] if len(item) > 19 else None,
+                 "calmar": item[20] if len(item) > 20 else None,
+                 "max_loss_days": item[21] if len(item) > 21 else None}
                 for item in scored
             ]
         }
@@ -258,7 +263,12 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
                     d.get("max_dd", 0), d.get("win_rate", 0),
                     d.get("inst", 0), d.get("sc", 0), d.get("rate", 0),
                     d.get("profit_ratio", 0), d.get("recovery", 0),
-                    0 if d.get("sy3") is None else d["sy3"])
+                    0 if d.get("sy3") is None else d["sy3"],
+                    f5_val,
+                    d.get("sy2"),
+                    d.get("volatility"),
+                    d.get("calmar"),
+                    d.get("max_loss_days"))
         except Exception as e:
             log.debug("跳过 %s: %s", code, e)
             return None
