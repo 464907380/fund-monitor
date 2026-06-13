@@ -242,14 +242,13 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
 
 
 def _web_rich_recommend_table() -> str:
-    """生成推荐 TOP 10 完整维度数据 HTML 表格（Web 版）"""
-    data = _load_recommend_data()
-    recs = data.get("results", []) if data else []
-    if not recs:
+    """生成推荐 TOP 10 完整维度数据 HTML 表格（Web 版，实时拉取）"""
+    fresh = _fetch_fresh_recommend_data()
+    if not fresh:
         return ""
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in SCORE_DIMS]
-    dims_shown = dim_names  # 取前 10 个主要维度
+    dims_shown = dim_names
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP 10 \uff08\u5168\u7ef4\u5ea6\uff09</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -262,11 +261,11 @@ def _web_rich_recommend_table() -> str:
         parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
     parts.append('</tr></thead><tbody>')
     medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
-    for i, r in enumerate(recs[:10]):
+    for i, r in enumerate(fresh[:10]):
         badge = medals[i] if i < 3 else f'{i+1}.'
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("name","")))} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;">{r.get("score",0):.1f}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
@@ -350,6 +349,60 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
     return fn() if fn else "-"
 
 
+def _fetch_fresh_recommend_data() -> list[dict]:
+    """从推荐结果取 TOP 10 基金代码，实时拉取数据并重新评分"""
+    try:
+        from fund_recommend import _load_result
+        recs = _load_result()
+        if not recs:
+            return []
+        # 取推荐结果前10的代码
+        codes = [(r.get("code", ""), r.get("name", "")) for r in recs[:10]]
+        codes = [(c, n) for c, n in codes if c]
+
+        from fund_watch import get
+        from fund_scoring import _calc_score, SCORE_DIMS
+
+        fresh = []
+        for code, cached_name in codes:
+            try:
+                d = get(code)
+                if not d.get("n"):
+                    continue
+                score_d = {
+                    "annual_return": d.get("annual_return"),
+                    "sharpe": d.get("sharpe"),
+                    "sortino": d.get("sortino"),
+                    "max_dd": d.get("max_dd"),
+                    "win_rate": d.get("win_rate"),
+                    "inst": d.get("inst"),
+                    "sc": d.get("sc"),
+                    "rate": d.get("rate"),
+                    "profit_ratio": d.get("profit_ratio"),
+                    "recovery": d.get("recovery"),
+                    "y1": d.get("y1"),
+                    "sy3": d.get("sy3"),
+                    "m1": d.get("m1"),
+                    "m3": d.get("m3"),
+                    "sy6": d.get("sy6"),
+                    "f5": d.get("f5"),
+                    "sy2": d.get("sy2"),
+                    "volatility": d.get("volatility"),
+                    "calmar": d.get("calmar"),
+                    "max_loss_days": d.get("max_loss_days"),
+                }
+                score = _calc_score(score_d)
+                d["score"] = score
+                fresh.append(d)
+            except Exception:
+                continue
+
+        fresh.sort(key=lambda r: r.get("score", 0), reverse=True)
+        return fresh
+    except Exception:
+        return []
+
+
 def _load_recommend_data() -> dict | None:
     """加载推荐结果完整数据（含日期和结果列表），合并文件读取"""
     if not os.path.exists(_RECOMMEND_RESULT_FILE):
@@ -364,65 +417,72 @@ def _load_recommend_data() -> dict | None:
 
 
 def _format_recommend_rankings() -> list[str]:
-    """展示市场优选基金排行（来自上次推荐结果）"""
-    data = _load_recommend_data()
-    recs = data.get("results", []) if data else None
+    """生成推荐排名的 Markdown 表格（实时拉取）"""
     lines: list[str] = []
-    if not recs:
+    try:
+        from fund_recommend import _load_result, _TOP
+
+        # 检查推荐数据是否存在及过期
+        recs = _load_result()
+        if recs:
+            try:
+                rec_date = recs[0].get("date", "")
+                if rec_date:
+                    rec_dt = datetime.date.fromisoformat(rec_date)
+                    days_old = (datetime.date.today() - rec_dt).days
+                    if days_old > 14:
+                        lines.append("")
+                        lines.append(f"⚠️ 推荐结果已是 {days_old} 天前的，建议重新运行")
+                        lines.append(f"   python fund_recommend.py")
+            except (ValueError, KeyError, TypeError):
+                pass
+
+        # 实时获取 TOP 10 数据并重新评分
+        fresh = _fetch_fresh_recommend_data()
+        if not fresh:
+            lines.append("")
+            lines.append("💡 **想看看市场上有哪些优秀基金？**")
+            lines.append("   运行 python fund_recommend.py（约16分钟）")
+            lines.append("   之后晚报自动展示推荐排行")
+            return lines
+
         lines.append("")
-        lines.append("💡 **想看看市场上有哪些优秀基金？**")
-        lines.append("   运行 python fund_recommend.py（约4分钟）")
-        lines.append("   之后晚报自动展示推荐排行")
-        return lines
+        num_dims = len(SCORE_DIMS)
+        lines.append(f"🏆 **市场优选基金 TOP 10**  （{num_dims} 维评分）")
+        lines.append("")
+        lines.append(f"|{{'排名':<4}}|{{'代码':<7}}|{{'基金名':<18}}|{{'评分':<5}}|{{'年化%':<6}}|{{'近1月':<7}}|{{'近3月':<7}}|{{'近1年':<7}}|{{'夏普':<5}}|{{'回撤':<5}}|{{'近3年':<6}}|")
+        lines.append(f"|:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
+        medals = ["🥇", "🥈", "🥉"]
+        for i, r in enumerate(fresh[:10], 1):
+            badge = medals[i - 1] if i <= 3 else f" {i}."
+            name = (r.get("n", "") or "")[:18]
+            code = r.get("code", "")
+            score = r.get("score", 0)
+            ar = r.get("annual_return", 0) or 0
+            m1 = f"{r.get('m1', 0):+.1f}" if isinstance(r.get("m1"), (int, float)) else str(r.get("m1", ""))
+            m3 = f"{r.get('m3', 0):+.1f}" if isinstance(r.get("m3"), (int, float)) else str(r.get("m3", ""))
+            y1 = f"{r.get('y1', 0):+.1f}" if isinstance(r.get("y1"), (int, float)) else str(r.get("y1", ""))
+            sharpe = r.get("sharpe", 0) or 0
+            dd = r.get("max_dd", 0) or 0
+            sy3 = r.get("sy3", 0) or 0
+            lines.append(f"|{badge:<4}|{code:<7}|{name:<18}|{score:<5.1f}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
-    # 检查推荐结果是否过旧
-    if data:
-        try:
-            rec_date = data.get("date", "")
-            if rec_date:
-                rec_dt = datetime.date.fromisoformat(rec_date)
-                days_old = (datetime.date.today() - rec_dt).days
-                if days_old > 14:
-                    lines.append("")
-                    lines.append(f"⚠️ 推荐结果已是 {days_old} 天前的，建议重新运行")
-                    lines.append(f"   python fund_recommend.py")
-        except (ValueError, KeyError, TypeError):
-            pass
+        lines.append("")
+        lines.append(f"  ── 排名依据：从全市场 {_TOP} 只基金中精选 TOP 10 ──")
+        lines.append("  📡 数据源：天天基金排行 + 东财净值 + 新浪行情 等综合数据")
+        lines.append(f"     拉取全市场近 1 年收益排行前 {_TOP} 名，筛选后进入深度评分。")
+        lines.append("     每只基金独立拉取净值数据，从净值数组真实计算各项指标。")
+        num = len(SCORE_DIMS)
+        lines.append(f"  🧮 评分方式：{num} 个维度加权打分（0-100 分），权重合计 100%")
+        lines.append("")
+        medals_cn = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟",
+                     "1️⃣1️⃣","1️⃣2️⃣","1️⃣3️⃣","1️⃣4️⃣","1️⃣5️⃣","1️⃣6️⃣","1️⃣7️⃣","1️⃣8️⃣","1️⃣9️⃣","2️⃣0️⃣"]
+        for i, (name, fn, weight, desc) in enumerate(SCORE_DIMS):
+            badge = medals_cn[i] if i < len(medals_cn) else f"  {i+1}."
+            lines.append(f"  {badge} {name}（{int(weight*100)}%）— {desc}")
 
-    lines.append("")
-    num_dims = len(SCORE_DIMS)
-    lines.append(f"🏆 **市场优选基金 TOP 10**  （{num_dims} 维评分）")
-    lines.append("")
-    lines.append(f"|{'排名':<4}|{'代码':<7}|{'基金名':<14}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
-    lines.append(f"|:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
-    medals = ["🥇", "🥈", "🥉"]
-    for i, r in enumerate(recs[:10], 1):
-        badge = medals[i - 1] if i <= 3 else f" {i}."
-        name = r.get("name", "")[:14]
-        code = r.get("code", "")
-        ar = r.get("annual_return", 0)
-        m1 = str(r.get("m1", ""))
-        m3 = str(r.get("m3", ""))
-        y1 = str(r.get("y1", ""))
-        sharpe = r.get("sharpe", 0)
-        dd = r.get("max_dd", 0)
-        sy3 = 0 if r.get("sy3") is None else r["sy3"]
-        lines.append(f"|{badge:<4}|{code:<7}|{name:<14}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
-
-    lines.append("")
-    from fund_recommend import _TOP
-    lines.append(f"  ── 排名依据：从全市场 {_TOP} 只基金中精选 TOP 10 ──")
-    lines.append("  \U0001f4e1 数据源：天天基金排行 + 东财净值 + 新浪行情 等综合数据")
-    lines.append(f"     拉取全市场近 1 年收益排行前 {_TOP} 名，筛选后进入深度评分。")
-    lines.append("     每只基金独立拉取净值数据，从净值数组真实计算各项指标。")
-    num = len(SCORE_DIMS)
-    lines.append(f"  🧮 评分方式：{num} 个维度加权打分（0-100 分），权重合计 100%")
-    lines.append("")
-    medals_cn = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟",
-                 "1️⃣1️⃣","1️⃣2️⃣","1️⃣3️⃣","1️⃣4️⃣","1️⃣5️⃣","1️⃣6️⃣","1️⃣7️⃣","1️⃣8️⃣","1️⃣9️⃣","2️⃣0️⃣"]
-    for i, (name, fn, weight, desc) in enumerate(SCORE_DIMS):
-        badge = medals_cn[i] if i < len(medals_cn) else f"  {i+1}."
-        lines.append(f"  {badge} {name}（{int(weight*100)}%）— {desc}")
+    except Exception as e:
+        lines.append(f"⚠️ 推荐排行加载失败: {e}")
 
     return lines
 
