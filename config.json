@@ -41,84 +41,84 @@
       {
         "name": "近1年收益",
         "key": "y1",
-        "weight": 0.09,
+        "weight": 0.08,
         "enabled": true,
         "desc": "最近一年的表现，反映基金近期赚钱能力"
       },
       {
         "name": "近3月收益",
         "key": "m3",
-        "weight": 0.11,
+        "weight": 0.09,
         "enabled": true,
         "desc": "近三个月涨跌幅，中期趋势"
       },
       {
         "name": "夏普比率",
         "key": "sharpe",
-        "weight": 0.06,
+        "weight": 0.05,
         "enabled": true,
         "desc": "每承受 1 份波动能换来多少超额收益"
       },
       {
         "name": "上行胜率",
         "key": "win_rate",
-        "weight": 0.07,
+        "weight": 0.06,
         "enabled": true,
         "desc": "赚钱天数占总交易天数的比例"
       },
       {
         "name": "盈亏比",
         "key": "profit_ratio",
-        "weight": 0.07,
+        "weight": 0.06,
         "enabled": true,
         "desc": "平均盈利÷平均亏损，>1说明赚比亏多"
       },
       {
         "name": "索提诺比率",
         "key": "sortino",
-        "weight": 0.06,
+        "weight": 0.05,
         "enabled": true,
         "desc": "只考虑下跌波动，更贴近真实风险感受"
       },
       {
         "name": "修复系数",
         "key": "recovery",
-        "weight": 0.04,
+        "weight": 0.03,
         "enabled": true,
         "desc": "总收益÷最大回撤，衡量跌下去能不能涨回来"
       },
       {
         "name": "近6月收益",
         "key": "sy6",
-        "weight": 0.06,
+        "weight": 0.05,
         "enabled": true,
         "desc": "近六个月表现，补充近1年的中短期维度"
       },
       {
         "name": "近3年收益",
         "key": "sy3",
-        "weight": 0.07,
+        "weight": 0.06,
         "enabled": true,
         "desc": "从净值数据取约750个交易日精确计算，看穿越牛熊能力"
       },
       {
         "name": "近1月收益",
         "key": "m1",
-        "weight": 0.14,
+        "weight": 0.12,
         "enabled": true,
         "desc": "近一个月涨跌幅，捕捉短期动量"
       },
       {
         "name": "最大回撤",
         "key": "max_dd",
-        "weight": 0.1,
+        "weight": 0.08,
         "enabled": true,
         "desc": "历史最大跌幅"
       },
       {
         "name": "年化收益率",
         "key": "annual_return",
-        "weight": 0.04,
+        "weight": 0.03,
         "enabled": true,
         "desc": "基金成立以来年化回报"
       },
@@ -132,7 +132,7 @@
       {
         "name": "基金规模",
         "key": "scale",
-        "weight": 0.06,
+        "weight": 0.05,
         "enabled": true,
         "desc": "1~50亿最理想"
       },
@@ -153,7 +153,7 @@
       {
         "name": "近2年收益",
         "key": "sy2",
-        "weight": 0.05,
+        "weight": 0.04,
         "enabled": true,
         "desc": "近两年精确收益，填补中期维度"
       },
@@ -170,13 +170,6 @@
         "weight": 0.03,
         "enabled": true,
         "desc": "年化收益÷最大回撤，衡量收益/风险比"
-      },
-      {
-        "name": "最大连跌天数",
-        "key": "max_loss_days",
-        "weight": 0.02,
-        "enabled": true,
-        "desc": "历史最长连续下跌天数"
       }
     ]
   }

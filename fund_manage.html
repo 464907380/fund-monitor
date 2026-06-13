@@ -565,7 +565,7 @@ checkBriefRunning();
 loadBriefing();
 
 
-var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
+var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days'];
 var DIM_INFO = {
   'y1': {name:'近1年收益',desc:'最近一年的表现'},
   'm3': {name:'近3月收益',desc:'近三个月涨跌幅'},
@@ -582,6 +582,11 @@ var DIM_INFO = {
   'scale': {name:'基金规模',desc:'1~50亿最理想'},
   'annual_return': {name:'年化收益率',desc:'基金成立以来年化回报'},
   'institutional': {name:'机构持有比例',desc:'专业机构认可度'},
+  'f5': {name:'近一周收益',desc:'近五个交易日涨跌幅'},
+  'sy2': {name:'近2年收益',desc:'近两年精确收益'},
+  'volatility': {name:'波动率',desc:'年化波动率'},
+  'calmar': {name:'卡玛比率',desc:'年化收益/最大回撤'},
+  'max_loss_days': {name:'最大连跌天数',desc:'历史最长连续下跌天数'},
 };
 async function loadDims() {
   const r = await fetch(API + '/api/dims');
@@ -718,6 +723,11 @@ async function resetDims() {
     {name:'基金规模',key:'scale',weight:0.02,enabled:true,desc:'1~50亿最理想，太小不灵活、太大难操作'},
     {name:'年化收益率',key:'annual_return',weight:0.04,enabled:true,desc:'基金成立以来年化回报'},
     {name:'机构持有比例',key:'institutional',weight:0.02,enabled:true,desc:'专业机构认可度，小幅参考'},
+  {name:'近一周收益',key:'f5',weight:0.03,enabled:true,desc:'近五个交易日涨跌幅，捕捉短期动量'},
+  {name:'近2年收益',key:'sy2',weight:0.05,enabled:true,desc:'近两年精确收益，填补中期维度'},
+  {name:'波动率',key:'volatility',weight:0.03,enabled:true,desc:'年化波动率，衡量基金震荡幅度'},
+  {name:'卡玛比率',key:'calmar',weight:0.03,enabled:true,desc:'年化收益/最大回撤，衡量收益/风险比'},
+  {name:'最大连跌天数',key:'max_loss_days',weight:0.02,enabled:true,desc:'历史最长连续下跌天数'},
   ];
   const r = await fetch(API + '/api/dims', {
     method: 'POST',
