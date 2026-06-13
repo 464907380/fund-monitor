@@ -198,7 +198,10 @@ def main() -> None:
         scored = _run_scoring_pipeline(candidates)
 
         # ── 保存并输出 ──
+        total_steps = len(candidates) + 2
+        update_heartbeat("fund_recommend", progress=total_steps - 1, total=total_steps, status="保存结果")
         _save_result(scored)
+        update_heartbeat("fund_recommend", progress=total_steps, total=total_steps, status="输出排行")
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}  (12 维评分)")
         print("=" * 90)
 
@@ -292,7 +295,7 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
                 print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {ar_str:<8} {result[0]:<6.1f}")
             else:
                 print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {'跳过':<8}")
-            update_heartbeat("fund_recommend", progress=i, total=len(candidates),
+            update_heartbeat("fund_recommend", progress=i, total=len(candidates) + 2,
                              status=f"评分 {name[:18]}({code})")
 
     scored.sort(key=lambda x: x[0], reverse=True)

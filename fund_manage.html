@@ -812,8 +812,7 @@ async function saveDims() {
       // 保存触发推荐->晚报，切换进度条到推荐按钮
       if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
       if (btn) { btn.disabled = false; btn.textContent = '💾 保存'; }
-      // 启动推荐进度轮询（推荐按钮接管）
-      runRecommend();
+      _watchRecommend(); // 直接轮询推荐心跳，不再 POST
     } else {
       showMsg('✖ ' + (d.error || '保存失败'), 'fail');
       if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
@@ -862,6 +861,43 @@ async function resetDims() {
   } else {
     showMsg('✖ ' + (d.error || '重置失败'), 'fail');
   }
+}
+
+/** 轮询推荐心跳（不发起 POST，用于保存后追踪连锁推荐进度） */
+function _watchRecommend() {
+  const btn = document.getElementById('recBtn2');
+  const prog = document.getElementById('recProgress');
+  if (btn) { btn.disabled = true; }
+  const startTime = Date.now();
+  const MAX_WAIT = 1800000;
+  const poll = setInterval(async () => {
+    try {
+      const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
+      const data = hb.heartbeats?.fund_recommend;
+      const alive = hb.alive?.fund_recommend;
+      if (data?.total > 0) {
+        const pct = Math.round(data.progress / data.total * 100);
+        if (btn) btn.textContent = `⏳ 推荐 ${data.status||''} ${pct}%`;
+        if (prog) prog.style.width = pct + '%';
+      } else if (alive) {
+        if (btn) btn.textContent = `⏳ 推荐 ${data?.status||'启动中'}`;
+        if (prog) prog.style.width = '5%';
+      }
+      if (!alive) {
+        clearInterval(poll);
+        loadFeatures();
+        if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+        if (prog) prog.style.width = '0%';
+        showMsg('✔ 推荐完成', 'ok');
+      }
+    } catch(e) {}
+    if (Date.now() - startTime > MAX_WAIT) {
+      clearInterval(poll);
+      if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+      if (prog) prog.style.width = '0%';
+      showMsg('推荐超时', 'fail');
+    }
+  }, 3000);
 }
 
 (async function() {
