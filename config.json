@@ -104,7 +104,7 @@
       {
         "name": "近1月收益",
         "key": "m1",
-        "weight": 0.12,
+        "weight": 0.1,
         "enabled": true,
         "desc": "近一个月涨跌幅，捕捉短期动量"
       },
@@ -125,35 +125,35 @@
       {
         "name": "机构持有比例",
         "key": "institutional",
-        "weight": 0.02,
+        "weight": 0.01,
         "enabled": true,
         "desc": "专业机构认可度，小幅参考"
       },
       {
         "name": "基金规模",
         "key": "scale",
-        "weight": 0.03,
+        "weight": 0.02,
         "enabled": true,
         "desc": "1~50亿最理想"
       },
       {
         "name": "费率",
         "key": "rate",
-        "weight": 0.02,
+        "weight": 0.01,
         "enabled": true,
         "desc": "申购费"
       },
       {
         "name": "近一周收益",
         "key": "f5",
-        "weight": 0.03,
+        "weight": 0.07,
         "enabled": true,
         "desc": "近五个交易日涨跌幅，捕捉短期动量"
       },
       {
         "name": "近2年收益",
         "key": "sy2",
-        "weight": 0.03,
+        "weight": 0.07,
         "enabled": true,
         "desc": "近两年精确收益，填补中期维度"
       },
@@ -174,7 +174,7 @@
       {
         "name": "最大连跌天数",
         "key": "max_loss_days",
-        "weight": 0.05,
+        "weight": 0.02,
         "enabled": true,
         "desc": "历史最长连续下跌天数"
       }

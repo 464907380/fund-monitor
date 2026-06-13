@@ -13,7 +13,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 from config import CFG, api_url
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, \
+from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, update_heartbeat, clear_heartbeat, _fetch_fund_estimate, \
     _color_inline, _strip_html, _send_smtp, send_wechat
 from fund_scoring import SCORE_DIMS, calc_score_detail, _rank_percentile_str
 from fund_metrics import _calc_nav_metrics
@@ -424,13 +424,17 @@ def main() -> None:
         raw_rows: list[dict] = []
         all_alerts: list[str] = []
         for f in FUND_LIST:
+            name = "?"
             try:
                 r, a = check(f["code"])
                 raw_rows.append(r)
                 all_alerts.extend(a)
-                log.info("  %s(%s) %s | 近1月%s | 近3月%s | 近1年%s", r["name"], r["code"], r["day"], r["m1"], r["m3"], r["y1"])
+                name = r.get("name", "?")
+                log.info("  %s(%s) %s | 近1月%s | 近3月%s | 近1年%s", name, r["code"], r["day"], r["m1"], r["m3"], r["y1"])
             except Exception as e:
                 log.error("❌ %s: %s", f["code"], e)
+            update_heartbeat("fund_watch", progress=len(raw_rows), total=len(FUND_LIST),
+                             status=f"取数据 {name}({f['code']})")
     
         # 计算评分（供展示使用）
         for r in raw_rows:
@@ -457,6 +461,7 @@ def main() -> None:
                 "max_loss_days": r.get("_max_loss_days"),
             }
             r["score"], r["_score_detail"], r["_skipped_weight"] = calc_score_detail(d)
+        update_heartbeat("fund_watch", progress=len(FUND_LIST), total=len(FUND_LIST), status="推送中")
     
         rows = raw_rows
     

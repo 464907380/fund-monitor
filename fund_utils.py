@@ -335,17 +335,37 @@ def _ensure_heartbeat_dir() -> None:
     os.makedirs(_HEARTBEAT_DIR, exist_ok=True)
 
 
-def write_heartbeat(name: str) -> None:
+def write_heartbeat(name: str, **kwargs) -> None:
     _ensure_heartbeat_dir()
     path = os.path.join(_HEARTBEAT_DIR, f"{name}.json")
     try:
         hb = {"name": name, "start": time.time(),
               "start_str": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-              "pid": os.getpid()}
-        with open(path, "w", encoding="utf-8") as f:
+              "pid": os.getpid(), "progress": 0, "total": 0, "status": ""}
+        hb.update(kwargs)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(hb, f)
+        os.replace(tmp, path)
     except Exception as e:
         log.debug("写入心跳失败 %s: %s", name, e)
+
+
+def update_heartbeat(name: str, **kwargs) -> None:
+    """更新心跳中的 progress/status 等字段，不重置 start/pid"""
+    _ensure_heartbeat_dir()
+    path = os.path.join(_HEARTBEAT_DIR, f"{name}.json")
+    try:
+        hb = read_heartbeat(name) or {"name": name, "start": time.time(),
+                                       "start_str": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                       "pid": os.getpid()}
+        hb.update(kwargs)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(hb, f)
+        os.replace(tmp, path)
+    except Exception as e:
+        log.debug("更新心跳失败 %s: %s", name, e)
 
 
 def clear_heartbeat(name: str) -> None:

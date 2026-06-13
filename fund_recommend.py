@@ -20,6 +20,8 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from fund_utils import update_heartbeat
+
 try:
     from fund_watch import get, log, fetch
     from fund_scoring import _calc_score, SCORE_DIMS
@@ -184,10 +186,12 @@ def main() -> None:
         est_min = _TOP * 2 // 60
 
         print(f"\n📥 获取全市场基金排行 (TOP {_TOP})...")
+        update_heartbeat("fund_recommend", progress=0, total=_TOP, status="获取排行榜")
         rows = _fetch_rank_list(_TOP)
         print(f"   获取到 {len(rows)} 只基金")
 
         candidates = _filter_candidates(rows)
+        update_heartbeat("fund_recommend", progress=0, total=len(candidates), status=f"筛选候选基金 ({len(candidates)}只)")
         print(f"   剔除负收益后: {len(candidates)} 只全部进入深度评分")
         print(f"   ⏱ 预计耗时约 {est_min} 分钟\n")
 
@@ -288,6 +292,8 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
                 print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {ar_str:<8} {result[0]:<6.1f}")
             else:
                 print(f"  {i}/{len(candidates):<4} {code:<7} {name[:18]:<20} {'跳过':<8}")
+            update_heartbeat("fund_recommend", progress=i, total=len(candidates),
+                             status=f"评分 {name[:18]}({code})")
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return scored
