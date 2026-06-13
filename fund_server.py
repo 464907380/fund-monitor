@@ -43,6 +43,27 @@ def _spawn_recommend() -> None:
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
 
 
+def _spawn_recommend_and_briefing() -> None:
+    """启动推荐，完成后自动清理心跳并连锁触发晚报生成"""
+    global _recommend_proc
+    script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
+    write_heartbeat("fund_recommend")
+    _recommend_proc = subprocess.Popen(
+        [sys.executable, script],
+        cwd=_SCRIPT_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    def _chain() -> None:
+        _recommend_proc.wait()
+        clear_heartbeat("fund_recommend")
+        # 推荐完成后自动触发晚报生成（使新权重应用到简报）
+        _spawn_briefing()
+
+    threading.Thread(target=_chain, daemon=True).start()
+
+
 def _spawn_briefing() -> None:
     """启动晚报生成，完成后自动清理心跳"""
     global _briefing_proc
@@ -388,9 +409,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 import importlib
                 import fund_scoring
                 importlib.reload(fund_scoring)
-                # 权重变更后自动重新跑推荐
-                _spawn_recommend()
-                self._send(*_json_response({"ok": True, "message": "评分配置已更新，推荐已启动"}))
+                # 权重变更后自动重新跑推荐+生成晚报
+                _spawn_recommend_and_briefing()
+                self._send(*_json_response({"ok": True, "message": "评分配置已更新，推荐+晚报已启动"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
