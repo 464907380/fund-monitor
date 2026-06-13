@@ -229,7 +229,10 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         _v = r.get("m1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         _v = r.get("m3",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         _v = r.get("y1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#66bb6a;">{r.get("score","")}</td>' if r.get("score") is not None else f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;color:#555;">-</td>')
+        _v_detail = r.get("_score_detail", [])
+        _detail_json = _html.escape(json.dumps(_v_detail, ensure_ascii=False)) if _v_detail else ""
+        _score_html = f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;" onclick="showScoreDetail(\'{_detail_json}\')">{r.get("score","")}</td>'
+        parts.append(_score_html)
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_annual_return"))}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sharpe"))}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sortino"))}</td>')
@@ -263,10 +266,12 @@ def _web_rich_recommend_table() -> str:
     medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
     for i, r in enumerate(fresh[:10]):
         badge = medals[i] if i < 3 else f'{i+1}.'
+        detail = r.get("score_detail", [])
+        detail_json = _html.escape(json.dumps(detail, ensure_ascii=False))
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;">{r.get("score",0):.1f}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;" onclick="showScoreDetail(\'{detail_json}\')">{r.get("score",0):.1f}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
@@ -303,6 +308,46 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         web += _web_rich_recommend_table()
         web = re.sub(r'\n{3,}', '\n\n', web)
         web = web.strip()
+        # 注入评分明细弹窗 JS
+        modal_js = '''
+<script>
+function showScoreDetail(json) {
+  var items = JSON.parse(json);
+  var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;">'
+    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">维度评分明细</div>'
+    + '<table style="width:100%;border-collapse:collapse;">'
+    + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">维度</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">得分</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">权重</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">贡献</th></tr></thead><tbody>';
+  var total = 0;
+  items.forEach(function(item){
+    var name = item[0], score = item[1], weight = item[2];
+    var contrib = (score * weight).toFixed(1);
+    total += score * weight;
+    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + name + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350') + ';">' + score.toFixed(1) + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib + '</td></tr>';
+  });
+  html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;">合计</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + total.toFixed(1) + '</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">100%</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + total.toFixed(1) + '</td></tr>'
+    + '</tbody></table>'
+    + '<button onclick="this.parentElement.style.display=\'none\'" style="margin-top:10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 12px;cursor:pointer;">关闭</button></div>';
+  var el = document.getElementById("scoreDetailModal");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "scoreDetailModal";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = html;
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;max-width:500px;width:90%;";
+}
+</script>
+'''
+        web += modal_js
         tmp_path = _BRIEFING_FILE + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(web)
@@ -361,7 +406,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
         codes = [(c, n) for c, n in codes if c]
 
         from fund_watch import get
-        from fund_scoring import _calc_score, SCORE_DIMS
+        from fund_scoring import calc_score_detail, SCORE_DIMS
 
         fresh = []
         for code, cached_name in codes:
@@ -391,8 +436,9 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                     "calmar": d.get("calmar"),
                     "max_loss_days": d.get("max_loss_days"),
                 }
-                score = _calc_score(score_d)
+                score, details = calc_score_detail(score_d)
                 d["score"] = score
+                d["score_detail"] = details
                 fresh.append(d)
             except Exception:
                 continue

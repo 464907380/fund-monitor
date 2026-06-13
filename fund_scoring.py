@@ -363,6 +363,26 @@ def _calc_score(d: dict) -> float:
     return round(total / weight_sum, 1) if weight_sum > 0 else 0.0
 
 
+def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float, float, str]]]:
+    """
+    计算基金综合评分并返回各维度明细
+
+    返回: (总分, [(维度名, 单项得分, 权重, 说明), ...])
+    """
+    total = 0.0
+    weight_sum = 0.0
+    details: list[tuple[str, float, float, str]] = []
+    for name, fn, weight, desc in SCORE_DIMS:
+        if weight <= 0:
+            continue
+        s = fn(d)
+        details.append((name, round(s, 1), weight, desc))
+        total += s * weight
+        weight_sum += weight
+    score = round(total / weight_sum, 1) if weight_sum > 0 else 0.0
+    return score, details
+
+
 def _rank_percentile_str(d: dict) -> str:
     """返回排名百分位字符串，如 'top 1.2%'"""
     rk = d.get("rank")
