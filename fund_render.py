@@ -230,8 +230,8 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         _v = r.get("m3",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         _v = r.get("y1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         _v_detail = r.get("_score_detail", [])
-        _detail_json = _html.escape(json.dumps(_v_detail, ensure_ascii=False)) if _v_detail else ""
-        _score_html = f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;" onclick="showScoreDetail(\'{_detail_json}\')">{r.get("score","")}</td>'
+        _detail_attr = _html.escape(json.dumps(_v_detail, ensure_ascii=False)) if _v_detail else ""
+        _score_html = f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;" data-detail="{_detail_attr}" onclick="showScoreDetail(this)">{r.get("score","")}</td>'
         parts.append(_score_html)
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_annual_return"))}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sharpe"))}</td>')
@@ -267,11 +267,11 @@ def _web_rich_recommend_table() -> str:
     for i, r in enumerate(fresh[:10]):
         badge = medals[i] if i < 3 else f'{i+1}.'
         detail = r.get("score_detail", [])
-        detail_json = _html.escape(json.dumps(detail, ensure_ascii=False))
+        detail_attr = _html.escape(json.dumps(detail, ensure_ascii=False)) if detail else ""
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;" onclick="showScoreDetail(\'{detail_json}\')">{r.get("score",0):.1f}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;" data-detail="{detail_attr}" onclick="showScoreDetail(this)">{r.get("score",0):.1f}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
@@ -311,7 +311,9 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         # 注入评分明细弹窗 JS
         modal_js = '''
 <script>
-function showScoreDetail(json) {
+function showScoreDetail(el) {
+  var json = el.dataset.detail || el.getAttribute("data-detail");
+  if (!json) return;
   var items = JSON.parse(json);
   var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;">'
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">维度评分明细</div>'
