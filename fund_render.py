@@ -107,7 +107,7 @@ def _build_briefing_html(rows: list[dict], alerts: list[str], today: str,
         _m3 = _html.escape(str(r.get("m3", "")))
         _y1 = _html.escape(str(r.get("y1", "")))
         row_htmls.append("<tr>"
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-family:Consolas;font-size:11px;color:#888;white-space:nowrap;">{_code}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-family:Consolas;font-size:12px;color:#888;white-space:nowrap;">{_code}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-size:13px;color:#ccc;white-space:nowrap;">{_name}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["day"])}">{_day}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m1"])}">{_m1}</td>'
@@ -201,7 +201,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     """生成自选基金完整数据 HTML 表格（Web 版）"""
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 自选基金完整数据</p>'
-             '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
+             '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
              '<thead><tr style="background:#2a2a2a;">'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">代码</th>'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金名</th>'
@@ -234,7 +234,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sortino"))}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_max_dd"))}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_win_rate"))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:11px;color:#888;">{_html.escape(str(r.get("mgr","")))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:12px;color:#888;">{_html.escape(str(r.get("mgr","")))}</td>')
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
     return "\n".join(parts)
@@ -251,7 +251,7 @@ def _web_rich_recommend_table() -> str:
     dims_shown = dim_names  # 取前 10 个主要维度
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP 10 \uff08\u5168\u7ef4\u5ea6\uff09</p>'
-             '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
+             '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
              '<thead><tr style="background:#2a2a2a;">'
              '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;white-space:nowrap;">#</th>'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金</th>'
@@ -265,7 +265,7 @@ def _web_rich_recommend_table() -> str:
         badge = medals[i] if i < 3 else f'{i+1}.'
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("name","")))} <span style="color:#666;font-family:Consolas;font-size:11px;">{r.get("code","")}</span></td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("name","")))} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;">{r.get("score",0):.1f}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
