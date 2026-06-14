@@ -372,19 +372,6 @@ h1 {
     <div id="features"></div>
   </div>
 
-  
-
-    <div class="card">
-    <div class="list-header" style="padding:12px 20px 8px;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:13px;font-weight:600;color:#ccc;">🏆 市场优选</span>
-      <span id="recResultDate" style="font-size:11px;color:#555;"></span>
-    </div>
-    <div class="divider"></div>
-    <div id="recResultList" style="padding:8px 12px;font-size:12px;color:#888;">
-      等待首次推荐运行…
-    </div>
-  </div>
-
 </div>
 
 <!-- 确认弹窗 -->
@@ -1062,7 +1049,6 @@ function _watchRecommend() {
         if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
         if (prog) prog.style.width = '0%';
         showMsg('✔ 推荐完成', 'ok');
-        loadRecommendResults();
       }
     } catch(e) {}
     if (Date.now() - startTime > MAX_WAIT) {
@@ -1163,7 +1149,6 @@ async function runRecommend() {
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           if (prog) prog.style.width = '0%';
           showMsg('✔ 推荐完成', 'ok');
-          loadRecommendResults();
         }
       } catch(e) {}
       if (Date.now() - startTime > MAX_WAIT) {
@@ -1180,7 +1165,6 @@ async function runRecommend() {
 }
 
 loadDims();
-loadRecommendResults();
 
 // 加载全市场筛选配置参数
 loadRecommendConfig();
@@ -1201,72 +1185,6 @@ async function loadRecommendConfig() {
     }
   } catch(e) {}
 }
-async function loadRecommendResults() {
-  try {
-    const r = await fetch(API + '/api/recommend');
-    const d = await r.json();
-    if (!d.ok || !d.results || d.results.length === 0) return;
-    var dateEl = document.getElementById('recResultDate');
-    var listEl = document.getElementById('recResultList');
-    if (!listEl) return;
-    if (dateEl) dateEl.textContent = d.date ? '更新于 ' + d.date : '';
-    
-    // 维度列映射：DIM_INFO key → API 数据字段名
-    var dimFieldMap = {
-      y1:'y1', m3:'m3', m1:'m1', f5:'f5', sy6:'sy6',
-      sy2:'sy2', sy3:'sy3', sharpe:'sharpe', win_rate:'win_rate',
-      profit_ratio:'profit_ratio', sortino:'sortino', recovery:'recovery',
-      max_dd:'max_dd', volatility:'volatility', calmar:'calmar',
-      max_loss_days:'max_loss_days', rate:'rate',
-      annual_return:'annual_return', institutional:'inst', scale:'sc'
-    };
-    var dimKeys = Object.keys(dimFieldMap);
-    
-    var medals = ['🥇','🥈','🥉'];
-    // 固定列 + 动态维度列
-    var fixedCols = [
-      {key:'_rank', label:'#'},
-      {key:'_name', label:'基金'},
-      {key:'score', label:'总分'},
-    ];
-    var allCols = fixedCols.concat(dimKeys.map(function(k){ return {key:k, label:DIM_INFO[k]?.name || k}; }));
-    
-    var html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
-      + '<thead><tr style="background:rgba(255,255,255,0.03);">';
-    allCols.forEach(function(col) {
-      var align = col.key === '_rank' ? 'center' : (col.key === '_name' ? 'left' : 'right');
-      html += '<th style="padding:4px 6px;text-align:' + align + ';color:#888;border-bottom:1px solid #333;white-space:nowrap;">' + col.label + '</th>';
-    });
-    html += '</tr></thead><tbody>';
-    
-    d.results.forEach(function(item, i) {
-      var rank = i < 3 ? medals[i] : (i+1);
-      var name = (item.name || item.code || '').substring(0, 14);
-      html += '<tr>';
-      html += '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px;">' + rank + '</td>';
-      html += '<td style="padding:3px 6px;border-bottom:1px solid rgba(255,255,255,0.04);color:#e0e0e0;white-space:nowrap;">' + name + '<br><span style="color:#555;font-family:Consolas;font-size:10px;">' + item.code + '</span></td>';
-      html += '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);color:#66bb6a;font-weight:600;font-family:Consolas;">' + (item.score || 0).toFixed(1) + '</td>';
-      // 维度列
-      dimKeys.forEach(function(k) {
-        var field = dimFieldMap[k] || k;
-        var v = item[field];
-        var display = '';
-        if (v === null || v === undefined) {
-          display = '-';
-        } else if (typeof v === 'number') {
-          display = v.toFixed(v >= 100 ? 1 : (v >= 10 ? 1 : 2));
-        } else {
-          display = String(v);
-        }
-        html += '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;color:#bbb;font-size:10px;">' + display + '</td>';
-      });
-      html += '</tr>';
-    });
-    html += '</tbody></table></div>';
-    listEl.innerHTML = html;
-  } catch(e) {}
-}
-
 async function runRecommendFromFilter() {
   var btn = document.getElementById('recFilterBtn');
   var prog = document.getElementById('recFilterProgress');
@@ -1308,7 +1226,6 @@ async function runRecommendFromFilter() {
           if (statusEl) statusEl.textContent = '✔ 推荐完成';
           // 等一秒确保 JSON 已写完，再刷新市场卡片 + 生成晚报
           await new Promise(function(r){ setTimeout(r, 1000); });
-          loadRecommendResults();
           try { await fetch(API + '/api/briefing', { method: 'POST' }); } catch(e) {}
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           setTimeout(function() {
