@@ -1211,15 +1211,16 @@ async function loadRecommendResults() {
     if (!listEl) return;
     if (dateEl) dateEl.textContent = d.date ? '更新于 ' + d.date : '';
     
-    // 动态提取维度列（跳过非展示字段）
-    var skipKeys = ['code', 'name', 'score', '_nodata', 'name_short', 'holds', 'score_detail'];
-    var dimKeys = [];
-    var first = d.results[0];
-    for (var k in first) {
-      if (skipKeys.indexOf(k) === -1 && typeof first[k] !== 'object') {
-        dimKeys.push(k);
-      }
-    }
+    // 维度列映射：DIM_INFO key → API 数据字段名
+    var dimFieldMap = {
+      y1:'y1', m3:'m3', m1:'m1', f5:'f5', sy6:'sy6',
+      sy2:'sy2', sy3:'sy3', sharpe:'sharpe', win_rate:'win_rate',
+      profit_ratio:'profit_ratio', sortino:'sortino', recovery:'recovery',
+      max_dd:'max_dd', volatility:'volatility', calmar:'calmar',
+      max_loss_days:'max_loss_days', rate:'rate',
+      annual_return:'annual_return', institutional:'inst', scale:'sc'
+    };
+    var dimKeys = Object.keys(dimFieldMap);
     
     var medals = ['🥇','🥈','🥉'];
     // 固定列 + 动态维度列
@@ -1247,7 +1248,8 @@ async function loadRecommendResults() {
       html += '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);color:#66bb6a;font-weight:600;font-family:Consolas;">' + (item.score || 0).toFixed(1) + '</td>';
       // 维度列
       dimKeys.forEach(function(k) {
-        var v = item[k];
+        var field = dimFieldMap[k] || k;
+        var v = item[field];
         var display = '';
         if (v === null || v === undefined) {
           display = '-';
