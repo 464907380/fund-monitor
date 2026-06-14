@@ -345,6 +345,96 @@ def _calc_day_change(navs: list[dict], td: float | None) -> tuple[str, str]:
     return day_s, f5
 
 
+
+# ── 公告类型名称映射 ────────────────────────────
+_ANNOUNCE_TYPE_NAMES = {
+    "1": "发行运作", "2": "分红送配", "3": "定期报告",
+    "4": "人事调整", "5": "基金销售", "6": "其他公告",
+}
+
+_ANNOUNCE_ICONS = {
+    "1": "📋", "2": "💰", "3": "📊",
+    "4": "👤", "5": "🏷️", "6": "📄",
+}
+
+# 公告标题中不值得单独推送的关键词（跳过）
+_ANNOUNCE_SKIP_KEYWORDS = [
+    "系统维护", "隐私政策", "网上交易", "节日", "假期",
+]
+
+
+def _fetch_announcements(code: str) -> list[dict]:
+    """获取基金最新公告列表，返回 [{id, title, type, date}]，失败返回 []"""
+    import urllib.request, re, json
+    url = api_url("fund_announce", code=code)
+    req = urllib.request.Request(url, headers={
+        "Referer": f"https://fundf10.eastmoney.com/jjgg_{code}.html",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = r.read().decode("utf-8")
+        m = re.search(r'j\((.+)\)$', data)
+        if not m:
+            return []
+        obj = json.loads(m.group(1))
+        if obj.get("ErrCode") != 0:
+            return []
+        raw = obj.get("Data") or []
+        result = []
+        for item in raw:
+            tid = item.get("ID", "")
+            title = item.get("TITLE", "")
+            cat = item.get("NEWCATEGORY", "0")
+            date = item.get("PUBLISHDATEDesc", "")
+            if tid and title:
+                result.append({"id": tid, "title": title, "type": cat, "date": date})
+        return result
+    except Exception as e:
+        log.debug("获取公告失败 %s: %s", code, e)
+        return []
+
+
+def _check_announcements(d: dict, h: dict, name: str, code: str) -> list[str]:
+    """检查是否有新公告，返回警报列表"""
+    alerts: list[str] = []
+    items = _fetch_announcements(code)
+    if not items:
+        return alerts
+
+    last_id = h.get("last_ann_id", "")
+    latest_id = items[0]["id"]
+
+    if not last_id:
+        # 首次运行：只记录最新 ID，不报警
+        h["last_ann_id"] = latest_id
+        return alerts
+
+    if latest_id == last_id:
+        # 无新公告
+        return alerts
+
+    # 有新公告：找出比 last_id 更新的
+    found = False
+    for item in items:
+        if item["id"] == last_id:
+            break
+        # 跳过不重要的公告
+        title = item["title"]
+        if any(kw in title for kw in _ANNOUNCE_SKIP_KEYWORDS):
+            continue
+        cat = item.get("type", "0")
+        cat_name = _ANNOUNCE_TYPE_NAMES.get(cat, "")
+        icon = _ANNOUNCE_ICONS.get(cat, "📋")
+        date = item.get("date", "")
+        if not found:
+            alerts.append(f"📋 <font color=\"info\">{name}({code}) 新公告</font>")
+            found = True
+        alerts.append(f"   {icon} [{date}] {cat_name} {title}")
+
+    h["last_ann_id"] = latest_id
+    return alerts
+
 def check(code: str) -> tuple[dict, list[str]]:
     d = get(code)
     h = load_hist(code)
@@ -354,6 +444,7 @@ def check(code: str) -> tuple[dict, list[str]]:
 
     alerts += _check_manager_and_scale(d, h, name, code)
     alerts += _check_monthly_drop(d, name, code)
+    alerts += _check_announcements(d, h, name, code)
     save_hist(code, h)
 
     td = d.get("td")

@@ -283,10 +283,6 @@ h1 {
       <button onclick="runRecommend()" id="recBtn2" class="toolbar-btn blue">▶ 运行推荐</button>
       <div class="btn-progress" id="recProgress"></div>
     </div>
-    <div class="toolbar-btn-wrap">
-      <button onclick="saveDims()" id="dimsSaveBtn" class="toolbar-btn green">💾 保存权重</button>
-      <div class="btn-progress" id="saveProgress"></div>
-    </div>
   </div>
 
 
@@ -305,10 +301,20 @@ h1 {
     </div>
     <div class="divider"></div>
     <div id="dimsList" style="font-size:12px;"></div>
-    <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;">
+    <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center;">
+      <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;" class="dims-save-btn">💾 保存权重</button>
       <button onclick="resetDims()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;">重置</button>
-      <span style="font-size:11px;color:#555;">· 取消勾选 = 关闭维度，保存后下次评分生效</span>
     </div>
+    <div id="saveProgressArea" style="padding:6px 4px 2px;display:none;">
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#888;">
+        <div style="flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+          <div id="saveProgressFill" style="width:0%;height:100%;background:linear-gradient(90deg,#66bb6a,#42a5f5);border-radius:3px;transition:width 0.5s;"></div>
+        </div>
+        <span id="saveProgressPct" style="font-family:Consolas;min-width:36px;text-align:right;">0%</span>
+      </div>
+      <div id="saveProgressText" style="font-size:11px;color:#888;padding:2px 0 0;"></div>
+    </div>
+    <div style="padding:2px 4px 0;font-size:11px;color:#555;text-align:center;">· 取消勾选 = 关闭维度，保存后下次评分生效</div>
   </div>
 
   <div class="card add-card">
@@ -673,34 +679,73 @@ loadBriefing();
 
 var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days'];
 var DIM_INFO = {
-  'y1': {name:'近1年收益',desc:'最近一年的表现'},
-  'm3': {name:'近3月收益',desc:'近三个月涨跌幅'},
-  'm1': {name:'近1月收益',desc:'近一个月涨跌幅'},
-  'sharpe': {name:'夏普比率',desc:'每承受 1 份波动能换来的收益'},
-  'win_rate': {name:'上行胜率',desc:'赚钱天数比例'},
-  'profit_ratio': {name:'盈亏比',desc:'平均盈利/亏损'},
-  'sortino': {name:'索提诺比率',desc:'只考虑下跌波动'},
-  'recovery': {name:'修复系数',desc:'总收益/最大回撤'},
-  'sy6': {name:'近6月收益',desc:'近六个月表现'},
-  'sy3': {name:'近3年收益',desc:'近3年精确计算'},
-  'max_dd': {name:'最大回撤',desc:'历史最大跌幅'},
-  'rate': {name:'费率',desc:'申购费'},
-  'scale': {name:'基金规模',desc:'1~50亿最理想'},
-  'annual_return': {name:'年化收益率',desc:'基金成立以来年化回报'},
-  'institutional': {name:'机构持有比例',desc:'专业机构认可度'},
-  'f5': {name:'近一周收益',desc:'近五个交易日涨跌幅'},
-  'sy2': {name:'近2年收益',desc:'近两年精确收益'},
-  'volatility': {name:'波动率',desc:'年化波动率'},
-  'calmar': {name:'卡玛比率',desc:'年化收益/最大回撤'},
-  'max_loss_days': {name:'最大连跌天数',desc:'历史最长连续下跌天数'},
+  'y1': {name:'近1年收益',desc:'最近一年的表现',cat:'perf'},
+  'm3': {name:'近3月收益',desc:'近三个月涨跌幅',cat:'perf'},
+  'm1': {name:'近1月收益',desc:'近一个月涨跌幅',cat:'perf'},
+  'f5': {name:'近一周收益',desc:'近五个交易日涨跌幅',cat:'perf'},
+  'sy6': {name:'近6月收益',desc:'近六个月表现',cat:'perf'},
+  'sy2': {name:'近2年收益',desc:'近两年精确收益',cat:'perf'},
+  'sy3': {name:'近3年收益',desc:'近3年精确计算',cat:'perf'},
+  'annual_return': {name:'年化收益率',desc:'基金成立以来年化回报',cat:'perf'},
+  'max_dd': {name:'最大回撤',desc:'历史最大跌幅',cat:'risk'},
+  'volatility': {name:'波动率',desc:'年化波动率',cat:'risk'},
+  'max_loss_days': {name:'最大连跌天数',desc:'历史最长连续下跌天数',cat:'risk'},
+  'sharpe': {name:'夏普比率',desc:'每承受 1 份波动能换来的收益',cat:'quality'},
+  'sortino': {name:'索提诺比率',desc:'只考虑下跌波动',cat:'quality'},
+  'profit_ratio': {name:'盈亏比',desc:'平均盈利/亏损',cat:'quality'},
+  'win_rate': {name:'上行胜率',desc:'赚钱天数比例',cat:'quality'},
+  'recovery': {name:'修复系数',desc:'总收益/最大回撤',cat:'quality'},
+  'calmar': {name:'卡玛比率',desc:'年化收益/最大回撤',cat:'quality'},
+  'rate': {name:'费率',desc:'申购费',cat:'other'},
+  'scale': {name:'基金规模',desc:'1~50亿最理想',cat:'other'},
+  'institutional': {name:'机构持有比例',desc:'专业机构认可度',cat:'other'},
 };
+_CAT_NAMES = {perf:'📈 收益表现', risk:'🛡️ 风险指标', quality:'⭐ 收益性价比', other:'📋 基金特征'};
+_CAT_ORDER = ['perf','risk','quality','other'];
+
+
+// ── 20 个维度的默认评分曲线断点 ──────────────
+// 与 fund_scoring.py 的 _DEFAULT_CURVES 保持一致
+_DEFAULT_CURVES = {
+  y1:              [[0,0], [20,50], [50,80], [100,100]],
+  m3:              [[0,0], [10,50], [30,80], [60,100]],
+  m1:              [[0,0], [5,50], [15,80], [30,100]],
+  f5:              [[0,0], [5,70], [10,100]],
+  sy6:             [[0,10], [20,60], [50,90], [100,100]],
+  sy2:             [[0,0], [30,20], [60,40], [100,70], [200,100]],
+  sy3:             [[0,0], [30,20], [60,40], [100,70], [200,100]],
+  annual_return:   [[0,0], [5,20], [15,60], [30,90], [60,100]],
+  sharpe:          [[0,0], [0.5,30], [1,70], [1.5,100]],
+  sortino:         [[0,0], [0.5,20], [1,60], [2,100]],
+  profit_ratio:    [[0,0], [1,20], [2,100]],
+  win_rate:        [[30,10], [50,40], [70,100]],
+  recovery:        [[0,0], [5,20], [20,60], [50,100]],
+  max_dd:          [[0,90], [16.67,90], [20,86], [50,50], [75,20], [91.67,0]],
+  volatility:      [[10,100], [20,80], [40,40], [60,0]],
+  calmar:          [[0,0], [0.3,20], [1,60], [3,100]],
+  max_loss_days:   [[3,100], [7,80], [15,40], [30,0]],
+  rate:            [[0,100], [0.15,80], [0.5,40], [1.5,0]],
+  scale:           [[0,0], [1,70], [20,100], [50,70], [100,30]],
+  institutional:   [[5,10], [30,50], [60,90]],
+};
+
+// 把后端返回的 curve 转成 JS 断点数组，没有则用默认
+function _getCurvePoints(dimKey, serverCurve) {
+  if (serverCurve && serverCurve.points && serverCurve.points.length >= 2) {
+    return serverCurve.points;
+  }
+  var def = _DEFAULT_CURVES[dimKey];
+  return def ? def.map(function(p){ return [p[0], p[1]]; }) : [[0,0],[100,100]];
+}
+
+
 async function loadDims() {
   const r = await fetch(API + '/api/dims');
   const d = await r.json();
   if (!d.ok || !d.dims) return;
   const el = document.getElementById('dimsList');
   if (!el) return;
-  const allKeys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional'];
+  const allKeys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days'];
   const usedKeys = d.dims.map(function(x){ return x.key; });
   
   el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;" id="dimsTable"><thead><tr style="background:#2a2a2a;">'
@@ -708,18 +753,45 @@ async function loadDims() {
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">维度</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;">权重</th>'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">说明</th>'
+    + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;">曲线</th>'
     + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;"></th>'
     + '</tr></thead><tbody>'
-    + d.dims.map(function(dim, i) {
-        const pct = Math.round(dim.weight * 100);
-        return '<tr>'
+    + function() {
+        var cats = {};
+        d.dims.forEach(function(dim) {
+            var cat = dim.category || DIM_INFO[dim.key]?.cat || '';
+            if (!cats[cat]) cats[cat] = [];
+            cats[cat].push(dim);
+        });
+        var html = '';
+        _CAT_ORDER.forEach(function(cat) {
+            var items = cats[cat];
+            if (!items || items.length === 0) return;
+            html += '<tr style="background:rgba(255,255,255,0.03);"><td colspan="6" style="padding:8px 6px 4px;font-size:12px;color:#888;letter-spacing:1px;border-bottom:none;">' + (_CAT_NAMES[cat] || cat) + '</td></tr>';
+            items.forEach(function(dim) {
+                const pct = Math.round(dim.weight * 100);
+                const pts = _getCurvePoints(dim.key, dim.curve);
+                html += '<tr>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" ' + (dim.enabled !== false ? 'checked' : '') + ' onchange="markDimsDirty()"></td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + htmlEscape(dim.key) + '</span></td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(dim.desc) + '</td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleCurveEditor(this)" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;" title="调整评分曲线">📐</button></td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
-          + '</tr>';
-      }).join('')
+          + '</tr>'
+          + '<tr class="curve-edit-row" style="display:none;background:rgba(255,255,255,0.02);">'
+          + '<td colspan="6" style="padding:6px 12px;">'
+          + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
+          + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + dim.key + '">'
+          + pts.map(function(p, j) {
+            return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
+          }).join('')
+          + '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addCurvePoint(this,\'' + dim.key + '\')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
+          + '</table></td></tr>';
+            });
+        });
+        return html;
+    }()
     + '</tbody></table></div>'
     + '<div id="addDimArea" style="padding:8px 4px;text-align:center;"></div>';
   renderAddDimBtn();
@@ -728,7 +800,7 @@ async function loadDims() {
 
 function updateDimsTotal() {
   var total = 0;
-  document.querySelectorAll('#dimsTable tbody input[type=number]').forEach(function(n){ total += parseInt(n.value) || 0; });
+  document.querySelectorAll('#dimsTable tbody tr td:nth-child(3) input[type=number]').forEach(function(n){ total += parseInt(n.value) || 0; });
   var el = document.getElementById('dimsTotal');
   if (!el) {
     el = document.createElement('div');
@@ -764,25 +836,74 @@ function doAddDim() {
   if (!info) return;
   const tbody = document.querySelector('#dimsTable tbody');
   const tr = document.createElement('tr');
+  const pts = _getCurvePoints(key, null);
   tr.innerHTML = '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" checked onchange="markDimsDirty()"></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(info.name) + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + htmlEscape(key) + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(info.desc) + '</td>'
+    + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleCurveEditor(this)" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;" title="调整评分曲线">📐</button></td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
   tbody.appendChild(tr);
+  // 添加曲线编辑子行
+  var curveSubRow = document.createElement('tr');
+  curveSubRow.className = 'curve-edit-row';
+  curveSubRow.style.cssText = 'display:none;background:rgba(255,255,255,0.02);';
+  var pts2 = _getCurvePoints(key, null);
+  curveSubRow.innerHTML = '<td colspan="6" style="padding:6px 12px;">'
+    + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
+    + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + key + '">'
+    + pts2.map(function(p, j) {
+      return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
+    }).join('')
+    + '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addCurvePoint(this,\'' + key + '\')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
+    + '</table></td></tr>';
+  tbody.appendChild(curveSubRow);
   renderAddDimBtn();
   updateDimsTotal();
   markDimsDirty();
 }
 function removeDim(btn) {
-  btn.closest('tr').remove();
+  var row = btn.closest('tr');
+  var subRow = row.nextElementSibling;
+  if (subRow && subRow.classList.contains('curve-edit-row')) subRow.remove();
+  row.remove();
   markDimsDirty();
+  renderAddDimBtn();
 }
 
 function markDimsDirty() {
   updateDimsTotal();
   document.getElementById('dimsSaveBtn').style.background = 'linear-gradient(135deg,#ef5350,#e53935)';
 }
+function toggleCurveEditor(btn) {
+  var row = btn.closest('tr');
+  var curveRow = row.nextElementSibling;
+  if (curveRow && curveRow.classList.contains('curve-edit-row')) {
+    curveRow.style.display = curveRow.style.display === 'none' ? 'table-row' : 'none';
+  }
+}
+function addCurvePoint(btn, key) {
+  var tbl = document.getElementById('curve-tbl-' + key);
+  if (!tbl) return;
+  // 取最后一行断点的值作为参考
+  var rows = tbl.querySelectorAll('tr');
+  var lastVal = 100, lastScore = 100;
+  for (var i = rows.length - 1; i >= 0; i--) {
+    var inputs = rows[i].querySelectorAll('input[type=number]');
+    if (inputs.length >= 2) {
+      lastVal = parseFloat(inputs[0].value) + 10;
+      lastScore = parseFloat(inputs[1].value);
+      break;
+    }
+  }
+  var newRow = document.createElement('tr');
+  newRow.innerHTML = '<td style="padding:2px 4px;"><input type="number" step="any" value="' + lastVal + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"> →</td>'
+    + '<td style="padding:2px 4px;"><input type="number" step="any" value="' + lastScore + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"></td>'
+    + '<td style="padding:2px 4px;"><button onclick="this.closest(\'tr\').remove();markDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button></td>';
+  tbl.querySelector('tr:last-child').before(newRow);
+  markDimsDirty();
+}
+
 
 async function saveDims() {
   const btn = document.getElementById('dimsSaveBtn');
@@ -792,63 +913,83 @@ async function saveDims() {
   const rows = document.querySelectorAll('#dimsTable tbody tr');
   const dims = [];
   rows.forEach(function(row) {
-    const cb = row.querySelector('input[type=checkbox]');
-    const num = row.querySelector('input[type=number]');
-    const key = row.querySelector('td:nth-child(2) span').textContent;
+    var cb = row.querySelector('input[type=checkbox]');
+    if (!cb) return; // 跳过分类标题行
+    var num = row.querySelector('input[type=number]');
+    var key = row.querySelector('td:nth-child(2) span').textContent;
     var name = row.querySelector('td:nth-child(2)').textContent.replace(key,'').trim();
     if (name.endsWith('\n')) name = name.slice(0,-1).trim();
     const desc = row.querySelectorAll('td')[3].textContent;
-    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc});
+    var curvePoints = null;
+    var curveRow = row.nextElementSibling;
+    if (curveRow && curveRow.classList.contains('curve-edit-row')) {
+      var inpRows = curveRow.querySelectorAll('table tr');
+      var pts = [];
+      for (var j = 0; j < inpRows.length; j++) {
+        var inputs = inpRows[j].querySelectorAll('input[type=number]');
+        if (inputs.length >= 2) {
+          var x = parseFloat(inputs[0].value);
+          var y = parseFloat(inputs[1].value);
+          if (!isNaN(x) && !isNaN(y)) pts.push([x, y]);
+        }
+      }
+      if (pts.length >= 2) curvePoints = {points: pts};
+    }
+    var cat = DIM_INFO[key]?.cat || '';
+    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc, curve: curvePoints, category: cat});
   });
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(function() { controller.abort(); }, 30000);
     const r = await fetch(API + '/api/dims', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({dims: dims}),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     const d = await r.json();
     if (d.ok) {
-      showMsg('✔ 权重已更新', 'ok');
-      loadDims();
-      // 保存触发推荐->晚报，切换进度条到推荐按钮
-      if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
-      _watchRecommend(); // 直接轮询推荐心跳，不再 POST
+      showMsg('✔ 权重已保存', 'ok');
+      try { loadDims(); } catch(e) {}
+      _watchRecommend();
+      _watchSaveProgress();
     } else {
-      showMsg('✖ ' + (d.error || '保存失败'), 'fail');
       if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
+      showMsg('✖ ' + (d.error || '保存失败'), 'fail');
     }
   } catch(e) {
-    showMsg('✖ 保存失败', 'fail');
     if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
+    showMsg('✖ 保存失败' + (e.name === 'AbortError' ? '（超时）' : ''), 'fail');
   }
 }
 
 async function resetDims() {
   if (!confirm('确定重置为默认权重配置？')) return;
+  function _defCurve(k) { var c = _DEFAULT_CURVES[k]; return c ? {points: c.map(function(p){return [p[0],p[1]]})} : null; }
   const defaults = [
-    {name:'近3月收益',key:'m3',weight:0.12,enabled:true,desc:'近三个月涨跌幅，中期趋势'},
-    {name:'近1月收益',key:'m1',weight:0.15,enabled:true,desc:'近一个月涨跌幅，捕捉短期动量'},
-    {name:'近1年收益',key:'y1',weight:0.09,enabled:true,desc:'最近一年的表现，反映基金近期赚钱能力'},
-    {name:'上行胜率',key:'win_rate',weight:0.07,enabled:true,desc:'赚钱天数占总交易天数的比例'},
-    {name:'盈亏比',key:'profit_ratio',weight:0.07,enabled:true,desc:'平均盈利÷平均亏损，>1说明赚比亏多'},
-    {name:'夏普比率',key:'sharpe',weight:0.06,enabled:true,desc:'每承受 1 份波动能换来多少额外收益'},
-    {name:'索提诺比率',key:'sortino',weight:0.06,enabled:true,desc:'只考虑下跌波动，更贴近真实风险感受'},
-    {name:'近3年收益',key:'sy3',weight:0.07,enabled:true,desc:'从净值数据取级750个交易日精确计算，看穿越牛熊能力'},
-    {name:'近6月收益',key:'sy6',weight:0.06,enabled:true,desc:'近六个月表现，补充近1年的中短期维度'},
-    {name:'最大回撤',key:'max_dd',weight:0.10,enabled:true,desc:'历史最大跌幅'},
-    {name:'修复系数',key:'recovery',weight:0.04,enabled:true,desc:'总收益÷最大回撤，衡量跌下去能不能涨回来'},
-    {name:'费率',key:'rate',weight:0.03,enabled:true,desc:'申购费越低越好'},
-    {name:'基金规模',key:'scale',weight:0.02,enabled:true,desc:'1~50亿最理想，太小不灵活、太大难操作'},
-    {name:'年化收益率',key:'annual_return',weight:0.04,enabled:true,desc:'基金成立以来年化回报'},
-    {name:'机构持有比例',key:'institutional',weight:0.02,enabled:true,desc:'专业机构认可度，小幅参考'},
-  {name:'近一周收益',key:'f5',weight:0.03,enabled:true,desc:'近五个交易日涨跌幅，捕捉短期动量'},
-  {name:'近2年收益',key:'sy2',weight:0.05,enabled:true,desc:'近两年精确收益，填补中期维度'},
-  {name:'波动率',key:'volatility',weight:0.03,enabled:true,desc:'年化波动率，衡量基金震荡幅度'},
-  {name:'卡玛比率',key:'calmar',weight:0.03,enabled:true,desc:'年化收益/最大回撤，衡量收益/风险比'},
-  {name:'最大连跌天数',key:'max_loss_days',weight:0.02,enabled:true,desc:'历史最长连续下跌天数'},
+    {name:'近3月收益',key:'m3',weight:0.12,enabled:true,desc:'近三个月涨跌幅，中期趋势',curve:_defCurve('m3'),category:'perf'},
+    {name:'近1月收益',key:'m1',weight:0.15,enabled:true,desc:'近一个月涨跌幅，捕捉短期动量',curve:_defCurve('m1'),category:'perf'},
+    {name:'近1年收益',key:'y1',weight:0.09,enabled:true,desc:'最近一年的表现，反映基金近期赚钱能力',curve:_defCurve('y1'),category:'perf'},
+    {name:'近一周收益',key:'f5',weight:0.03,enabled:true,desc:'近五个交易日涨跌幅，捕捉短期动量',curve:_defCurve('f5'),category:'perf'},
+    {name:'近6月收益',key:'sy6',weight:0.06,enabled:true,desc:'近六个月表现，补充近1年的中短期维度',curve:_defCurve('sy6'),category:'perf'},
+    {name:'近2年收益',key:'sy2',weight:0.05,enabled:true,desc:'近两年精确收益，填补中期维度',curve:_defCurve('sy2'),category:'perf'},
+    {name:'近3年收益',key:'sy3',weight:0.07,enabled:true,desc:'从净值数据取级750个交易日精确计算，看穿越牛熊能力',curve:_defCurve('sy3'),category:'perf'},
+    {name:'年化收益率',key:'annual_return',weight:0.04,enabled:true,desc:'基金成立以来年化回报',curve:_defCurve('annual_return'),category:'perf'},
+    {name:'最大回撤',key:'max_dd',weight:0.10,enabled:true,desc:'历史最大跌幅',curve:_defCurve('max_dd'),category:'risk'},
+    {name:'波动率',key:'volatility',weight:0.03,enabled:true,desc:'年化波动率，衡量基金震荡幅度',curve:_defCurve('volatility'),category:'risk'},
+    {name:'最大连跌天数',key:'max_loss_days',weight:0.02,enabled:true,desc:'历史最长连续下跌天数',curve:_defCurve('max_loss_days'),category:'risk'},
+    {name:'夏普比率',key:'sharpe',weight:0.06,enabled:true,desc:'每承受 1 份波动能换来多少额外收益',curve:_defCurve('sharpe'),category:'quality'},
+    {name:'索提诺比率',key:'sortino',weight:0.06,enabled:true,desc:'只考虑下跌波动，更贴近真实风险感受',curve:_defCurve('sortino'),category:'quality'},
+    {name:'盈亏比',key:'profit_ratio',weight:0.07,enabled:true,desc:'平均盈利÷平均亏损，>1说明赚比亏多',curve:_defCurve('profit_ratio'),category:'quality'},
+    {name:'上行胜率',key:'win_rate',weight:0.07,enabled:true,desc:'赚钱天数占总交易天数的比例',curve:_defCurve('win_rate'),category:'quality'},
+    {name:'修复系数',key:'recovery',weight:0.04,enabled:true,desc:'总收益÷最大回撤，衡量跌下去能不能涨回来',curve:_defCurve('recovery'),category:'quality'},
+    {name:'卡玛比率',key:'calmar',weight:0.03,enabled:true,desc:'年化收益/最大回撤，衡量收益/风险比',curve:_defCurve('calmar'),category:'quality'},
+    {name:'费率',key:'rate',weight:0.03,enabled:true,desc:'申购费越低越好',curve:_defCurve('rate'),category:'other'},
+    {name:'基金规模',key:'scale',weight:0.02,enabled:true,desc:'1~50亿最理想，太小不灵活、太大难操作',curve:_defCurve('scale'),category:'other'},
+    {name:'机构持有比例',key:'institutional',weight:0.02,enabled:true,desc:'专业机构认可度，小幅参考',curve:_defCurve('institutional'),category:'other'},
   ];
   const r = await fetch(API + '/api/dims', {
     method: 'POST',
@@ -900,6 +1041,58 @@ function _watchRecommend() {
       showMsg('推荐超时', 'fail');
     }
   }, 3000);
+}
+
+function _watchSaveProgress() {
+  var area = document.getElementById("saveProgressArea");
+  var fill = document.getElementById("saveProgressFill");
+  var pctEl = document.getElementById("saveProgressPct");
+  var txtEl = document.getElementById("saveProgressText");
+  var saveBtn = document.getElementById("dimsSaveBtn");
+  if (!area) return;
+  area.style.display = "block";
+  fill.style.width = "0%";
+  pctEl.textContent = "0%";
+  txtEl.textContent = "初始化...";
+  var startTime = Date.now();
+  var briefDone = false;
+  var poll = setInterval(async function() {
+    try {
+      var hb = await fetch(API + "/api/heartbeat").then(function(r){ return r.json(); });
+      var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
+      var recAlive = hb.alive && hb.alive.fund_recommend;
+      var briefData = hb.heartbeats && hb.heartbeats.fund_briefing;
+      var briefAlive = hb.alive && hb.alive.fund_briefing;
+
+      if (recAlive && recData) {
+        var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
+        fill.style.width = pct + "%";
+        pctEl.textContent = pct + "%";
+        txtEl.textContent = "\u26a1 \u5168\u5e02\u573a\u4f18\u9009 " + recData.progress + "/" + recData.total + "\uff1a" + (recData.status || "");
+        if (saveBtn) saveBtn.textContent = "\u23f3 \u63a8\u8350\u4e2d " + pct + "%";
+      } else if (briefAlive && briefData) {
+        if (!briefDone) {
+          briefDone = true;
+          txtEl.textContent = "\u2714 \u63a8\u8350\u5df2\u5b8c\u6210\uff0c\u6b63\u5728\u751f\u6210\u665a\u62a5...";
+          fill.style.width = "100%";
+          pctEl.textContent = "100%";
+          if (saveBtn) saveBtn.textContent = "\u23f3 \u751f\u6210\u665a\u62a5...";
+        }
+        var bpct = briefData.total > 0 ? Math.round(briefData.progress / briefData.total * 100) : 0;
+        txtEl.textContent = "\u26a1 \u665a\u62a5\u751f\u6210 " + briefData.progress + "/" + briefData.total + "\uff1a" + (briefData.status || "");
+        fill.style.width = Math.max(parseInt(fill.style.width) || 0, bpct) + "%";
+        pctEl.textContent = Math.max(parseInt(pctEl.textContent) || 0, bpct) + "%";
+      } else if (!recAlive && !briefAlive) {
+        clearInterval(poll);
+        fill.style.width = "100%";
+        pctEl.textContent = "100%";
+        txtEl.textContent = "\u2714 \u6743\u91cd\u5df2\u4fdd\u5b58\uff0c\u63a8\u8350+\u665a\u62a5\u5df2\u5b8c\u6210";
+        setTimeout(function() {
+          area.style.display = "none";
+        }, 5000);
+      }
+    } catch(e) {}
+  }, 2000);
 }
 
 (async function() {

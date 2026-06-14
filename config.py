@@ -133,6 +133,7 @@ _DEFAULTS = {
             "fund_rank_fallback": "http://fund.eastmoney.com/data/rankhandler.aspx",
             "fund_lsjz": "https://api.fund.eastmoney.com/f10/lsjz",
             "sina_fund_quote": "http://hq.sinajs.cn/list=of{code}",
+            "fund_announce": "https://api.fund.eastmoney.com/f10/JJGG?callback=j&fundcode={code}&pageIndex=1&pageSize=5&type=0",
         },
         "timeout": {
             "default": 10,

@@ -1,5 +1,5 @@
 """
-基金评分模块 — 12 维评分模型
+基金评分模块 — 20 维可配置评分模型
 """
 # mypy: ignore-errors
 import logging
@@ -10,112 +10,140 @@ from typing import Callable
 log = logging.getLogger(__name__)
 
 
+# ── 通用分段线性评分函数 ─────────────────────────
+
+def _score_piecewise(val, points):
+    """分段线性评分：val 为输入值，points = [[x0,y0], [x1,y1], ...]
+    返回 0~100 分。val 为 None 或 points 不足两点时返回 0.0。
+    低于最低断点 → 向第一段外推截断；高于最高断点 → 向最后一段外推截断。
+    """
+    if val is None or not points or len(points) < 2:
+        return 0.0
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    # 低于最低断点
+    if val <= xs[0]:
+        return max(0.0, min(100.0, ys[0]))
+    # 高于最高断点
+    if val >= xs[-1]:
+        return max(0.0, min(100.0, ys[-1]))
+    # 线性插值
+    for i in range(len(xs) - 1):
+        if xs[i] <= val <= xs[i + 1]:
+            if xs[i + 1] == xs[i]:
+                return float(ys[i])
+            ratio = (val - xs[i]) / (xs[i + 1] - xs[i])
+            return max(0.0, min(100.0, ys[i] + (ys[i + 1] - ys[i]) * ratio))
+    return 0.0
+
+
+# ── 默认评分曲线（在 config.json 中没有显式 curve 时使用） ──────────
+# 每项格式：{key: {"points": [[x0,y0], [x1,y1], ...], "desc": "说明"}}
+
+_DEFAULT_CURVES: dict = {
+    "y1":  {"points": [[0,0], [20,50], [50,80], [100,100]], "desc": "近1年收益%"},
+    "m3":  {"points": [[0,0], [10,50], [30,80], [60,100]], "desc": "近3月收益%"},
+    "m1":  {"points": [[0,0], [5,50], [15,80], [30,100]], "desc": "近1月收益%"},
+    "f5":  {"points": [[0,0], [5,70], [10,100]], "desc": "近一周收益%"},
+    "sy6": {"points": [[0,10], [20,60], [50,90], [100,100]], "desc": "近6月收益%"},
+    "sy2": {"points": [[0,0], [30,20], [60,40], [100,70], [200,100]], "desc": "近2年收益%"},
+    "sy3": {"points": [[0,0], [30,20], [60,40], [100,70], [200,100]], "desc": "近3年收益%"},
+    "annual_return": {"points": [[0,0], [5,20], [15,60], [30,90], [60,100]], "desc": "年化收益率%"},
+    "sharpe": {"points": [[0,0], [0.5,30], [1,70], [1.5,100]], "desc": "夏普比率"},
+    "sortino": {"points": [[0,0], [0.5,20], [1,60], [2,100]], "desc": "索提诺比率"},
+    "profit_ratio": {"points": [[0,0], [1,20], [2,100]], "desc": "盈亏比"},
+    "win_rate": {"points": [[30,10], [50,40], [70,100]], "desc": "上行胜率%"},
+    "recovery": {"points": [[0,0], [5,20], [20,60], [50,100]], "desc": "修复系数"},
+    "max_dd": {"points": [[0,90], [16.67,90], [20,86], [50,50], [75,20], [91.67,0]], "desc": "最大回撤%"},
+    "volatility": {"points": [[10,100], [20,80], [40,40], [60,0]], "desc": "波动率%（越低越好）"},
+    "calmar": {"points": [[0,0], [0.3,20], [1,60], [3,100]], "desc": "卡玛比率"},
+    "max_loss_days": {"points": [[3,100], [7,80], [15,40], [30,0]], "desc": "最大连跌天数（越短越好）"},
+    "rate": {"points": [[0,100], [0.15,80], [0.5,40], [1.5,0]], "desc": "费率%（越低越好）"},
+    "scale": {"points": [[0,0], [1,70], [20,100], [50,70], [100,30]], "desc": "基金规模（亿）"},
+    "institutional": {"points": [[5,10], [30,50], [60,90]], "desc": "机构持有比例%"},
+}
+
+# 运行时曲线配置（由 _load_dim_curves 填充，可从 config.json 覆盖）
+_DIM_CURVES: dict[str, dict] = {}
+
+
+def _load_dim_curves():
+    """从 config.json 的 dims 列表中提取各维度的 curve 配置，
+    缺失项用 _DEFAULT_CURVES 补齐，结果写入模块级 _DIM_CURVES。"""
+    import json, os
+    curves = {}
+    try:
+        cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        cfg = json.load(open(cfg_path, encoding="utf-8"))
+        for dim in cfg.get("scoring", {}).get("dims", []):
+            key = dim.get("key", "")
+            curve = dim.get("curve")
+            if key and curve and isinstance(curve, dict) and "points" in curve:
+                curves[key] = curve
+    except Exception:
+        pass
+    # 用默认值补齐缺失项
+    for k, v in _DEFAULT_CURVES.items():
+        if k not in curves:
+            curves[k] = dict(v)  # 复制，避免引用共享
+    # 更新模块级变量
+    globals()["_DIM_CURVES"] = curves
+    return curves
+
+
 # ── 单项评分函数（每项 0-100 分） ──────────────
+# 全部委托给 _score_piecewise + _DIM_CURVES
 
 def _score_annual_return(d: dict) -> float:
-    """年化收益率评分"""
     ann_ret = d.get("annual_return")
-    if ann_ret is None:
-        return 0.0
-    if ann_ret >= 30:   return min(100, 90 + (ann_ret - 30) / 30 * 10)
-    elif ann_ret >= 15:  return 60 + (ann_ret - 15) / 15 * 30
-    elif ann_ret >= 5:   return 20 + (ann_ret - 5) / 10 * 40
-    elif ann_ret >= 0:   return ann_ret / 5 * 20
-    else:                return 0
+    pts = _DIM_CURVES.get("annual_return", _DEFAULT_CURVES["annual_return"]).get("points", [])
+    return _score_piecewise(ann_ret, pts)
 
 
 def _score_y1(d: dict) -> float:
-    """近1年收益评分"""
     y1 = d.get("y1")
-    if y1 is None:
-        return 0.0
-    if y1 >= 100:   y1_score = 100
-    elif y1 >= 50:  y1_score = 80 + (y1 - 50) / 50 * 20
-    elif y1 >= 20:  y1_score = 50 + (y1 - 20) / 30 * 30
-    elif y1 >= 0:   y1_score = y1 / 20 * 50
-    else:           y1_score = 0
-    return y1_score
+    pts = _DIM_CURVES.get("y1", _DEFAULT_CURVES["y1"]).get("points", [])
+    return _score_piecewise(y1, pts)
 
 
 def _score_sharpe(d: dict) -> float:
-    """夏普比率评分"""
     sharpe = d.get("sharpe")
-    if sharpe is None:
-        return 0.0
-    if sharpe >= 1.5:   sharpe_score = 100
-    elif sharpe >= 1:   sharpe_score = 70 + (sharpe - 1) / 0.5 * 30
-    elif sharpe >= 0.5: sharpe_score = 30 + (sharpe - 0.5) / 0.5 * 40
-    elif sharpe >= 0:   sharpe_score = sharpe / 0.5 * 30
-    else:               sharpe_score = 0
-    return sharpe_score
+    pts = _DIM_CURVES.get("sharpe", _DEFAULT_CURVES["sharpe"]).get("points", [])
+    return _score_piecewise(sharpe, pts)
 
 
 def _score_sortino(d: dict) -> float:
-    """索提诺比率评分（只考虑下跌波动）"""
     sortino = d.get("sortino")
-    if sortino is None:
-        return 0.0
-    if sortino >= 2:    sortino_score = 100
-    elif sortino >= 1:  sortino_score = 60 + (sortino - 1) / 1 * 40
-    elif sortino >= 0.5: sortino_score = 20 + (sortino - 0.5) / 0.5 * 40
-    elif sortino >= 0:  sortino_score = sortino / 0.5 * 20
-    else:               sortino_score = 0
-    return sortino_score
+    pts = _DIM_CURVES.get("sortino", _DEFAULT_CURVES["sortino"]).get("points", [])
+    return _score_piecewise(sortino, pts)
 
 
 def _score_profit_ratio(d: dict) -> float:
-    """盈亏比评分"""
     pr = d.get("profit_ratio")
-    if pr is None:
-        return 0.0
-    if pr >= 2:    pr_score = 100
-    elif pr >= 1:  pr_score = (pr - 1) / 1 * 80 + 20
-    elif pr >= 0:  pr_score = pr * 20
-    else:          pr_score = 0
-    return pr_score
+    pts = _DIM_CURVES.get("profit_ratio", _DEFAULT_CURVES["profit_ratio"]).get("points", [])
+    return _score_piecewise(pr, pts)
 
 
 def _score_recovery(d: dict) -> float:
-    """修复系数评分（总收益÷最大回撤）"""
     rec = d.get("recovery")
-    if rec is None:
-        return 0.0
-    if rec >= 50:   rec_score = 100
-    elif rec >= 20:  rec_score = 60 + (rec - 20) / 30 * 40
-    elif rec >= 5:   rec_score = 20 + (rec - 5) / 15 * 40
-    elif rec >= 0:   rec_score = rec / 5 * 20
-    else:            rec_score = 0
-    return rec_score
+    pts = _DIM_CURVES.get("recovery", _DEFAULT_CURVES["recovery"]).get("points", [])
+    return _score_piecewise(rec, pts)
 
 
 def _score_sy3(d: dict) -> float:
-    """近3年收益评分 — 从净值数据计算"""
     sy3 = d.get("sy3")
-    if sy3 is None:
-        return 0.0
-    if sy3 >= 100:   sy3_score = 100
-    elif sy3 >= 50:  sy3_score = 80 + (sy3 - 50) / 50 * 20
-    elif sy3 >= 20:  sy3_score = 60 + (sy3 - 20) / 30 * 20
-    elif sy3 >= 0:   sy3_score = 20 + sy3 / 20 * 40
-    else:            sy3_score = 0
-    return sy3_score
+    pts = _DIM_CURVES.get("sy3", _DEFAULT_CURVES["sy3"]).get("points", [])
+    return _score_piecewise(sy3, pts)
 
 
 def _score_sy6(d: dict) -> float:
-    """近6月收益评分 — 从净值数据计算"""
     sy6 = d.get("sy6")
-    if sy6 is None:
-        return 0.0
-    if sy6 >= 50:   sy6_score = min(100, 90 + (sy6 - 50) / 50 * 10)
-    elif sy6 >= 20:  sy6_score = 60 + (sy6 - 20) / 30 * 30
-    elif sy6 >= 0:   sy6_score = 10 + sy6 / 20 * 50
-    else:            sy6_score = 0
-    return sy6_score
+    pts = _DIM_CURVES.get("sy6", _DEFAULT_CURVES["sy6"]).get("points", [])
+    return _score_piecewise(sy6, pts)
 
 
 def _score_m1(d: dict) -> float:
-    """近1月收益评分"""
-    # 可能传入字符串 "+3.45%" 或数值
+    """近1月收益评分（处理字符串格式）"""
     raw = d.get("m1", "")
     if isinstance(raw, str) and raw.endswith("%"):
         m1 = float(raw.rstrip("%").lstrip("+"))
@@ -123,15 +151,12 @@ def _score_m1(d: dict) -> float:
         m1 = float(raw)
     else:
         return 0.0
-    if m1 >= 30:    return 100
-    elif m1 >= 15:  return 80 + (m1 - 15) / 15 * 20
-    elif m1 >= 5:   return 50 + (m1 - 5) / 10 * 30
-    elif m1 >= 0:   return m1 / 5 * 50
-    else:            return 0
+    pts = _DIM_CURVES.get("m1", _DEFAULT_CURVES["m1"]).get("points", [])
+    return _score_piecewise(m1, pts)
 
 
 def _score_m3(d: dict) -> float:
-    """近3月收益评分"""
+    """近3月收益评分（处理字符串格式）"""
     raw = d.get("m3", "")
     if isinstance(raw, str) and raw.endswith("%"):
         m3 = float(raw.rstrip("%").lstrip("+"))
@@ -139,15 +164,12 @@ def _score_m3(d: dict) -> float:
         m3 = float(raw)
     else:
         return 0.0
-    if m3 >= 60:    return 100
-    elif m3 >= 30:  return 80 + (m3 - 30) / 30 * 20
-    elif m3 >= 10:  return 50 + (m3 - 10) / 20 * 30
-    elif m3 >= 0:   return m3 / 10 * 50
-    else:            return 0
+    pts = _DIM_CURVES.get("m3", _DEFAULT_CURVES["m3"]).get("points", [])
+    return _score_piecewise(m3, pts)
 
 
 def _score_f5(d: dict) -> float:
-    """近一周收益评分"""
+    """近一周收益评分（处理字符串格式）"""
     raw = d.get("f5", "")
     if isinstance(raw, str) and raw.endswith("%"):
         f5 = float(raw.rstrip("%").lstrip("+"))
@@ -155,117 +177,62 @@ def _score_f5(d: dict) -> float:
         f5 = float(raw)
     else:
         return 0.0
-    if f5 >= 10:    return 100
-    elif f5 >= 5:   return 70 + (f5 - 5) / 5 * 30
-    elif f5 >= 0:   return f5 / 5 * 70
-    else:            return 0
+    pts = _DIM_CURVES.get("f5", _DEFAULT_CURVES["f5"]).get("points", [])
+    return _score_piecewise(f5, pts)
 
 
 def _score_sy2(d: dict) -> float:
-    """近2年收益评分"""
     sy2 = d.get("sy2")
-    if sy2 is None:
-        return 0.0
-    if sy2 >= 150:   return 100
-    elif sy2 >= 80:  return 70 + (sy2 - 80) / 70 * 30
-    elif sy2 >= 30:  return 40 + (sy2 - 30) / 50 * 30
-    elif sy2 >= 0:   return sy2 / 30 * 40
-    else:            return 0
+    pts = _DIM_CURVES.get("sy2", _DEFAULT_CURVES["sy2"]).get("points", [])
+    return _score_piecewise(sy2, pts)
 
 
 def _score_volatility(d: dict) -> float:
-    """波动率评分（越低越好）"""
     v = d.get("volatility")
-    if v is None:
-        return 0.0
-    if v <= 10:     return 100
-    elif v <= 20:   return 80 + (20 - v) / 10 * 20
-    elif v <= 40:   return 40 + (40 - v) / 20 * 40
-    elif v <= 60:   return (60 - v) / 20 * 40
-    else:           return 0
+    pts = _DIM_CURVES.get("volatility", _DEFAULT_CURVES["volatility"]).get("points", [])
+    return _score_piecewise(v, pts)
 
 
 def _score_calmar(d: dict) -> float:
-    """卡玛比率评分（年化收益/最大回撤，越高越好）"""
     c = d.get("calmar")
-    if c is None:
-        return 0.0
-    if c >= 3:      return 100
-    elif c >= 1:    return 60 + (c - 1) / 2 * 40
-    elif c >= 0.3:  return 20 + (c - 0.3) / 0.7 * 40
-    elif c >= 0:    return c / 0.3 * 20
-    else:           return 0
+    pts = _DIM_CURVES.get("calmar", _DEFAULT_CURVES["calmar"]).get("points", [])
+    return _score_piecewise(c, pts)
 
 
 def _score_max_loss_days(d: dict) -> float:
-    """最大连跌天数评分（越短越好）"""
     m = d.get("max_loss_days")
-    if m is None:
-        return 0.0
-    if m <= 3:      return 100
-    elif m <= 7:    return 80 + (7 - m) / 4 * 20
-    elif m <= 15:   return 40 + (15 - m) / 8 * 40
-    elif m <= 30:   return (30 - m) / 15 * 40
-    else:           return 0
+    pts = _DIM_CURVES.get("max_loss_days", _DEFAULT_CURVES["max_loss_days"]).get("points", [])
+    return _score_piecewise(m, pts)
 
 
 def _score_max_dd(d: dict) -> float:
-    """最大回撤评分"""
     max_dd = d.get("max_dd")
-    if max_dd is None:
-        return 0.0
-    raw = max(0, min(90, 110 - max_dd * 1.2))
-    return raw
+    pts = _DIM_CURVES.get("max_dd", _DEFAULT_CURVES["max_dd"]).get("points", [])
+    return _score_piecewise(max_dd, pts)
 
 
 def _score_win_rate(d: dict) -> float:
-    """上行胜率评分"""
     win_rate = d.get("win_rate")
-    if win_rate is None:
-        return 0.0
-    if win_rate >= 70:  wr_score = 100
-    elif win_rate >= 50: wr_score = 40 + (win_rate - 50) / 20 * 60
-    elif win_rate >= 30: wr_score = 10 + (win_rate - 30) / 20 * 30
-    else:               wr_score = 0
-    return wr_score
+    pts = _DIM_CURVES.get("win_rate", _DEFAULT_CURVES["win_rate"]).get("points", [])
+    return _score_piecewise(win_rate, pts)
 
 
 def _score_institutional(d: dict) -> float:
-    """机构持有比例评分"""
     inst = d.get("inst")
-    if inst is None:
-        return 0.0
-    if inst >= 60:   inst_score = 90
-    elif inst >= 30:  inst_score = 50 + (inst - 30) / 30 * 40
-    elif inst >= 5:   inst_score = 10 + (inst - 5) / 25 * 40
-    else:             inst_score = 0
-    return inst_score
+    pts = _DIM_CURVES.get("institutional", _DEFAULT_CURVES["institutional"]).get("points", [])
+    return _score_piecewise(inst, pts)
 
 
 def _score_scale(d: dict) -> float:
-    """基金规模评分（1~50亿最理想）"""
     sc = d.get("sc")
-    if sc is None:
-        return 0.0
-    if sc <= 0:       return 0
-    elif sc >= 100:    sc_score = 30
-    elif sc >= 50:     sc_score = 30 + (100 - sc) / 50 * 40
-    elif sc >= 20:     sc_score = 70 + (50 - sc) / 30 * 30
-    elif sc >= 1:      sc_score = 50 + (20 - sc) / 19 * 20
-    else:              sc_score = 50
-    return sc_score
+    pts = _DIM_CURVES.get("scale", _DEFAULT_CURVES["scale"]).get("points", [])
+    return _score_piecewise(sc, pts)
 
 
 def _score_rate(d: dict) -> float:
-    """费率评分（申购费越低越好）"""
     rate = d.get("rate")
-    if rate is None:
-        return 0.0
-    if rate <= 0:     return 100
-    elif rate <= 0.15: return 80 + (0.15 - rate) / 0.15 * 20
-    elif rate <= 0.5:  return 40 + (0.5 - rate) / 0.35 * 40
-    elif rate <= 1.5:  return (1.5 - rate) / 1 * 40
-    else:              return 0
+    pts = _DIM_CURVES.get("rate", _DEFAULT_CURVES["rate"]).get("points", [])
+    return _score_piecewise(rate, pts)
 
 
 # ── 评分维度注册表 ─────────────────────────────
@@ -336,7 +303,8 @@ _DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
 
 
 def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
-    """"""
+    """从 config.json 加载评分维度配置。先加载曲线，再构建维度列表。"""
+    _load_dim_curves()
     import json, os
     try:
         cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
@@ -371,7 +339,6 @@ SCORE_DIMS = _load_score_dims()
 def _calc_score(d: dict) -> float:
     """
     计算基金综合评分 (0-100)
-
     从 SCORE_DIMS 注册表动态读取维度和权重。
     无数据的维度得中性分 50（既不惩罚也不奖励）。
     """
@@ -393,7 +360,6 @@ def _calc_score(d: dict) -> float:
 def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float | None, float, object, str]], float]:
     """
     计算基金综合评分并返回各维度明细
-
     返回: (总分, [(维度名, 单项得分或None, 权重, 原始值, 说明), ...], 中性分处理的权重和)
     无数据的维度得中性分 50，不跳过。
     """
@@ -426,7 +392,7 @@ def _rank_percentile_str(d: dict) -> str:
     if rk is not None and total:
         pct = rk / total * 100
         if pct <= 5:
-            return f"top {pct:.1f}%🌟"
+            return f"top {pct:.1f}%\U0001f31f"
         elif pct <= 20:
             return f"top {pct:.1f}%"
         else:

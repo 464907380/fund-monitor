@@ -39,137 +39,576 @@
   "scoring": {
     "dims": [
       {
-        "name": "近1年收益",
-        "key": "y1",
-        "weight": 0.1,
-        "enabled": true,
-        "desc": "最近一年的表现，反映基金近期赚钱能力"
-      },
-      {
         "name": "近3月收益",
         "key": "m3",
         "weight": 0.1,
         "enabled": true,
-        "desc": "近三个月涨跌幅，中期趋势"
+        "desc": "近三个月涨跌幅，中期趋势",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              50
+            ],
+            [
+              60,
+              80
+            ],
+            [
+              90,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
       },
       {
-        "name": "夏普比率",
-        "key": "sharpe",
+        "name": "近1月收益",
+        "key": "m1",
+        "weight": 0.12,
+        "enabled": true,
+        "desc": "近一个月涨跌幅，捕捉短期动量",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              15,
+              50
+            ],
+            [
+              30,
+              80
+            ],
+            [
+              45,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
+      },
+      {
+        "name": "近1年收益",
+        "key": "y1",
         "weight": 0.05,
         "enabled": true,
-        "desc": "每承受 1 份波动能换来多少超额收益"
+        "desc": "最近一年的表现，反映基金近期赚钱能力",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              50
+            ],
+            [
+              100,
+              80
+            ],
+            [
+              150,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
       },
       {
-        "name": "上行胜率",
-        "key": "win_rate",
-        "weight": 0.03,
+        "name": "近一周收益",
+        "key": "f5",
+        "weight": 0.06,
         "enabled": true,
-        "desc": "赚钱天数占总交易天数的比例"
-      },
-      {
-        "name": "盈亏比",
-        "key": "profit_ratio",
-        "weight": 0.04,
-        "enabled": true,
-        "desc": "平均盈利÷平均亏损，>1说明赚比亏多"
-      },
-      {
-        "name": "索提诺比率",
-        "key": "sortino",
-        "weight": 0.04,
-        "enabled": true,
-        "desc": "只考虑下跌波动，更贴近真实风险感受"
-      },
-      {
-        "name": "修复系数",
-        "key": "recovery",
-        "weight": 0.03,
-        "enabled": true,
-        "desc": "总收益÷最大回撤，衡量跌下去能不能涨回来"
+        "desc": "近五个交易日涨跌幅，捕捉短期动量",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              50
+            ],
+            [
+              20,
+              75
+            ],
+            [
+              30,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
       },
       {
         "name": "近6月收益",
         "key": "sy6",
         "weight": 0.05,
         "enabled": true,
-        "desc": "近六个月表现，补充近1年的中短期维度"
+        "desc": "近六个月表现，补充近1年的中短期维度",
+        "curve": {
+          "points": [
+            [
+              0,
+              10
+            ],
+            [
+              50,
+              50
+            ],
+            [
+              75,
+              75
+            ],
+            [
+              100,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
+      },
+      {
+        "name": "近2年收益",
+        "key": "sy2",
+        "weight": 0.05,
+        "enabled": true,
+        "desc": "近两年精确收益，填补中期维度",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              60,
+              40
+            ],
+            [
+              100,
+              70
+            ],
+            [
+              200,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
       },
       {
         "name": "近3年收益",
         "key": "sy3",
         "weight": 0.05,
         "enabled": true,
-        "desc": "从净值数据取约750个交易日精确计算，看穿越牛熊能力"
+        "desc": "从净值数据取级750个交易日精确计算，看穿越牛熊能力",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              20
+            ],
+            [
+              100,
+              40
+            ],
+            [
+              150,
+              70
+            ],
+            [
+              300,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
       },
       {
-        "name": "近1月收益",
-        "key": "m1",
-        "weight": 0.15,
+        "name": "年化收益率",
+        "key": "annual_return",
+        "weight": 0.05,
         "enabled": true,
-        "desc": "近一个月涨跌幅，捕捉短期动量"
+        "desc": "基金成立以来年化回报",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              20
+            ],
+            [
+              20,
+              50
+            ],
+            [
+              30,
+              80
+            ],
+            [
+              60,
+              100
+            ]
+          ]
+        },
+        "category": "perf"
       },
       {
         "name": "最大回撤",
         "key": "max_dd",
         "weight": 0.1,
         "enabled": true,
-        "desc": "历史最大跌幅"
-      },
-      {
-        "name": "年化收益率",
-        "key": "annual_return",
-        "weight": 0.03,
-        "enabled": true,
-        "desc": "基金成立以来年化回报"
-      },
-      {
-        "name": "机构持有比例",
-        "key": "institutional",
-        "weight": 0.01,
-        "enabled": true,
-        "desc": "专业机构认可度，小幅参考"
-      },
-      {
-        "name": "基金规模",
-        "key": "scale",
-        "weight": 0,
-        "enabled": true,
-        "desc": "1~50亿最理想"
-      },
-      {
-        "name": "近一周收益",
-        "key": "f5",
-        "weight": 0.07,
-        "enabled": true,
-        "desc": "近五个交易日涨跌幅，捕捉短期动量"
-      },
-      {
-        "name": "近2年收益",
-        "key": "sy2",
-        "weight": 0.07,
-        "enabled": true,
-        "desc": "近两年精确收益，填补中期维度"
+        "desc": "历史最大跌幅",
+        "curve": {
+          "points": [
+            [
+              0,
+              90
+            ],
+            [
+              16.67,
+              90
+            ],
+            [
+              20,
+              86
+            ],
+            [
+              50,
+              50
+            ],
+            [
+              75,
+              20
+            ],
+            [
+              91.67,
+              0
+            ]
+          ]
+        },
+        "category": "risk"
       },
       {
         "name": "波动率",
         "key": "volatility",
         "weight": 0.03,
         "enabled": true,
-        "desc": "年化波动率，衡量基金震荡幅度"
-      },
-      {
-        "name": "卡玛比率",
-        "key": "calmar",
-        "weight": 0.03,
-        "enabled": true,
-        "desc": "年化收益÷最大回撤，衡量收益/风险比"
+        "desc": "年化波动率，衡量基金震荡幅度",
+        "curve": {
+          "points": [
+            [
+              10,
+              100
+            ],
+            [
+              20,
+              80
+            ],
+            [
+              40,
+              40
+            ],
+            [
+              60,
+              0
+            ]
+          ]
+        },
+        "category": "risk"
       },
       {
         "name": "最大连跌天数",
         "key": "max_loss_days",
         "weight": 0.02,
         "enabled": true,
-        "desc": "历史最长连续下跌天数"
+        "desc": "历史最长连续下跌天数",
+        "curve": {
+          "points": [
+            [
+              3,
+              100
+            ],
+            [
+              7,
+              80
+            ],
+            [
+              15,
+              40
+            ],
+            [
+              30,
+              0
+            ]
+          ]
+        },
+        "category": "risk"
+      },
+      {
+        "name": "夏普比率",
+        "key": "sharpe",
+        "weight": 0.08,
+        "enabled": true,
+        "desc": "每承受 1 份波动能换来多少额外收益",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              0.5,
+              30
+            ],
+            [
+              1,
+              70
+            ],
+            [
+              1.5,
+              100
+            ]
+          ]
+        },
+        "category": "quality"
+      },
+      {
+        "name": "索提诺比率",
+        "key": "sortino",
+        "weight": 0.04,
+        "enabled": true,
+        "desc": "只考虑下跌波动，更贴近真实风险感受",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              0.5,
+              20
+            ],
+            [
+              1,
+              60
+            ],
+            [
+              2,
+              100
+            ]
+          ]
+        },
+        "category": "quality"
+      },
+      {
+        "name": "盈亏比",
+        "key": "profit_ratio",
+        "weight": 0.04,
+        "enabled": true,
+        "desc": "平均盈利÷平均亏损，>1说明赚比亏多",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              20
+            ],
+            [
+              2,
+              100
+            ]
+          ]
+        },
+        "category": "quality"
+      },
+      {
+        "name": "上行胜率",
+        "key": "win_rate",
+        "weight": 0.04,
+        "enabled": true,
+        "desc": "赚钱天数占总交易天数的比例",
+        "curve": {
+          "points": [
+            [
+              30,
+              10
+            ],
+            [
+              50,
+              40
+            ],
+            [
+              70,
+              100
+            ]
+          ]
+        },
+        "category": "quality"
+      },
+      {
+        "name": "修复系数",
+        "key": "recovery",
+        "weight": 0.03,
+        "enabled": true,
+        "desc": "总收益÷最大回撤，衡量跌下去能不能涨回来",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              5,
+              20
+            ],
+            [
+              20,
+              60
+            ],
+            [
+              50,
+              100
+            ]
+          ]
+        },
+        "category": "quality"
+      },
+      {
+        "name": "卡玛比率",
+        "key": "calmar",
+        "weight": 0.03,
+        "enabled": true,
+        "desc": "年化收益/最大回撤，衡量收益/风险比",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              0.3,
+              20
+            ],
+            [
+              1,
+              60
+            ],
+            [
+              3,
+              100
+            ]
+          ]
+        },
+        "category": "quality"
+      },
+      {
+        "name": "费率",
+        "key": "rate",
+        "weight": 0.02,
+        "enabled": true,
+        "desc": "申购费越低越好",
+        "curve": {
+          "points": [
+            [
+              0,
+              100
+            ],
+            [
+              0.15,
+              80
+            ],
+            [
+              0.5,
+              40
+            ],
+            [
+              1.5,
+              0
+            ]
+          ]
+        },
+        "category": "other"
+      },
+      {
+        "name": "基金规模",
+        "key": "scale",
+        "weight": 0.02,
+        "enabled": true,
+        "desc": "1~50亿最理想，太小不灵活、太大难操作",
+        "curve": {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              70
+            ],
+            [
+              20,
+              100
+            ],
+            [
+              50,
+              70
+            ],
+            [
+              100,
+              30
+            ]
+          ]
+        },
+        "category": "other"
+      },
+      {
+        "name": "机构持有比例",
+        "key": "institutional",
+        "weight": 0.02,
+        "enabled": true,
+        "desc": "专业机构认可度，小幅参考",
+        "curve": {
+          "points": [
+            [
+              5,
+              10
+            ],
+            [
+              30,
+              50
+            ],
+            [
+              60,
+              90
+            ]
+          ]
+        },
+        "category": "other"
       }
     ]
   }
