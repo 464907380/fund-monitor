@@ -325,6 +325,9 @@ h1 {
         <label style="color:#888;display:flex;align-items:center;gap:4px;">
           <input type="checkbox" id="recExcludeNeg" checked> 剔除负收益
         </label>
+        <label style="color:#888;">展示条数
+          <input type="number" id="recShowTop" value="20" min="5" max="50" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+        </label>
       </div>
       <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <button onclick="runRecommendFromFilter()" id="recFilterBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">▶ 运行推荐</button>
@@ -1184,6 +1187,8 @@ async function loadRecommendConfig() {
       if (el1) el1.value = d.config.top_n || 200;
       if (el2) el2.value = d.config.min_y1_return || 20;
       if (el3) el3.checked = d.config.exclude_negative !== false;
+      var el4 = document.getElementById('recShowTop');
+      if (el4) el4.value = d.config.show_top || 20;
     }
   } catch(e) {}
 }
@@ -1197,10 +1202,11 @@ async function runRecommendFromFilter() {
     var topN = parseInt(document.getElementById('recTopN').value) || 200;
     var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
     var excl = document.getElementById('recExcludeNeg').checked;
+    var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
     await fetch(API + '/api/recommend-config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({top_n: topN, min_y1_return: minY1, exclude_negative: excl}),
+      body: JSON.stringify({top_n: topN, min_y1_return: minY1, exclude_negative: excl, show_top: showTop}),
     });
   } catch(e) {}
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 推荐中'; }
@@ -1301,3 +1307,6 @@ function showScoreDetail(items) {
 loadDims();</script>
 </body>
 </html>
+
+
+
