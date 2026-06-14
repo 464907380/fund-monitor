@@ -311,7 +311,6 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         web = re.sub(r'</center>', '', web)
         # 追加完整数据表格
         web += _web_rich_fund_table(rows)
-        web += _web_rich_recommend_table()
         web = re.sub(r'\n{3,}', '\n\n', web)
         web = web.strip()
         # 注入评分明细弹窗 JS
