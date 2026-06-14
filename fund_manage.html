@@ -374,9 +374,15 @@ h1 {
 
   
 
-  <div class="card" style="padding:12px 20px;display:flex;align-items:center;gap:12px;">
-    <span style="font-size:13px;font-weight:600;color:#ccc;">🏆 市场优选</span>
-    <span style="font-size:12px;color:#666;flex:1;">推荐结果已缓存，点顶部“运行推荐”重新计算</span>
+    <div class="card">
+    <div class="list-header" style="padding:12px 20px 8px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:13px;font-weight:600;color:#ccc;">🏆 市场优选</span>
+      <span id="recResultDate" style="font-size:11px;color:#555;"></span>
+    </div>
+    <div class="divider"></div>
+    <div id="recResultList" style="padding:8px 12px;font-size:12px;color:#888;">
+      等待首次推荐运行…
+    </div>
   </div>
 
 </div>
@@ -1056,6 +1062,7 @@ function _watchRecommend() {
         if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
         if (prog) prog.style.width = '0%';
         showMsg('✔ 推荐完成', 'ok');
+        loadRecommendResults();
       }
     } catch(e) {}
     if (Date.now() - startTime > MAX_WAIT) {
@@ -1156,6 +1163,7 @@ async function runRecommend() {
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           if (prog) prog.style.width = '0%';
           showMsg('✔ 推荐完成', 'ok');
+          loadRecommendResults();
         }
       } catch(e) {}
       if (Date.now() - startTime > MAX_WAIT) {
@@ -1172,6 +1180,7 @@ async function runRecommend() {
 }
 
 loadDims();
+loadRecommendResults();
 
 // 加载全市场筛选配置参数
 loadRecommendConfig();
@@ -1190,6 +1199,45 @@ async function loadRecommendConfig() {
       var el4 = document.getElementById('recShowTop');
       if (el4) el4.value = d.config.show_top || 20;
     }
+  } catch(e) {}
+}
+async function loadRecommendResults() {
+  try {
+    const r = await fetch(API + '/api/recommend');
+    const d = await r.json();
+    if (!d.ok || !d.results || d.results.length === 0) return;
+    var dateEl = document.getElementById('recResultDate');
+    var listEl = document.getElementById('recResultList');
+    if (!listEl) return;
+    if (dateEl) dateEl.textContent = d.date ? '更新于 ' + d.date : '';
+    var medals = ['🥇','🥈','🥉'];
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+      + '<thead><tr style="background:rgba(255,255,255,0.03);">'
+      + '<th style="padding:4px 6px;text-align:center;color:#888;">排名</th>'
+      + '<th style="padding:4px 6px;text-align:left;color:#888;">基金</th>'
+      + '<th style="padding:4px 6px;text-align:right;color:#888;">评分</th>'
+      + '<th style="padding:4px 6px;text-align:right;color:#888;">年化%</th>'
+      + '<th style="padding:4px 6px;text-align:right;color:#888;">近1月</th>'
+      + '<th style="padding:4px 6px;text-align:right;color:#888;">近1年</th>'
+      + '</tr></thead><tbody>';
+    d.results.forEach(function(item, i) {
+      var rank = i < 3 ? medals[i] : (i+1);
+      var name = (item.name || item.code || '').substring(0, 12);
+      var score = (item.score || 0).toFixed(1);
+      var annRet = (item.annual_return || 0).toFixed(1);
+      var m1 = typeof item.m1 === 'number' ? item.m1.toFixed(1) + '%' : (item.m1 || '');
+      var y1 = typeof item.y1 === 'number' ? item.y1.toFixed(1) + '%' : (item.y1 || '');
+      html += '<tr>'
+        + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px;">' + rank + '</td>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid rgba(255,255,255,0.04);color:#e0e0e0;">' + name + '<br><span style="color:#555;font-family:Consolas;font-size:10px;">' + item.code + '</span></td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);color:#66bb6a;font-weight:600;">' + score + '</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;">' + annRet + '</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;">' + m1 + '</td>'
+        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;">' + y1 + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    listEl.innerHTML = html;
   } catch(e) {}
 }
 
@@ -1232,6 +1280,7 @@ async function runRecommendFromFilter() {
           clearInterval(poll);
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '✔ 推荐完成';
+          loadRecommendResults();
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           setTimeout(function() {
             if (prog) prog.style.width = '0%';
