@@ -25,14 +25,16 @@ from fund_utils import update_heartbeat
 try:
     from fund_watch import get, log, fetch
     from fund_scoring import _calc_score, SCORE_DIMS
-    from config import api_url
+    from config import api_url, CFG
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
     sys.exit(1)
 
 # ── 配置 ──────────────────────────────────────
-_TOP = 200
-SHOW_TOP = 10
+_TOP = CFG.get("recommend", {}).get("top_n", 200)
+SHOW_TOP = 10  # 输出条数不变，保持硬编码
+_MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
+_EXCLUDE_NEG = CFG.get("recommend", {}).get("exclude_negative", True)
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
@@ -227,15 +229,14 @@ def main() -> None:
 
 
 def _filter_candidates(rows: list) -> list:
-    """剔除近1年收益为负或低于20%的基金"""
+    """根据配置筛选候选基金"""
     candidates = []
     for r in rows:
         try:
             y1 = float(r[11]) if len(r) > 11 and r[11] else 0
-            if y1 <= 0:
+            if _EXCLUDE_NEG and y1 <= 0:
                 continue
-            # 年化收益低于 20% 的不适合推荐（多为债券基金或表现不佳的混合基金）
-            if y1 < 20:
+            if y1 < _MIN_Y1:
                 continue
             candidates.append(r)
         except (ValueError, IndexError):

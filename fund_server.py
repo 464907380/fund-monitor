@@ -298,6 +298,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/recommend-config":
+            try:
+                cfg = json.load(open(_CONFIG_PATH, encoding="utf-8"))
+                rc = cfg.get("recommend", {})
+                self._send(*_json_response({
+                    "ok": True,
+                    "config": {
+                        "top_n": rc.get("top_n", 200),
+                        "min_y1_return": rc.get("min_y1_return", 20),
+                        "exclude_negative": rc.get("exclude_negative", True),
+                    }
+                }))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/briefing":
             path = os.path.join(HISTORY_DIR, ".briefing_fund.html")
             if os.path.exists(path):
@@ -446,6 +462,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 权重变更后自动重新跑推荐+生成晚报
                 _spawn_recommend_and_briefing()
                 self._send(*_json_response({"ok": True, "message": "评分配置已更新，推荐+晚报已启动"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/recommend-config":
+            try:
+                cfg = json.load(open(_CONFIG_PATH, encoding="utf-8"))
+                cfg["recommend"] = {
+                    "top_n": int(body.get("top_n", 200)),
+                    "min_y1_return": int(body.get("min_y1_return", 20)),
+                    "exclude_negative": bool(body.get("exclude_negative", True)),
+                }
+                json.dump(cfg, open(_CONFIG_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+                self._send(*_json_response({"ok": True, "message": "推荐配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
