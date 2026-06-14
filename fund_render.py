@@ -281,7 +281,17 @@ def _web_rich_recommend_table() -> str:
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
-            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#bbb;">{val}</td>')
+            # 判断颜色：数值型正绿负红，非数值灰
+            raw_val = r.get(_dim_value_to_key(dim_name))
+            color = "#bbb"
+            if isinstance(raw_val, (int, float)):
+                # "较低越好"的维度：波动率、最大回撤、最大连跌天数、费率
+                lower_better = dim_name in ("\u6ce2\u52a8\u7387", "\u6700\u5927\u56de\u64a4", "\u6700\u5927\u8fde\u8dcc\u5929\u6570", "\u8d39\u7387")
+                if lower_better:
+                    color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
+                else:
+                    color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
+            parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:' + color + ';">' + val + '</td>')
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
     return "\n".join(parts)
@@ -330,6 +340,25 @@ def _fmt(v) -> str:
     if isinstance(v, float):
         return f"{v:.2f}"
     return str(v)
+
+
+def _dim_value_to_key(dim_name: str) -> str | None:
+    """维度中文名 → 数据字典 key"""
+    m = {
+        "\u8fd11\u5e74\u6536\u76ca": "y1", "\u8fd13\u6708\u6536\u76ca": "m3",
+        "\u8fd11\u6708\u6536\u76ca": "m1", "\u8fd1\u4e00\u5468\u6536\u76ca": "f5",
+        "\u8fd12\u5e74\u6536\u76ca": "sy2", "\u8fd13\u5e74\u6536\u76ca": "sy3",
+        "\u8fd16\u6708\u6536\u76ca": "sy6",
+        "\u590f\u666e\u6bd4\u7387": "sharpe", "\u7d22\u63d0\u8bfa\u6bd4\u7387": "sortino",
+        "\u76c8\u4e8f\u6bd4": "profit_ratio", "\u4e0a\u884c\u80dc\u7387": "win_rate",
+        "\u4fee\u590d\u7cfb\u6570": "recovery", "\u5361\u739b\u6bd4\u7387": "calmar",
+        "\u5e74\u5316\u6536\u76ca\u7387": "annual_return",
+        "\u6ce2\u52a8\u7387": "volatility", "\u6700\u5927\u56de\u64a4": "max_dd",
+        "\u6700\u5927\u8fde\u8dcc\u5929\u6570": "max_loss_days",
+        "\u8d39\u7387": "rate", "\u57fa\u91d1\u89c4\u6a21": "sc",
+        "\u673a\u6784\u6301\u6709\u6bd4\u4f8b": "inst",
+    }
+    return m.get(dim_name)
 
 
 def _get_dim_value(r: dict, dim_name: str) -> str:
