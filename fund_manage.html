@@ -1304,8 +1304,9 @@ async function runRecommendFromFilter() {
           clearInterval(poll);
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '✔ 推荐完成';
+          // 等一秒确保 JSON 已写完，再刷新市场卡片 + 生成晚报
+          await new Promise(function(r){ setTimeout(r, 1000); });
           loadRecommendResults();
-          // 推荐完成后自动生成晚报
           try { await fetch(API + '/api/briefing', { method: 'POST' }); } catch(e) {}
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           setTimeout(function() {
