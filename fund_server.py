@@ -459,7 +459,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 重新加载评分模块使新配置生效
                 import importlib
                 import fund_scoring
+                import fund_render
                 importlib.reload(fund_scoring)
+                importlib.reload(fund_render)
                 # 权重变更后自动重新跑推荐+生成晚报
                 _spawn_recommend_and_briefing()
                 self._send(*_json_response({"ok": True, "message": "评分配置已更新，推荐+晚报已启动"}))
@@ -477,6 +479,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "show_top": int(body.get("show_top", 20)),
                 }
                 json.dump(cfg, open(_CONFIG_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+                import importlib, fund_render
+                importlib.reload(fund_render)
                 self._send(*_json_response({"ok": True, "message": "推荐配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
