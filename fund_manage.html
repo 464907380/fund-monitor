@@ -279,10 +279,6 @@ h1 {
       <button onclick="runBriefing()" id="briefBtn" class="toolbar-btn blue">📊 生成晚报</button>
       <div class="btn-progress" id="briefProgress"></div>
     </div>
-    <div class="toolbar-btn-wrap">
-      <button onclick="runRecommend()" id="recBtn2" class="toolbar-btn blue">▶ 运行推荐</button>
-      <div class="btn-progress" id="recProgress"></div>
-    </div>
   </div>
 
 
@@ -315,6 +311,31 @@ h1 {
       <div id="saveProgressText" style="font-size:11px;color:#888;padding:2px 0 0;"></div>
     </div>
     <div style="padding:2px 4px 0;font-size:11px;color:#555;text-align:center;">· 取消勾选 = 关闭维度，保存后下次评分生效</div>
+
+    <div class="divider" style="margin:12px 0 8px;"></div>
+    <div style="padding:0 4px;">
+      <div style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:8px;">🔍 全市场筛选</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;">
+        <label style="color:#888;">拉取数量
+          <input type="number" id="recTopN" value="200" min="50" max="500" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+        </label>
+        <label style="color:#888;">最低近1年收益
+          <input type="number" id="recMinY1" value="20" min="0" max="100" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;"> %
+        </label>
+        <label style="color:#888;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="recExcludeNeg" checked> 剔除负收益
+        </label>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button onclick="runRecommendFromFilter()" id="recFilterBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">▶ 运行推荐</button>
+        <div style="flex:1;max-width:200px;">
+          <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+            <div id="recFilterProgress" style="width:0%;height:100%;background:linear-gradient(90deg,#66bb6a,#42a5f5);border-radius:2px;transition:width 0.5s;"></div>
+          </div>
+        </div>
+        <span id="recFilterStatus" style="font-size:11px;color:#888;"></span>
+      </div>
+    </div>
   </div>
 
   <div class="card add-card">
@@ -1098,8 +1119,8 @@ function _watchSaveProgress() {
 (async function() {
   const hb2 = await fetch(API + '/api/heartbeat').then(r => r.json());
   if (hb2.alive && hb2.alive['fund_recommend']) {
-    document.getElementById('recBtn2').disabled = true;
-    document.getElementById('recBtn2').textContent = '⏳ 运行中（约 4 分钟）';
+    var el = document.getElementById('recBtn2'); if (el) el.disabled = true;
+    var el = document.getElementById('recBtn2'); if (el) el.textContent = '⏳ 运行中（约 4 分钟）';
   }
 })();
 
@@ -1148,6 +1169,82 @@ async function runRecommend() {
 }
 
 loadDims();
+
+// 加载全市场筛选配置参数
+loadRecommendConfig();
+
+async function loadRecommendConfig() {
+  try {
+    const r = await fetch(API + '/api/recommend-config');
+    const d = await r.json();
+    if (d.ok && d.config) {
+      var el1 = document.getElementById('recTopN');
+      var el2 = document.getElementById('recMinY1');
+      var el3 = document.getElementById('recExcludeNeg');
+      if (el1) el1.value = d.config.top_n || 200;
+      if (el2) el2.value = d.config.min_y1_return || 20;
+      if (el3) el3.checked = d.config.exclude_negative !== false;
+    }
+  } catch(e) {}
+}
+
+async function runRecommendFromFilter() {
+  var btn = document.getElementById('recFilterBtn');
+  var prog = document.getElementById('recFilterProgress');
+  var statusEl = document.getElementById('recFilterStatus');
+  if (!btn) return;
+  try {
+    var topN = parseInt(document.getElementById('recTopN').value) || 200;
+    var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
+    var excl = document.getElementById('recExcludeNeg').checked;
+    await fetch(API + '/api/recommend-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({top_n: topN, min_y1_return: minY1, exclude_negative: excl}),
+    });
+  } catch(e) {}
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 推荐中'; }
+  if (prog) prog.style.width = '5%';
+  if (statusEl) statusEl.textContent = '启动中...';
+  try {
+    const r = await fetch(API + '/api/recommend', { method: 'POST' });
+    const d = await r.json();
+    var startTime = Date.now();
+    var MAX_WAIT = 1800000;
+    var poll = setInterval(async function() {
+      try {
+        var hb = await fetch(API + '/api/heartbeat').then(function(r){ return r.json(); });
+        var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
+        var recAlive = hb.alive && hb.alive.fund_recommend;
+        if (recAlive && recData) {
+          var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
+          if (prog) prog.style.width = pct + '%';
+          var displayTotal = recData.total || 0;
+          if (statusEl) statusEl.textContent = recData.progress + '/' + displayTotal + ' (' + pct + '%) ' + (recData.status || '');
+          if (btn) btn.textContent = '⏳ 推荐中 ' + pct + '%';
+        } else if (!recAlive) {
+          clearInterval(poll);
+          if (prog) prog.style.width = '100%';
+          if (statusEl) statusEl.textContent = '✔ 推荐完成';
+          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+          setTimeout(function() {
+            if (prog) prog.style.width = '0%';
+          }, 3000);
+        }
+      } catch(e) {}
+      if (Date.now() - startTime > MAX_WAIT) {
+        clearInterval(poll);
+        if (prog) prog.style.width = '0%';
+        if (statusEl) statusEl.textContent = '⏰ 超时';
+        if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+      }
+    }, 2000);
+  } catch(e) {
+    if (prog) prog.style.width = '0%';
+    if (statusEl) statusEl.textContent = '启动失败';
+    if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+  }
+}
 
 function showScoreDetail(items) {
   var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;">'
