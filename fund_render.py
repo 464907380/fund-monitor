@@ -34,6 +34,8 @@ ALERT_DROP_1M_RED = CFG.get("fund_watch", {}).get("alert_drop_1m_red", -15)
 ALERT_SCALE_2X = CFG.get("fund_watch", {}).get("alert_scale_2x", 2.0)
 ALERT_SCALE_1_5X = CFG.get("fund_watch", {}).get("alert_scale_1_5x", 1.5)
 
+_show_top = CFG.get("recommend", {}).get("show_top", 20)
+
 
 # ── 推荐结果文件（需要 HISTORY_DIR 定义后）──
 _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json")
@@ -48,7 +50,7 @@ def _pipe_table_to_html(ranking_lines: list[str]) -> str:
     """将 Markdown 管道表行列表转为 HTML <table> 字符串"""
     cp = '<tr><td style="padding:12px 14px;background:#222;border:1px solid #333;border-radius:6px;">'
     num_dims = len(SCORE_DIMS)
-    cp += f'<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ccc;">🏆 市场优选基金 TOP 10 （{num_dims} 维评分）</p>'
+    cp += f'<p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#ccc;">🏆 市场优选基金 TOP {_show_top} （{num_dims} 维评分）</p>'
     in_table = False
     header_done = False
     for line in ranking_lines:
@@ -256,7 +258,7 @@ def _web_rich_recommend_table() -> str:
     dim_names = [d[0] for d in SCORE_DIMS]
     dims_shown = dim_names
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
-             '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP 10 \uff08\u5168\u7ef4\u5ea6\uff09</p>'
+             f'<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP {_show_top} \uff08\u5168\u7ef4\u5ea6\uff09</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
              '<thead><tr style="background:#2a2a2a;">'
              '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;white-space:nowrap;">#</th>'
@@ -267,7 +269,7 @@ def _web_rich_recommend_table() -> str:
         parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
     parts.append('</tr></thead><tbody>')
     medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
-    for i, r in enumerate(fresh[:10]):
+    for i, r in enumerate(fresh[:_show_top]):
         badge = medals[i] if i < 3 else f'{i+1}.'
         detail = r.get("score_detail", [])
         detail_json = json.dumps(detail, ensure_ascii=False)
@@ -367,7 +369,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
         if not recs:
             return []
         # 取推荐结果前10的代码
-        codes = [(r.get("code", ""), r.get("name", "")) for r in recs[:10]]
+        codes = [(r.get("code", ""), r.get("name", "")) for r in recs[:_show_top]]
         codes = [(c, n) for c, n in codes if c]
 
         from fund_watch import get
@@ -466,12 +468,12 @@ def _format_recommend_rankings() -> list[str]:
 
         lines.append("")
         num_dims = len(SCORE_DIMS)
-        lines.append(f"🏆 **市场优选基金 TOP 10**  （{num_dims} 维评分）")
+        lines.append(f"🏆 **市场优选基金 TOP {_show_top}**  （{num_dims} 维评分）")
         lines.append("")
         lines.append(f"|{'排名':<4}|{'代码':<7}|{'基金名':<18}|{'评分':<5}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
         lines.append(f"|:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
         medals = ["🥇", "🥈", "🥉"]
-        for i, r in enumerate(fresh[:10], 1):
+        for i, r in enumerate(fresh[:_show_top], 1):
             badge = medals[i - 1] if i <= 3 else f" {i}."
             name = (r.get("n", "") or "")[:18]
             code = r.get("code", "")
@@ -486,7 +488,7 @@ def _format_recommend_rankings() -> list[str]:
             lines.append(f"|{badge:<4}|{code:<7}|{name:<18}|{score:<5.1f}|{ar:<6.1f}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
 
         lines.append("")
-        lines.append(f"  ── 排名依据：从全市场 {_TOP} 只基金中精选 TOP 10 ──")
+        lines.append(f"  ── 排名依据：从全市场 {_TOP} 只基金中精选 TOP {_show_top} ──")
         lines.append("  📡 数据源：天天基金排行 + 东财净值 + 新浪行情 等综合数据")
         lines.append(f"     拉取全市场近 1 年收益排行前 {_TOP} 名，筛选后进入深度评分。")
         lines.append("     每只基金独立拉取净值数据，从净值数组真实计算各项指标。")

@@ -32,7 +32,7 @@ except ImportError:
 
 # ── 配置 ──────────────────────────────────────
 _TOP = CFG.get("recommend", {}).get("top_n", 200)
-SHOW_TOP = 10  # 输出条数不变，保持硬编码
+SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
 _EXCLUDE_NEG = CFG.get("recommend", {}).get("exclude_negative", True)
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
