@@ -1210,33 +1210,57 @@ async function loadRecommendResults() {
     var listEl = document.getElementById('recResultList');
     if (!listEl) return;
     if (dateEl) dateEl.textContent = d.date ? '更新于 ' + d.date : '';
+    
+    // 动态提取维度列（跳过非展示字段）
+    var skipKeys = ['code', 'name', 'score', '_nodata', 'name_short', 'holds', 'score_detail'];
+    var dimKeys = [];
+    var first = d.results[0];
+    for (var k in first) {
+      if (skipKeys.indexOf(k) === -1 && typeof first[k] !== 'object') {
+        dimKeys.push(k);
+      }
+    }
+    
     var medals = ['🥇','🥈','🥉'];
-    var html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
-      + '<thead><tr style="background:rgba(255,255,255,0.03);">'
-      + '<th style="padding:4px 6px;text-align:center;color:#888;">排名</th>'
-      + '<th style="padding:4px 6px;text-align:left;color:#888;">基金</th>'
-      + '<th style="padding:4px 6px;text-align:right;color:#888;">评分</th>'
-      + '<th style="padding:4px 6px;text-align:right;color:#888;">年化%</th>'
-      + '<th style="padding:4px 6px;text-align:right;color:#888;">近1月</th>'
-      + '<th style="padding:4px 6px;text-align:right;color:#888;">近1年</th>'
-      + '</tr></thead><tbody>';
+    // 固定列 + 动态维度列
+    var fixedCols = [
+      {key:'_rank', label:'#'},
+      {key:'_name', label:'基金'},
+      {key:'score', label:'总分'},
+    ];
+    var allCols = fixedCols.concat(dimKeys.map(function(k){ return {key:k, label:DIM_INFO[k]?.name || k}; }));
+    
+    var html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
+      + '<thead><tr style="background:rgba(255,255,255,0.03);">';
+    allCols.forEach(function(col) {
+      var align = col.key === '_rank' ? 'center' : (col.key === '_name' ? 'left' : 'right');
+      html += '<th style="padding:4px 6px;text-align:' + align + ';color:#888;border-bottom:1px solid #333;white-space:nowrap;">' + col.label + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    
     d.results.forEach(function(item, i) {
       var rank = i < 3 ? medals[i] : (i+1);
-      var name = (item.name || item.code || '').substring(0, 12);
-      var score = (item.score || 0).toFixed(1);
-      var annRet = (item.annual_return || 0).toFixed(1);
-      var m1 = typeof item.m1 === 'number' ? item.m1.toFixed(1) + '%' : (item.m1 || '');
-      var y1 = typeof item.y1 === 'number' ? item.y1.toFixed(1) + '%' : (item.y1 || '');
-      html += '<tr>'
-        + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px;">' + rank + '</td>'
-        + '<td style="padding:3px 6px;border-bottom:1px solid rgba(255,255,255,0.04);color:#e0e0e0;">' + name + '<br><span style="color:#555;font-family:Consolas;font-size:10px;">' + item.code + '</span></td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);color:#66bb6a;font-weight:600;">' + score + '</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;">' + annRet + '</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;">' + m1 + '</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;">' + y1 + '</td>'
-        + '</tr>';
+      var name = (item.name || item.code || '').substring(0, 14);
+      html += '<tr>';
+      html += '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px;">' + rank + '</td>';
+      html += '<td style="padding:3px 6px;border-bottom:1px solid rgba(255,255,255,0.04);color:#e0e0e0;white-space:nowrap;">' + name + '<br><span style="color:#555;font-family:Consolas;font-size:10px;">' + item.code + '</span></td>';
+      html += '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);color:#66bb6a;font-weight:600;font-family:Consolas;">' + (item.score || 0).toFixed(1) + '</td>';
+      // 维度列
+      dimKeys.forEach(function(k) {
+        var v = item[k];
+        var display = '';
+        if (v === null || v === undefined) {
+          display = '-';
+        } else if (typeof v === 'number') {
+          display = v.toFixed(v >= 100 ? 1 : (v >= 10 ? 1 : 2));
+        } else {
+          display = String(v);
+        }
+        html += '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.04);font-family:Consolas;color:#bbb;font-size:10px;">' + display + '</td>';
+      });
+      html += '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     listEl.innerHTML = html;
   } catch(e) {}
 }
@@ -1281,6 +1305,8 @@ async function runRecommendFromFilter() {
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '✔ 推荐完成';
           loadRecommendResults();
+          // 推荐完成后自动生成晚报
+          try { await fetch(API + '/api/briefing', { method: 'POST' }); } catch(e) {}
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           setTimeout(function() {
             if (prog) prog.style.width = '0%';
