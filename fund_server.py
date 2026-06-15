@@ -315,10 +315,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/recommend-table":
-            """返回市场优选全维度表格 HTML（实时生成）"""
+            """返回市场优选全维度表格 HTML（优先用缓存数据快速生成）"""
             try:
-                from fund_render import _web_rich_recommend_table
-                html = _web_rich_recommend_table()
+                from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+                _saved = _load_saved_recommend_data()
+                if _saved:
+                    html = _web_rich_recommend_table(_saved)
+                else:
+                    html = _web_rich_recommend_table()
                 if html:
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
                 else:

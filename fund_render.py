@@ -259,9 +259,13 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def _web_rich_recommend_table() -> str:
-    """生成推荐 TOP 10 完整维度数据 HTML 表格（Web 版，实时拉取）"""
-    fresh = _fetch_fresh_recommend_data()
+def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
+    """生成推荐 TOP 10 完整维度数据 HTML 表格（Web 版）
+    
+    可传入已准备好的数据，否则实时拉取。
+    """
+    if fresh is None:
+        fresh = _fetch_fresh_recommend_data()
     if not fresh:
         return ""
     from fund_scoring import SCORE_DIMS
@@ -408,6 +412,48 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
     }
     fn = mapping.get(dim_name)
     return fn() if fn else "-"
+
+
+def _load_saved_recommend_data() -> list[dict]:
+    """从保存的结果文件直接读取推荐数据（无网络请求，用于快速刷新表格）"""
+    try:
+        data = _load_recommend_data()
+        if not data:
+            return []
+        results = data.get("results", [])
+        if not results:
+            return []
+        out = []
+        for r in results[:_show_top]:
+            out.append({
+                "n": r.get("name", ""),
+                "code": r.get("code", ""),
+                "score": r.get("score", 0),
+                "annual_return": r.get("annual_return", 0),
+                "m1": r.get("m1"),
+                "m3": r.get("m3"),
+                "y1": r.get("y1"),
+                "sharpe": r.get("sharpe"),
+                "sortino": r.get("sortino"),
+                "max_dd": r.get("max_dd"),
+                "win_rate": r.get("win_rate"),
+                "inst": r.get("inst"),
+                "sc": r.get("sc"),
+                "rate": r.get("rate"),
+                "profit_ratio": r.get("profit_ratio"),
+                "recovery": r.get("recovery"),
+                "sy3": r.get("sy3"),
+                "f5": r.get("f5"),
+                "sy2": r.get("sy2"),
+                "volatility": r.get("volatility"),
+                "calmar": r.get("calmar"),
+                "max_loss_days": r.get("max_loss_days"),
+                "score_detail": [],
+                "_skipped_weight": 0,
+            })
+        return out
+    except Exception:
+        return []
 
 
 def _fetch_fresh_recommend_data() -> list[dict]:
