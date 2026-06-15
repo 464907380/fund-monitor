@@ -245,7 +245,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         _v = r.get("y1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
-        _warn = ' \u26a0\ufe0f' if r.get("_skipped_weight", 0) > 0.15 else ''
+        _warn = _skipped_icon(r.get("_skipped_weight", 0))
         _score_html = f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}{_warn}</td>"
         parts.append(_score_html)
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_annual_return"))}</td>')
@@ -286,7 +286,7 @@ def _web_rich_recommend_table() -> str:
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
-        warn = ' \u26a0\ufe0f' if r.get("_skipped_weight", 0) > 0.15 else ''
+        warn = _skipped_icon(r.get("_skipped_weight", 0))
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}{warn}</td>")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
@@ -352,6 +352,16 @@ def _fmt(v) -> str:
         return f"{v:.2f}"
     return str(v)
 
+
+def _skipped_icon(weight: float) -> str:
+    """根据缺失权重返回分级提示图标"""
+    if weight > 0.30:
+        return " 🚫"  # 严重缺失
+    if weight > 0.15:
+        return " ⚠️"  # 中等缺失
+    if weight > 0:
+        return " ℹ️"  # 少量缺失
+    return ""
 
 def _dim_value_to_key(dim_name: str) -> str | None:
     """维度中文名 → 数据字典 key"""
