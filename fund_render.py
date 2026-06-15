@@ -79,7 +79,17 @@ def _pipe_table_to_html(ranking_lines: list[str]) -> str:
             else:
                 cp += '<tr>'
                 for c in clean.strip("|").split("|"):
-                    cp += f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:#bbb;white-space:nowrap;">{_html.escape(c.strip())}</td>'
+                    cell = c.strip()
+                    # 判断颜色：数值正绿负红
+                    cell_color = "#bbb"
+                    try:
+                        num_str = cell.replace("%", "").replace("+", "").replace(",", "")
+                        if num_str.lstrip("-").replace(".", "").isdigit():
+                            num = float(num_str)
+                            cell_color = "#66bb6a" if num > 0 else ("#ef5350" if num < 0 else "#bbb")
+                    except (ValueError, TypeError):
+                        pass
+                    cp += f"<td style=\"padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:{cell_color};white-space:nowrap;\">{_html.escape(cell)}</td>" 
                 cp += '</tr>'
             continue
         if not in_table:
