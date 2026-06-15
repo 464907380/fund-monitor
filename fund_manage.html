@@ -1254,7 +1254,6 @@ async function loadRecommendConfig() {
     if (d.ok && d.config) {
       var el1 = document.getElementById('recTopN');
       var el2 = document.getElementById('recMinY1');
-      var el3 = document.getElementById('recExcludeNeg');
       if (el1) el1.value = d.config.top_n || 200;
       if (el2) el2.value = d.config.min_y1_return || 20;
       var el4 = document.getElementById('recShowTop');
@@ -1270,7 +1269,6 @@ async function runRecommendFromFilter() {
   try {
     var topN = parseInt(document.getElementById('recTopN').value) || 200;
     var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
-    var excl = document.getElementById('recExcludeNeg').checked;
     var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
     await fetch(API + '/api/recommend-config', {
       method: 'POST',
