@@ -215,19 +215,14 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
     """获取基金实时估算涨跌幅，返回 (基金名, 估算涨跌幅%)"""
     import urllib.request
 
-    sources = [
-        # 1-2. 天天基金实时估值
-        {"url": api_url("fund_estimate", code=code),
-         "pattern": r'"fundcode":"[^"]+","name":"([^"]*)","gszzl":"([-+\d.]+)"', "ni": 1, "vi": 2},
-        {"url": api_url("fund_estimate_fallback", code=code),
-         "pattern": r'"fundcode":"[^"]+","name":"([^"]*)","gszzl":"([-+\d.]+)"', "ni": 1, "vi": 2},
-    ]
-    for src in sources:
+    # 1-2. 天天基金实时估值（JSONP → JSON 解析，字段顺序不敏感）
+    for url in [api_url("fund_estimate", code=code), api_url("fund_estimate_fallback", code=code)]:
         try:
-            gz = fetch(src["url"])
-            m = re.search(src["pattern"], gz)
-            if m:
-                return (m.group(src["ni"]) or code, float(m.group(src["vi"])))
+            gz = fetch(url)
+            # jsonpgz({"fundcode":"...","name":"...","gszzl":"..."})
+            json_str = re.sub(r"^\w+\(", "", gz).rstrip(");")
+            data = json.loads(json_str)
+            return (data.get("name", code), float(data["gszzl"]))
         except Exception:
             continue
 
