@@ -322,9 +322,6 @@ h1 {
         <label style="color:#888;">最低近1年收益
           <input type="number" id="recMinY1" value="20" min="0" max="100" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;"> %
         </label>
-        <label style="color:#888;display:flex;align-items:center;gap:4px;">
-          <input type="checkbox" id="recExcludeNeg" checked> 剔除负收益
-        </label>
         <label style="color:#888;">展示条数
           <input type="number" id="recShowTop" value="20" min="5" max="50" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
         </label>
@@ -1202,7 +1199,6 @@ async function loadRecommendConfig() {
       var el3 = document.getElementById('recExcludeNeg');
       if (el1) el1.value = d.config.top_n || 200;
       if (el2) el2.value = d.config.min_y1_return || 20;
-      if (el3) el3.checked = d.config.exclude_negative !== false;
       var el4 = document.getElementById('recShowTop');
       if (el4) el4.value = d.config.show_top || 20;
     }
@@ -1221,7 +1217,7 @@ async function runRecommendFromFilter() {
     await fetch(API + '/api/recommend-config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({top_n: topN, min_y1_return: minY1, exclude_negative: excl, show_top: showTop}),
+      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop}),
     });
   } catch(e) {}
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 推荐中'; }

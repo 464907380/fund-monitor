@@ -307,7 +307,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "config": {
                         "top_n": rc.get("top_n", 200),
                         "min_y1_return": rc.get("min_y1_return", 20),
-                        "exclude_negative": rc.get("exclude_negative", True),
                         "show_top": rc.get("show_top", 20),
                     }
                 }))
@@ -475,7 +474,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 cfg["recommend"] = {
                     "top_n": int(body.get("top_n", 200)),
                     "min_y1_return": int(body.get("min_y1_return", 20)),
-                    "exclude_negative": bool(body.get("exclude_negative", True)),
                     "show_top": int(body.get("show_top", 20)),
                 }
                 json.dump(cfg, open(_CONFIG_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)

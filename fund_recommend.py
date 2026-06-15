@@ -34,7 +34,6 @@ except ImportError:
 _TOP = CFG.get("recommend", {}).get("top_n", 200)
 SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
-_EXCLUDE_NEG = CFG.get("recommend", {}).get("exclude_negative", True)
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
@@ -234,8 +233,6 @@ def _filter_candidates(rows: list) -> list:
     for r in rows:
         try:
             y1 = float(r[11]) if len(r) > 11 and r[11] else 0
-            if _EXCLUDE_NEG and y1 <= 0:
-                continue
             if y1 < _MIN_Y1:
                 continue
             candidates.append(r)
