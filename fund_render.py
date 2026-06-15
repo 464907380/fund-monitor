@@ -237,7 +237,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         col = lambda v: f'style="color:#ef5350;"' if (isinstance(v, str) and v.startswith("+")) else (f'style="color:#66bb6a;"' if (isinstance(v, str) and v.startswith("-")) else 'style="color:#ccc;"')
         parts.append(f'<tr>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-family:Consolas;color:#888;">{_html.escape(str(r.get("code","")))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#ccc;">{_html.escape(str(r.get("name_short","")))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#ccc;">{_html.escape(str(r.get("name_short","")))}{_warn}</td>')
         _v = r.get("day",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         _v = r.get("f5",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         _v = r.get("m1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
@@ -246,7 +246,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
         _warn = _skipped_icon(r.get("_skipped_weight", 0))
-        _score_html = f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}{_warn}</td>"
+        _score_html = f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}</td>"
         parts.append(_score_html)
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_annual_return"))}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sharpe"))}</td>')
@@ -285,9 +285,9 @@ def _web_rich_recommend_table() -> str:
         detail_json = json.dumps(detail, ensure_ascii=False)
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))}{warn} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
         warn = _skipped_icon(r.get("_skipped_weight", 0))
-        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}{warn}</td>")
+        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
