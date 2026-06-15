@@ -762,8 +762,11 @@ def main() -> None:
         webhook = _get_secret("WECHAT_WEBHOOK")
         if webhook:
             send_wechat(brief_md)
-        else:
+        # 邮件也发（可同时走双通道）
+        try:
             send_mail_html("🌏 全球股市简报", brief_html)
+        except Exception as _e:
+            log.warning("简报邮件发送失败: %s", _e)
 
         log.info("====== 全球股市简报 完成 ======")
     finally:
