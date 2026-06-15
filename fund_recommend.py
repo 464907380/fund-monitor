@@ -68,7 +68,7 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
 
     def _try_one(url: str) -> list[list[str]] | None:
         try:
-            data = fetch(url)
+            data = fetch(url, {"Referer": "https://fund.eastmoney.com/"})
             return _parse_rank_response(data)
         except Exception:
             return None

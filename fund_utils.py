@@ -141,16 +141,19 @@ def _request_with_retry(req: urllib.request.Request, decode: bool = True) -> str
     return None
 
 
-def _retry_fetch(url: str) -> str:
+def _retry_fetch(url: str, headers: dict | None = None) -> str:
     """带指数退避的 HTTP GET 请求"""
     _cache_evict()
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    req_headers = {"User-Agent": "Mozilla/5.0"}
+    if headers:
+        req_headers.update(headers)
+    req = urllib.request.Request(url, headers=req_headers)
     result = _request_with_retry(req, decode=True)
     return result if isinstance(result, str) else ""
 
 
-def fetch(url: str) -> str:
-    """带缓存的 HTTP GET"""
+def fetch(url: str, headers: dict | None = None) -> str:
+    """带缓存的 HTTP GET，可传自定义 headers"""
     with _cache_lock:
         entry = _cache.get(url)
         if entry:
@@ -158,7 +161,7 @@ def fetch(url: str) -> str:
             if time.time() - ts <= _CACHE_TTL:
                 return data
             del _cache[url]
-    resp = _retry_fetch(url)
+    resp = _retry_fetch(url, headers)
     with _cache_lock:
         _cache[url] = (time.time(), resp)
     return resp
