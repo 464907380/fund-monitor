@@ -1015,8 +1015,8 @@ async function saveDims() {
       body: JSON.stringify({ dims: dims }),
     });
     var d1 = await r1.json();
-    if (!d1.ok) { showMsg('\u2716 ' + (d1.error || '保存失败'), 'fail'); if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; } return; }
-  } catch(e) { showMsg('\u2716 保存失败', 'fail'); if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; } return; }
+    if (!d1.ok) { showMsg('\u2716 ' + (d1.error || '保存失败'), 'fail'); if (btn) { btn.disabled = false; btn.textContent = '💾 保存并推荐'; } return; }
+  } catch(e) { showMsg('\u2716 保存失败', 'fail'); if (btn) { btn.disabled = false; btn.textContent = '💾 保存并推荐'; } return; }
   showMsg('\u2714 权重已保存', 'ok');
   try { loadDims(); } catch(e) {}
   // Step 2: 保存筛选参数
@@ -1044,7 +1044,7 @@ async function saveDims() {
     if (fill) { fill.style.width = '0%'; }
     if (pctEl) pctEl.textContent = '0%';
     if (txtEl) txtEl.textContent = '\u2716 启动失败';
-    if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; }
+    if (btn) { btn.disabled = false; btn.textContent = '💾 保存并推荐'; }
     return;
   }
   // Step 4: 轮询进度
@@ -1065,7 +1065,7 @@ async function saveDims() {
         if (fill) fill.style.width = '100%';
         if (pctEl) pctEl.textContent = '100%';
         if (txtEl) txtEl.textContent = '\u23f0 超时';
-        if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; }
+        if (btn) { btn.disabled = false; btn.textContent = '💾 保存并推荐'; }
         return;
       }
       if (recAlive && recData) {
@@ -1092,7 +1092,7 @@ async function saveDims() {
           if (fill) fill.style.width = '100%';
           if (pctEl) pctEl.textContent = '100%';
           if (txtEl) txtEl.textContent = '\u2714 完成';
-          if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; }
+          if (btn) { btn.disabled = false; btn.textContent = '💾 保存并推荐'; }
           loadBriefing();
           try {
             var rtResp = await fetch(API + '/api/recommend-table');
