@@ -1086,8 +1086,7 @@ async function saveDims() {
         }
         var bpct = briefData.total > 0 ? Math.round(briefData.progress / briefData.total * 100) : 0;
         if (txtEl) txtEl.textContent = '\u26a1 晚报生成 ' + briefData.progress + '/' + briefData.total + ': ' + (briefData.status || '');
-      } else if (!recAlive && !briefAlive) {
-        if (phase === 1 || Date.now() - startTime > 30000) {
+      } else if (!recAlive) {
           clearInterval(poll);
           if (fill) fill.style.width = '100%';
           if (pctEl) pctEl.textContent = '100%';
@@ -1105,7 +1104,6 @@ async function saveDims() {
           setTimeout(function() {
             if (area) area.style.display = 'none';
           }, 5000);
-        }
       }
     } catch(e) {}
   }, 2000);
@@ -1188,152 +1186,6 @@ function _watchRecommend() {
   }, 3000);
 }
 
-function _watchSaveProgress() {
-  var area = document.getElementById("saveProgressArea");
-  var fill = document.getElementById("saveProgressFill");
-  var pctEl = document.getElementById("saveProgressPct");
-  var txtEl = document.getElementById("saveProgressText");
-  var saveBtn = document.getElementById("dimsSaveBtn");
-  if (!area) return;
-  area.style.display = "block";
-  fill.style.width = "0%";
-  pctEl.textContent = "0%";
-  txtEl.textContent = "初始化...";
-  var phase = 0;
-  var briefDone = false;
-  var startTime = Date.now();
-  var MAX_WAIT = 600000; // 10min
-  var poll = setInterval(async function() {
-    try {
-      var hb = await fetch(API + "/api/heartbeat").then(function(r){ return r.json(); });
-      var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
-      var recAlive = hb.alive && hb.alive.fund_recommend;
-      var briefData = hb.heartbeats && hb.heartbeats.fund_briefing;
-      var briefAlive = hb.alive && hb.alive.fund_briefing;
-
-      if (Date.now() - startTime > MAX_WAIT) {
-        clearInterval(poll);
-        fill.style.width = "100%";
-        pctEl.textContent = "100%";
-        txtEl.textContent = "✔ 完成（超时）";
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "💾 保存权重"; saveBtn.style.background = "linear-gradient(135deg,#66bb6a,#43a047)"; }
-        return;
-      }
-      if (recAlive && recData) {
-        var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
-        fill.style.width = pct + "%";
-        pctEl.textContent = pct + "%";
-        txtEl.textContent = "\u26a1 \u5168\u5e02\u573a\u4f18\u9009 " + recData.progress + "/" + recData.total + "\uff1a" + (recData.status || "");
-        if (saveBtn) saveBtn.textContent = "\u23f3 \u63a8\u8350\u4e2d " + pct + "%";
-      } else if (briefAlive && briefData) {
-        phase = 1;
-        if (!briefDone) {
-          briefDone = true;
-          txtEl.textContent = "\u2714 \u63a8\u8350\u5df2\u5b8c\u6210\uff0c\u6b63\u5728\u751f\u6210\u665a\u62a5...";
-          fill.style.width = "100%";
-          pctEl.textContent = "100%";
-          if (saveBtn) saveBtn.textContent = "\u23f3 \u751f\u6210\u665a\u62a5...";
-        }
-        var bpct = briefData.total > 0 ? Math.round(briefData.progress / briefData.total * 100) : 0;
-        txtEl.textContent = "\u26a1 \u665a\u62a5\u751f\u6210 " + briefData.progress + "/" + briefData.total + "\uff1a" + (briefData.status || "");
-        fill.style.width = Math.max(parseInt(fill.style.width) || 0, bpct) + "%";
-        pctEl.textContent = Math.max(parseInt(pctEl.textContent) || 0, bpct) + "%";
-      } else if (!recAlive && !briefAlive) {
-        if (phase === 1) {
-          clearInterval(poll);
-          fill.style.width = "100%";
-          pctEl.textContent = "100%";
-          txtEl.textContent = "\u2714 \u6743\u91cd\u5df2\u4fdd\u5b58\uff0c\u63a8\u8350+\u665a\u62a5\u5df2\u5b8c\u6210";
-          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "💾 \u4fdd\u5b58\u6743\u91cd"; saveBtn.style.background = "linear-gradient(135deg,#66bb6a,#43a047)"; }
-          setTimeout(function() {
-            area.style.display = "none";
-          }, 5000);
-        } else if (Date.now() - startTime > 30000) {
-          clearInterval(poll);
-          fill.style.width = "100%";
-          pctEl.textContent = "100%";
-          txtEl.textContent = "\u2714 \u5b8c\u6210";
-          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "💾 \u4fdd\u5b58\u6743\u91cd"; saveBtn.style.background = "linear-gradient(135deg,#66bb6a,#43a047)"; }
-          setTimeout(function() {
-            area.style.display = "none";
-          }, 5000);
-        }
-      }
-    } catch(e) {}
-  }, 2000);
-}
-
-(async function() {
-  const hb2 = await fetch(API + '/api/heartbeat').then(r => r.json());
-  if (hb2.alive && hb2.alive['fund_recommend']) {
-    var el = document.getElementById('recBtn2'); if (el) el.disabled = true;
-    var el = document.getElementById('recBtn2'); if (el) el.textContent = '⏳ 运行中（约 4 分钟）';
-  }
-})();
-
-async function runRecommend() {
-  const btn = document.getElementById('recBtn2');
-  const prog = document.getElementById('recProgress');
-  if (btn) { btn.disabled = true; }
-  const startTime = Date.now();
-  const MAX_WAIT = 1800000; // 30min
-  const r = await fetch(API + '/api/recommend', { method: 'POST' });
-  const d = await r.json();
-  if (d.ok) {
-    const poll = setInterval(async () => {
-      try {
-        const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
-        const data = hb.heartbeats?.fund_recommend;
-        const alive = hb.alive?.fund_recommend;
-        if (data?.total > 0) {
-          const pct = Math.round(data.progress / data.total * 100);
-          if (btn) btn.textContent = `⏳ 推荐 ${data.status||''} ${pct}%`;
-          if (prog) prog.style.width = pct + '%';
-        } else if (alive) {
-          if (btn) btn.textContent = `⏳ 推荐 ${data?.status||'启动中'}`;
-          if (prog) prog.style.width = data?.status ? '10%' : '5%';
-        }
-        if (!alive) {
-          clearInterval(poll);
-          loadFeatures();
-          loadBriefing();
-          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-          if (prog) prog.style.width = '0%';
-          showMsg('✔ 推荐完成', 'ok');
-        }
-      } catch(e) {}
-      if (Date.now() - startTime > MAX_WAIT) {
-        clearInterval(poll);
-        if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-        if (prog) prog.style.width = '0%';
-        showMsg('推荐超时', 'fail');
-      }
-    }, 3000);
-  } else {
-    if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-    showMsg('✖ ' + (d.error || '发起失败'), 'fail');
-  }
-}
-
-loadDims();
-
-// 加载全市场筛选配置参数
-loadRecommendConfig();
-
-async function loadRecommendConfig() {
-  try {
-    const r = await fetch(API + '/api/recommend-config');
-    const d = await r.json();
-    if (d.ok && d.config) {
-      var el1 = document.getElementById('recTopN');
-      var el2 = document.getElementById('recMinY1');
-      if (el1) el1.value = d.config.top_n || 200;
-      if (el2) el2.value = d.config.min_y1_return || 20;
-      var el4 = document.getElementById('recShowTop');
-      if (el4) el4.value = d.config.show_top || 20;
-    }
-  } catch(e) {}
-}
 
 function showScoreDetail(items) {
   var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;">'
