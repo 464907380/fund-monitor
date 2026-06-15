@@ -1071,10 +1071,10 @@ function _watchSaveProgress() {
   fill.style.width = "0%";
   pctEl.textContent = "0%";
   txtEl.textContent = "初始化...";
+  var phase = 0;
+  var briefDone = false;
   var startTime = Date.now();
   var MAX_WAIT = 600000; // 10min
-  var briefDone = false;
-  var recEverAlive = false;
   var poll = setInterval(async function() {
     try {
       var hb = await fetch(API + "/api/heartbeat").then(function(r){ return r.json(); });
@@ -1091,7 +1091,6 @@ function _watchSaveProgress() {
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "💾 保存权重"; saveBtn.style.background = "linear-gradient(135deg,#66bb6a,#43a047)"; }
         return;
       }
-      if (recAlive) recEverAlive = true;
       if (recAlive && recData) {
         var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
         fill.style.width = pct + "%";
@@ -1099,6 +1098,7 @@ function _watchSaveProgress() {
         txtEl.textContent = "\u26a1 \u5168\u5e02\u573a\u4f18\u9009 " + recData.progress + "/" + recData.total + "\uff1a" + (recData.status || "");
         if (saveBtn) saveBtn.textContent = "\u23f3 \u63a8\u8350\u4e2d " + pct + "%";
       } else if (briefAlive && briefData) {
+        phase = 1;
         if (!briefDone) {
           briefDone = true;
           txtEl.textContent = "\u2714 \u63a8\u8350\u5df2\u5b8c\u6210\uff0c\u6b63\u5728\u751f\u6210\u665a\u62a5...";
@@ -1111,15 +1111,25 @@ function _watchSaveProgress() {
         fill.style.width = Math.max(parseInt(fill.style.width) || 0, bpct) + "%";
         pctEl.textContent = Math.max(parseInt(pctEl.textContent) || 0, bpct) + "%";
       } else if (!recAlive && !briefAlive) {
-        // 从未见过心跳且超过30秒 → 按完成处理
-        if (!recEverAlive && Date.now() - startTime < 30000) return;
-        clearInterval(poll);
-        fill.style.width = "100%";
-        pctEl.textContent = "100%";
-        txtEl.textContent = "\u2714 \u6743\u91cd\u5df2\u4fdd\u5b58\uff0c\u63a8\u8350+\u665a\u62a5\u5df2\u5b8c\u6210";
-        setTimeout(function() {
-          area.style.display = "none";
-        }, 5000);
+        if (phase === 1) {
+          clearInterval(poll);
+          fill.style.width = "100%";
+          pctEl.textContent = "100%";
+          txtEl.textContent = "\u2714 \u6743\u91cd\u5df2\u4fdd\u5b58\uff0c\u63a8\u8350+\u665a\u62a5\u5df2\u5b8c\u6210";
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "\U0001f4be \u4fdd\u5b58\u6743\u91cd"; saveBtn.style.background = "linear-gradient(135deg,#66bb6a,#43a047)"; }
+          setTimeout(function() {
+            area.style.display = "none";
+          }, 5000);
+        } else if (Date.now() - startTime > 30000) {
+          clearInterval(poll);
+          fill.style.width = "100%";
+          pctEl.textContent = "100%";
+          txtEl.textContent = "\u2714 \u5b8c\u6210";
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "\U0001f4be \u4fdd\u5b58\u6743\u91cd"; saveBtn.style.background = "linear-gradient(135deg,#66bb6a,#43a047)"; }
+          setTimeout(function() {
+            area.style.display = "none";
+          }, 5000);
+        }
       }
     } catch(e) {}
   }, 2000);
