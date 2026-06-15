@@ -51,3 +51,6 @@ Thumbs.db
 # 静态分析 / 测试缓存
 .mypy_cache/
 .pytest_cache/
+
+# Generated briefing HTML.briefing_fund.html
+server.log
