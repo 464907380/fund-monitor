@@ -1073,6 +1073,7 @@ function _watchSaveProgress() {
   txtEl.textContent = "初始化...";
   var startTime = Date.now();
   var briefDone = false;
+  var recEverAlive = false;
   var poll = setInterval(async function() {
     try {
       var hb = await fetch(API + "/api/heartbeat").then(function(r){ return r.json(); });
@@ -1081,6 +1082,7 @@ function _watchSaveProgress() {
       var briefData = hb.heartbeats && hb.heartbeats.fund_briefing;
       var briefAlive = hb.alive && hb.alive.fund_briefing;
 
+      if (recAlive) recEverAlive = true;
       if (recAlive && recData) {
         var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
         fill.style.width = pct + "%";
@@ -1100,6 +1102,8 @@ function _watchSaveProgress() {
         fill.style.width = Math.max(parseInt(fill.style.width) || 0, bpct) + "%";
         pctEl.textContent = Math.max(parseInt(pctEl.textContent) || 0, bpct) + "%";
       } else if (!recAlive && !briefAlive) {
+        // 从未见过心跳且超过60秒 → 可能进程未启动，按完成处理
+        if (!recEverAlive && Date.now() - startTime < 60000) return;
         clearInterval(poll);
         fill.style.width = "100%";
         pctEl.textContent = "100%";
