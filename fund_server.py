@@ -479,9 +479,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 import fund_render
                 importlib.reload(fund_scoring)
                 importlib.reload(fund_render)
-                # 权重变更后自动重新跑推荐+生成晚报
-                _spawn_recommend_and_briefing()
-                self._send(*_json_response({"ok": True, "message": "评分配置已更新，推荐+晚报已启动"}))
+                self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
