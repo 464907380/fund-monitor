@@ -1303,6 +1303,15 @@ async function runRecommendFromFilter() {
           await new Promise(function(r){ setTimeout(r, 1000); });
           try { await fetch(API + '/api/briefing', { method: 'POST' }); } catch(e) {}
           loadBriefing();
+          // 立即刷新市场优选全维度表
+          try {
+            var rtResp = await fetch(API + '/api/recommend-table');
+            if (rtResp.ok) {
+              var rtHtml = await rtResp.text();
+              var rtEl = document.getElementById('recommendFullTable');
+              if (rtEl) rtEl.innerHTML = rtHtml;
+            }
+          } catch(e) {}
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           setTimeout(function() {
             if (prog) prog.style.width = '0%';

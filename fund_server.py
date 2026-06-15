@@ -314,6 +314,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/recommend-table":
+            """返回市场优选全维度表格 HTML（实时生成）"""
+            try:
+                from fund_render import _web_rich_recommend_table
+                html = _web_rich_recommend_table()
+                if html:
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
+                else:
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
+            except Exception as e:
+                self._send(500, {"Content-Type": "text/html; charset=utf-8"},
+                           f"<p style=\"color:#ef5350;\">获取推荐表格失败: {e}</p>".encode("utf-8"))
+            return
+
         if parsed.path == "/api/briefing":
             path = os.path.join(HISTORY_DIR, ".briefing_fund.html")
             if os.path.exists(path):
