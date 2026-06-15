@@ -1302,6 +1302,7 @@ async function runRecommendFromFilter() {
           // 等一秒确保 JSON 已写完，再刷新市场卡片 + 生成晚报
           await new Promise(function(r){ setTimeout(r, 1000); });
           try { await fetch(API + '/api/briefing', { method: 'POST' }); } catch(e) {}
+          loadBriefing();
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           setTimeout(function() {
             if (prog) prog.style.width = '0%';
