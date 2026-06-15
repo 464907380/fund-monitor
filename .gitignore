@@ -52,5 +52,7 @@ Thumbs.db
 .mypy_cache/
 .pytest_cache/
 
-# Generated briefing HTML.briefing_fund.html
+
+server.log
+.briefing_fund.html
 server.log
