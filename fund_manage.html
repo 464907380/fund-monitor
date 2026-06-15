@@ -314,7 +314,7 @@ h1 {
     <div class="divider"></div>
     <div id="dimsList" style="font-size:12px;"></div>
     <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center;">
-      <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;" class="dims-save-btn">💾 保存并推荐</button>
+      <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;" class="dims-save-btn">💾 保存权重</button>
       <button onclick="resetDims()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;">重置</button>
     </div>
     <div id="saveProgressArea" style="padding:6px 4px 2px;display:none;">
@@ -342,7 +342,12 @@ h1 {
           <input type="number" id="recShowTop" value="20" min="5" max="50" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
         </label>
       </div>
-      <span style="font-size:11px;color:#666;">权重保存后自动启动推荐</span>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button onclick="runRecommendFromFilter()" id="recFilterBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">▶ 运行推荐</button>
+        <div style="flex:1;max-width:200px;">
+          <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+            <div id="recFilterProgress" style="width:0%;height:100%;background:linear-gradient(90deg,#66bb6a,#42a5f5);border-radius:2px;transition:width 0.5s;"></div>
+          </div>
         </div>
         <span id="recFilterStatus" style="font-size:11px;color:#888;"></span>
       </div>
@@ -973,18 +978,15 @@ function addCurvePoint(btn, key) {
 
 
 async function saveDims() {
-  var btn = document.getElementById('dimsSaveBtn');
-  var area = document.getElementById('saveProgressArea');
-  var fill = document.getElementById('saveProgressFill');
-  var pctEl = document.getElementById('saveProgressPct');
-  var txtEl = document.getElementById('saveProgressText');
+  const btn = document.getElementById('dimsSaveBtn');
+  const prog = document.getElementById('saveProgress');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 保存中'; }
-  // Step 1: 收集并保存权重
+  if (prog) { prog.classList.add('pulse'); }
   const rows = document.querySelectorAll('#dimsTable tbody tr');
   const dims = [];
   rows.forEach(function(row) {
     var cb = row.querySelector('input[type=checkbox]');
-    if (!cb) return;
+    if (!cb) return; // 跳过分类标题行
     var num = row.querySelector('input[type=number]');
     var key = row.querySelector('td:nth-child(2) span').textContent;
     var name = row.querySelector('td:nth-child(2)').textContent.replace(key,'').trim();
@@ -1006,109 +1008,34 @@ async function saveDims() {
       if (pts.length >= 2) curvePoints = {points: pts};
     }
     var cat = DIM_INFO[key]?.cat || '';
-    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, cat: cat, desc: desc, curve: curvePoints});
+    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc, curve: curvePoints, category: cat});
   });
   try {
-    var r1 = await fetch(API + '/api/dims', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dims: dims }),
-    });
-    var d1 = await r1.json();
-    if (!d1.ok) { showMsg('\u2716 ' + (d1.error || '保存失败'), 'fail'); if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; } return; }
-  } catch(e) { showMsg('\u2716 保存失败', 'fail'); if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; } return; }
-  showMsg('\u2714 权重已保存', 'ok');
-  try { loadDims(); } catch(e) {}
-  // Step 2: 保存筛选参数
-  try {
-    var topN = parseInt(document.getElementById('recTopN').value) || 200;
-    var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
-    var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
-    await fetch(API + '/api/recommend-config', {
+    const controller = new AbortController();
+    const timeout = setTimeout(function() { controller.abort(); }, 30000);
+    const r = await fetch(API + '/api/dims', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop}),
+      body: JSON.stringify({dims: dims}),
+      signal: controller.signal,
     });
-  } catch(e) {}
-  // Step 3: 启动推荐
-  if (area) area.style.display = 'block';
-  if (fill) { fill.style.width = '5%'; }
-  if (pctEl) pctEl.textContent = '5%';
-  if (txtEl) txtEl.textContent = '启动中...';
-  if (btn) btn.textContent = '⏳ 推荐中 5%';
-  try {
-    var r2 = await fetch(API + '/api/recommend', { method: 'POST' });
-    var d2 = await r2.json();
-    if (!d2.ok) { throw new Error(d2.error); }
+    clearTimeout(timeout);
+    const d = await r.json();
+    if (d.ok) {
+      showMsg('✔ 权重已保存', 'ok');
+      try { loadDims(); } catch(e) {}
+      _watchRecommend();
+      _watchSaveProgress();
+    } else {
+      if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
+      showMsg('✖ ' + (d.error || '保存失败'), 'fail');
+    }
   } catch(e) {
-    if (fill) { fill.style.width = '0%'; }
-    if (pctEl) pctEl.textContent = '0%';
-    if (txtEl) txtEl.textContent = '\u2716 启动失败';
-    if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; }
-    return;
+    if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
+    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
+    showMsg('✖ 保存失败' + (e.name === 'AbortError' ? '（超时）' : ''), 'fail');
   }
-  // Step 4: 轮询进度
-  var startTime = Date.now();
-  var MAX_WAIT = 1800000;
-  var briefDone = false;
-  var phase = 0;
-  var poll = setInterval(async function() {
-    try {
-      var hb = await fetch(API + '/api/heartbeat').then(function(r){ return r.json(); });
-      var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
-      var recAlive = hb.alive && hb.alive.fund_recommend;
-      var briefData = hb.heartbeats && hb.heartbeats.fund_briefing;
-      var briefAlive = hb.alive && hb.alive.fund_briefing;
-
-      if (Date.now() - startTime > MAX_WAIT) {
-        clearInterval(poll);
-        if (fill) fill.style.width = '100%';
-        if (pctEl) pctEl.textContent = '100%';
-        if (txtEl) txtEl.textContent = '\u23f0 超时';
-        if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; }
-        return;
-      }
-      if (recAlive && recData) {
-        phase = 0;
-        var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
-        if (fill) fill.style.width = Math.max(parseInt(fill.style.width) || 0, pct) + '%';
-        if (pctEl) pctEl.textContent = pct + '%';
-        if (txtEl) txtEl.textContent = '\u26a1 推荐中 ' + recData.progress + '/' + recData.total + ': ' + (recData.status || '');
-        if (btn) btn.textContent = '\u23f3 推荐中 ' + pct + '%';
-      } else if (briefAlive && briefData) {
-        phase = 1;
-        if (!briefDone) {
-          briefDone = true;
-          if (fill) fill.style.width = '100%';
-          if (pctEl) pctEl.textContent = '100%';
-          if (txtEl) txtEl.textContent = '\u2714 推荐已完成，正在生成晚报...';
-          if (btn) btn.textContent = '\u23f3 生成晚报...';
-        }
-        var bpct = briefData.total > 0 ? Math.round(briefData.progress / briefData.total * 100) : 0;
-        if (txtEl) txtEl.textContent = '\u26a1 晚报生成 ' + briefData.progress + '/' + briefData.total + ': ' + (briefData.status || '');
-      } else if (!recAlive && !briefAlive) {
-        if (phase === 1 || Date.now() - startTime > 30000) {
-          clearInterval(poll);
-          if (fill) fill.style.width = '100%';
-          if (pctEl) pctEl.textContent = '100%';
-          if (txtEl) txtEl.textContent = '\u2714 完成';
-          if (btn) { btn.disabled = false; btn.textContent = '\U0001f4be 保存并推荐'; }
-          loadBriefing();
-          try {
-            var rtResp = await fetch(API + '/api/recommend-table');
-            if (rtResp.ok) {
-              var rtHtml = await rtResp.text();
-              var rtEl = document.getElementById('recommendFullTable');
-              if (rtEl) rtEl.innerHTML = rtHtml;
-            }
-          } catch(e) {}
-          setTimeout(function() {
-            if (area) area.style.display = 'none';
-          }, 5000);
-        }
-      }
-    } catch(e) {}
-  }, 2000);
 }
 
 async function resetDims() {
@@ -1333,6 +1260,76 @@ async function loadRecommendConfig() {
       if (el4) el4.value = d.config.show_top || 20;
     }
   } catch(e) {}
+}
+async function runRecommendFromFilter() {
+  var btn = document.getElementById('recFilterBtn');
+  var prog = document.getElementById('recFilterProgress');
+  var statusEl = document.getElementById('recFilterStatus');
+  if (!btn) return;
+  try {
+    var topN = parseInt(document.getElementById('recTopN').value) || 200;
+    var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
+    var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
+    await fetch(API + '/api/recommend-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop}),
+    });
+  } catch(e) {}
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 推荐中'; }
+  if (prog) prog.style.width = '5%';
+  if (statusEl) statusEl.textContent = '启动中...';
+  try {
+    const r = await fetch(API + '/api/recommend', { method: 'POST' });
+    const d = await r.json();
+    var startTime = Date.now();
+    var MAX_WAIT = 1800000;
+    var poll = setInterval(async function() {
+      try {
+        var hb = await fetch(API + '/api/heartbeat').then(function(r){ return r.json(); });
+        var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
+        var recAlive = hb.alive && hb.alive.fund_recommend;
+        if (recAlive && recData) {
+          var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
+          if (prog) prog.style.width = pct + '%';
+          var displayTotal = recData.total || 0;
+          if (statusEl) statusEl.textContent = recData.progress + '/' + displayTotal + ' (' + pct + '%) ' + (recData.status || '');
+          if (btn) btn.textContent = '⏳ 推荐中 ' + pct + '%';
+        } else if (!recAlive) {
+          clearInterval(poll);
+          if (prog) prog.style.width = '100%';
+          if (statusEl) statusEl.textContent = '✔ 推荐完成';
+          // 等一秒确保 JSON 已写完，再刷新市场卡片 + 生成晚报
+          await new Promise(function(r){ setTimeout(r, 1000); });
+          try { await fetch(API + '/api/briefing', { method: 'POST' }); } catch(e) {}
+          loadBriefing();
+          // 立即刷新市场优选全维度表
+          try {
+            var rtResp = await fetch(API + '/api/recommend-table');
+            if (rtResp.ok) {
+              var rtHtml = await rtResp.text();
+              var rtEl = document.getElementById('recommendFullTable');
+              if (rtEl) rtEl.innerHTML = rtHtml;
+            }
+          } catch(e) {}
+          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+          setTimeout(function() {
+            if (prog) prog.style.width = '0%';
+          }, 3000);
+        }
+      } catch(e) {}
+      if (Date.now() - startTime > MAX_WAIT) {
+        clearInterval(poll);
+        if (prog) prog.style.width = '0%';
+        if (statusEl) statusEl.textContent = '⏰ 超时';
+        if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+      }
+    }, 2000);
+  } catch(e) {
+    if (prog) prog.style.width = '0%';
+    if (statusEl) statusEl.textContent = '启动失败';
+    if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+  }
 }
 
 function showScoreDetail(items) {
