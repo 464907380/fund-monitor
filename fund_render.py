@@ -340,7 +340,7 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
             f.write(web)
         os.replace(tmp_path, _BRIEFING_FILE)
         log.info("晚报已保存到 %s (%d chars)", _BRIEFING_FILE, len(web))
-    except OSError as e:
+    except Exception as e:
         log.warning("保存晚报失败: %s", e)
 
 
