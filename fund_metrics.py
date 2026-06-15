@@ -5,88 +5,75 @@ import math
 from typing import Callable
 
 
-def _calc_daily_returns(prices: list[float]) -> list[float]:
-    """计算日收益率（小数形式）"""
-    return [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, len(prices))]
-
-
-def _calc_max_drawdown(prices: list[float]) -> float:
-    """计算最大回撤（%）"""
-    peak = prices[0]
-    max_dd = 0.0
-    for p in prices:
-        if p > peak:
-            peak = p
-        dd = (peak - p) / peak * 100
-        if dd > max_dd:
-            max_dd = dd
-    return max_dd
-
-
-def _calc_downside_deviation(daily_r: list[float], mean_r: float, n: int) -> float:
-    """计算下行波动率"""
-    neg_r = [r for r in daily_r if r < 0]
-    if len(neg_r) > 1:
-        down_var = sum((r - mean_r) ** 2 for r in neg_r) / len(neg_r)
-        return float(math.sqrt(down_var * 250) * 100)
-    return 0.0
-
-
 def _calc_nav_metrics(full_nav: list[dict]) -> dict:
     """
-    从完整净值列表计算风险指标。
-    拆分为多个小函数以降低圈复杂度。
+    从完整净值列表计算风险指标（单趟扫描优化版）。
+    同时计算日收益率、波动率、最大回撤、胜率、盈亏比、连跌天数。
     """
     if not full_nav or len(full_nav) < 30:
         return {}
     prices = [n["v"] for n in full_nav]
     days = len(prices)
+    n = days - 1
+    if n < 1:
+        return {}
 
-    daily_r = _calc_daily_returns(prices)
-    n = len(daily_r)
+    # 单趟扫描：日收益率 + 均值 + 方差 + 最大回撤 + 胜率 + 盈亏 + 连跌
+    sum_r = 0.0
+    sum_sq = 0.0
+    sum_pos = 0.0
+    sum_neg = 0.0
+    count_pos = 0
+    count_neg = 0
+    cur_loss = 0
+    max_loss_days = 0
+    peak = prices[0]
+    max_dd = 0.0
+
+    for i in range(1, days):
+        r = (prices[i] - prices[i-1]) / prices[i-1]
+        sum_r += r
+        sum_sq += r * r
+        if r > 0:
+            sum_pos += r
+            count_pos += 1
+            cur_loss = 0
+        elif r < 0:
+            sum_neg += r
+            count_neg += 1
+            cur_loss += 1
+            if cur_loss > max_loss_days:
+                max_loss_days = cur_loss
+        if prices[i] > peak:
+            peak = prices[i]
+        dd = (peak - prices[i]) / peak * 100
+        if dd > max_dd:
+            max_dd = dd
+
+    mean_r = sum_r / n
+    variance = sum_sq / n - mean_r * mean_r
     total_return = (prices[-1] - prices[0]) / prices[0]
     annual_return = ((1 + total_return) ** (250 / days) - 1) * 100
+    volatility = math.sqrt(max(variance, 0) * 250) * 100
 
-    # 波动率
-    mean_r = sum(daily_r) / n
-    variance = sum((r - mean_r) ** 2 for r in daily_r) / n
-    volatility = math.sqrt(variance * 250) * 100
-
-    # 最大回撤
-    max_dd = _calc_max_drawdown(prices)
-    calmar = annual_return / max_dd if max_dd > 0 else 0
-
-    # 下行波动率
-    down_dev = _calc_downside_deviation(daily_r, mean_r, n)
-    if down_dev == 0:
+    # 下行波动率（只算负收益日）
+    if count_neg > 1:
+        neg_r = [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, days) if prices[i] < prices[i-1]]
+        down_var = sum((r_neg - mean_r) ** 2 for r_neg in neg_r) / count_neg
+        down_dev = math.sqrt(down_var * 250) * 100
+    else:
         down_dev = volatility
 
-    # 夏普比率 & 索提诺比率
     rf = 2.5
     sharpe = (annual_return - rf) / volatility if volatility > 0 else 0
     sortino = (annual_return - rf) / down_dev if down_dev > 0 else 0
-
-    # 上行胜率
-    win_rate = sum(1 for r in daily_r if r > 0) / n * 100
-
-    # 盈亏比
-    avg_win = sum(r for r in daily_r if r > 0) / max(sum(1 for r in daily_r if r > 0), 1)
-    avg_loss = abs(sum(r for r in daily_r if r < 0) / max(sum(1 for r in daily_r if r < 0), 1))
+    calmar = annual_return / max_dd if max_dd > 0 else 0
+    win_rate = count_pos / n * 100
+    avg_win = sum_pos / count_pos if count_pos > 0 else 0
+    avg_loss = abs(sum_neg / count_neg) if count_neg > 0 else 1
     profit_ratio = avg_win / avg_loss if avg_loss > 0 else 0
-
-    # 修复系数
     total_return_pct = total_return * 100
     recovery = abs(total_return_pct / max_dd) if max_dd > 0 else 0
-
-    # 最长连续下跌天数
-    max_loss_days = 0
-    cur = 0
-    for r in daily_r:
-        if r < 0:
-            cur += 1
-            max_loss_days = max(max_loss_days, cur)
-        else:
-            cur = 0
 
     return {
         "annual_return": round(annual_return, 2),
