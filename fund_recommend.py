@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from fund_utils import update_heartbeat
 
 try:
-    from fund_watch import get, log, fetch
+    from fund_watch import get_scoring_data as get, log, fetch
     from fund_scoring import _calc_score, SCORE_DIMS
     from config import api_url, CFG
 except ImportError:

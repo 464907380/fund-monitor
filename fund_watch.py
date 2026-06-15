@@ -263,6 +263,38 @@ def get(code: str) -> dict:
     return d
 
 
+def get_scoring_data(code: str) -> dict:
+    """拉取评分所需的最小数据集（跳过实时估值和持仓，减少网络请求）"""
+    d: dict = {"code": code}
+    data = fetch(api_url("fund_pingzhongdata", code=code))
+
+    if name := _parse_name(data):
+        d["n"] = name
+    if sc := _parse_scale(data):
+        d["sc"] = sc
+    d.update(_parse_period_returns(data))
+    if mgr := _parse_manager(data):
+        d["mgr"] = mgr
+    if inst := _parse_institutional_ratio(data):
+        d["inst"] = inst
+    if full_nav := _parse_full_nav(data):
+        d["full_nav"] = full_nav
+        d["nav"] = _parse_net_trend(data, full_nav)
+        metrics = _calc_nav_metrics(full_nav)
+        d.update(metrics)
+        d["sy3"] = _calc_period_return(full_nav, 750)
+        d["sy2"] = _calc_period_return(full_nav, 500)
+    else:
+        if nav := _parse_net_trend(data):
+            d["nav"] = nav
+    if rp := _parse_rank_info(data):
+        d["rank"], d["rank_total"] = rp
+    if rate := _parse_fund_rate(data):
+        d["rate"] = rate
+    d["sy6"] = _parse_syl_6y(data)
+    return d
+
+
 # ── 历史快照 ──────────────────────────────────
 
 def _validate_fund_code(code: str) -> None:
