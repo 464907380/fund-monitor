@@ -38,8 +38,20 @@ _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_r
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
 
+def _parse_rank_response(data: str) -> list[list[str]] | None:
+    """解析天天基金排行 API 的 JSONP 响应"""
+    try:
+        raw = data.replace("var rankData = ", "", 1).rstrip(";")
+        raw_clean = re.sub(r'(\{|,)\s*(\w+)\s*:', lambda m: m.group(1) + '"' + m.group(2) + '":', raw)
+        result = json.loads(raw_clean)
+        rows = [row.split(",") for row in result.get("datas", [])]
+        return rows if rows else None
+    except (json.JSONDecodeError, KeyError, IndexError):
+        return None
+
+
 def _fetch_rank_list(pn: int) -> list[list[str]]:
-    """从天天基金排行 API 获取全市场基金排行（多URL备选）"""
+    """从天天基金排行 API 获取全市场基金排行（并发多URL，走缓存）"""
     sd = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
     ed = datetime.date.today().isoformat()
     urls = [
@@ -53,22 +65,27 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
         "http://fund.eastmoney.com/data/rankhandler.aspx" + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}",
     ]
-    for url in urls:
+
+    def _try_one(url: str) -> list[list[str]] | None:
         try:
-            req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=15) as r:
-                data = r.read().decode("utf-8")
+            data = fetch(url)
+            return _parse_rank_response(data)
         except Exception:
-            continue
-        try:
-            raw = data.replace("var rankData = ", "", 1).rstrip(";")
-            raw_clean = re.sub(r'(\{|,)\s*(\w+)\s*:', lambda m: m.group(1) + '"' + m.group(2) + '":', raw)
-            result = json.loads(raw_clean)
-            rows = [row.split(",") for row in result.get("datas", [])]
+            return None
+
+    # 并发尝试前两个 URL
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        futs = {ex.submit(_try_one, url): url for url in urls[:2]}
+        for f in as_completed(futs):
+            rows = f.result()
             if rows:
                 return rows
-        except (json.JSONDecodeError, KeyError, IndexError):
-            continue
+
+    # 降级尝试后两个备选（串行，较少触发）
+    for url in urls[2:]:
+        rows = _try_one(url)
+        if rows:
+            return rows
     return []
 
 
