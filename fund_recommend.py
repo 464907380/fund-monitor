@@ -278,7 +278,7 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
             log.debug("跳过 %s: %s", code, e)
             return None
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         for row in candidates:
             code = row[0]
             name = row[1]
