@@ -656,19 +656,25 @@ async function loadBriefing() {
     }
   }
 
-  // Move recommend table
+  // 移动所有市场优选表格到独立容器
   var recDivs = el.querySelectorAll('div[style]');
+  var recMoved = false;
   for (var i = 0; i < recDivs.length; i++) {
     var p = recDivs[i].querySelector('p');
     if (p && p.textContent.indexOf('市场优选') >= 0) {
       var rtContainer = document.getElementById('recommendFullTable');
       if (rtContainer) {
-        rtContainer.innerHTML = recDivs[i].outerHTML;
+        if (!recMoved) {
+          rtContainer.innerHTML = recDivs[i].outerHTML;
+          recMoved = true;
+        }
         recDivs[i].remove();
-        document.getElementById('recommendFullTableCard').style.display = '';
+        i--;
       }
-      break;
     }
+  }
+  if (recMoved) {
+    document.getElementById('recommendFullTableCard').style.display = '';
   }
 
   // 从内容中提取日期更新右上角
