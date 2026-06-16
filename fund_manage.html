@@ -862,6 +862,9 @@ async function loadDims(customDims) {
     + '<div id="addDimArea" style="padding:8px 4px;text-align:center;"></div>';
   renderAddDimBtn();
   updateDimsTotal();
+  // 重置按钮为绿色（未修改状态）
+  var saveBtn = document.getElementById('dimsSaveBtn');
+  if (saveBtn) saveBtn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)';
 }
 
 function updateDimsTotal() {
@@ -1033,7 +1036,7 @@ async function saveDims() {
     if (progText) progText.textContent = '保存完成';
     if (d.ok) {
       showMsg('✔ 权重已保存', 'ok');
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
       setTimeout(function() {
         if (progArea) progArea.style.display = 'none';
         if (progFill) progFill.style.width = '0%';
@@ -1044,14 +1047,14 @@ async function saveDims() {
       if (progFill) progFill.style.width = '0%';
       if (progPct) progPct.textContent = '0%';
       if (progText) progText.textContent = '';
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
       showMsg('✖ ' + (d.error || '保存失败'), 'fail');
     }
   } catch(e) {
     if (progFill) progFill.style.width = '0%';
     if (progPct) progPct.textContent = '0%';
     if (progText) progText.textContent = '';
-    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
     if (progArea) progArea.style.display = 'none';
     showMsg('✖ 保存失败' + (e.name === 'AbortError' ? '（超时）' : ''), 'fail');
   }
