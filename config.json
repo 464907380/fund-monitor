@@ -41,7 +41,7 @@
       {
         "name": "近3月收益",
         "key": "m3",
-        "weight": 0.1,
+        "weight": 0.11,
         "enabled": true,
         "desc": "近三个月涨跌幅，中期趋势",
         "curve": {
@@ -69,7 +69,7 @@
       {
         "name": "近1月收益",
         "key": "m1",
-        "weight": 0.12,
+        "weight": 0.13,
         "enabled": true,
         "desc": "近一个月涨跌幅，捕捉短期动量",
         "curve": {
@@ -125,7 +125,7 @@
       {
         "name": "近一周收益",
         "key": "f5",
-        "weight": 0.1,
+        "weight": 0.12,
         "enabled": true,
         "desc": "近五个交易日涨跌幅，捕捉短期动量",
         "curve": {
@@ -531,34 +531,6 @@
         "category": "quality"
       },
       {
-        "name": "费率",
-        "key": "rate",
-        "weight": 0.02,
-        "enabled": true,
-        "desc": "申购费越低越好",
-        "curve": {
-          "points": [
-            [
-              0,
-              100
-            ],
-            [
-              0.15,
-              80
-            ],
-            [
-              0.5,
-              40
-            ],
-            [
-              1.5,
-              0
-            ]
-          ]
-        },
-        "category": "other"
-      },
-      {
         "name": "基金规模",
         "key": "scale",
         "weight": 0.02,
@@ -589,36 +561,12 @@
           ]
         },
         "category": "other"
-      },
-      {
-        "name": "机构持有比例",
-        "key": "institutional",
-        "weight": 0.02,
-        "enabled": true,
-        "desc": "专业机构认可度，小幅参考",
-        "curve": {
-          "points": [
-            [
-              5,
-              10
-            ],
-            [
-              30,
-              50
-            ],
-            [
-              60,
-              90
-            ]
-          ]
-        },
-        "category": "other"
       }
     ]
   },
   "recommend": {
-    "top_n": 500,
+    "top_n": 100,
     "min_y1_return": 30,
-    "show_top": 20
+    "show_top": 10
   }
 }
