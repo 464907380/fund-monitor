@@ -9,6 +9,7 @@ from config import CFG, api_url
 from config import get_secret as _get_secret
 from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, update_heartbeat, clear_heartbeat, _send_smtp, send_wechat
 from fund_scoring import SCORE_DIMS, calc_score_detail
+from fund_metrics import _calc_nav_metrics
 from fund_alerts import check_stagnation, check_consecutive_drop, check_dividend
 from fund_render import _get_webhook, _get_email_user, _get_email_auth, send_mail_html, push, md_content, _load_recommend_data, _format_recommend_rankings
 
