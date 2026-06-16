@@ -11,7 +11,9 @@ sudo ./deploy/install.sh
 | Service | Timer | 触发时间 | 说明 |
 |---------|-------|----------|------|
 | `global-briefing.service` | `global-briefing.timer` | 工作日 09:30 | 全球股市早报 |
-| `fund-watch.service` | `fund-watch.timer` | 工作日 15:30 | 收盘晚报 |
+| `fund-watch.service` | `fund-watch.timer` | 工作日 15:30 | 先运行全市场推荐评分，再生成收盘晚报 |
+
+> `fund-watch.service` 在启动晚报生成前会自动先执行 `fund_recommend.py`（全市场推荐评分），确保晚报使用的数据是最新的。推荐评分约需 4~16 分钟，晚报约需 5~15 秒。
 | `fund-monitor.service` | `fund-monitor.timer` | 工作日 09:25 | 盘中实时监控（运行到 15:00 自动退出） |
 
 ## 管理命令
