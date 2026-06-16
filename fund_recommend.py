@@ -120,7 +120,8 @@ def _save_result(scored: list[tuple]) -> None:
                  "volatility": item[19] if len(item) > 19 else None,
                  "calmar": item[20] if len(item) > 20 else None,
                  "max_loss_days": item[21] if len(item) > 21 else None,
-                 "sy6": item[22] if len(item) > 22 else None}
+                 "sy6": item[22] if len(item) > 22 else None,
+                 "mgr": item[23] if len(item) > 23 else ""}
                 for item in scored
             ]
         }
@@ -292,7 +293,8 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
                     d.get("volatility"),
                     d.get("calmar"),
                     d.get("max_loss_days"),
-                    d.get("sy6"))
+                    d.get("sy6"),
+                    d.get("mgr", "")[:6])
         except Exception as e:
             log.debug("跳过 %s: %s", code, e)
             return None

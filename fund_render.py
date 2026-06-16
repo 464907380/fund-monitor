@@ -269,7 +269,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
     可传入已准备好的数据，否则实时拉取。
     """
     if fresh is None:
-        fresh = _fetch_fresh_recommend_data()
+        fresh = _load_saved_recommend_data()
     if not fresh:
         return ""
     from fund_scoring import SCORE_DIMS
@@ -454,6 +454,7 @@ def _load_saved_recommend_data() -> list[dict]:
                 "volatility": r.get("volatility"),
                 "calmar": r.get("calmar"),
                 "max_loss_days": r.get("max_loss_days"),
+                "mgr": r.get("mgr", ""),
             }
             # 用当前 SCORE_DIMS 重新评分，确保已移除的维度不会残留在总分或明细中
             score_d = {k: entry.get(k) for k in (
@@ -569,8 +570,8 @@ def _format_recommend_rankings() -> list[str]:
             except (ValueError, KeyError, TypeError):
                 pass
 
-        # 实时获取 TOP 10 数据并重新评分
-        fresh = _fetch_fresh_recommend_data()
+        # 使用已保存的推荐结果数据（避免重复网络请求）
+        fresh = _load_saved_recommend_data()
         if not fresh:
             lines.append("")
             lines.append("💡 **想看看市场上有哪些优秀基金？**")

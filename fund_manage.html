@@ -655,48 +655,6 @@ async function loadBriefing() {
   const html = await r.text();
   const el = document.getElementById('briefContent');
   if (el) el.innerHTML = html;
-
-  // 从内容中提取两个表格，移到下方独立容器
-  var fundTable = el.querySelector('div > div > p');  // find first nested div with title
-  if (fundTable && fundTable.textContent.indexOf('自选基金完整数据') >= 0) {
-    var ftContainer = document.getElementById('fundFullTable');
-    if (ftContainer) {
-      ftContainer.innerHTML = fundTable.parentNode.outerHTML;
-      fundTable.parentNode.remove();
-      document.getElementById('fundFullTableCard').style.display = '';
-    }
-  } else {
-    // Try by text content
-    var allDivs = el.querySelectorAll('div[style]');
-    for (var i = 0; i < allDivs.length; i++) {
-      var p = allDivs[i].querySelector('p');
-      if (p && p.textContent.indexOf('自选基金完整数据') >= 0) {
-        var ftContainer = document.getElementById('fundFullTable');
-        if (ftContainer) {
-          ftContainer.innerHTML = allDivs[i].outerHTML;
-          allDivs[i].remove();
-          document.getElementById('fundFullTableCard').style.display = '';
-        }
-        break;
-      }
-    }
-  }
-
-  // Move recommend table
-  var recDivs = el.querySelectorAll('div[style]');
-  for (var i = 0; i < recDivs.length; i++) {
-    var p = recDivs[i].querySelector('p');
-    if (p && p.textContent.indexOf('市场优选') >= 0) {
-      var rtContainer = document.getElementById('recommendFullTable');
-      if (rtContainer) {
-        rtContainer.innerHTML = recDivs[i].outerHTML;
-        recDivs[i].remove();
-        document.getElementById('recommendFullTableCard').style.display = '';
-      }
-      break;
-    }
-  }
-
   // 从内容中提取日期更新右上角
   const dateMatch = html.match(/(\d{4}-\d{2}-\d{2})/);
   const dateEl = document.getElementById('briefDate');

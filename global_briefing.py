@@ -485,9 +485,10 @@ def _backfill_volume_history(history: dict, today_amount: float) -> None:
     """从腾讯K线API回填历史成交额（用成交量估算）"""
     try:
         url = api_url("tencent_kline")
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        resp = urllib.request.urlopen(req, timeout=10).read()
-        j = json.loads(resp)
+        raw = fetch_bytes(url)
+        if not raw:
+            return
+        j = json.loads(raw)
         klines = j["data"]["sh000001"]["day"]
 
         # 找今天的K线算换算比例

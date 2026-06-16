@@ -74,7 +74,8 @@ def _load_dim_curves():
     curves = {}
     try:
         cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-        cfg = json.load(open(cfg_path, encoding="utf-8"))
+        with open(cfg_path, encoding="utf-8") as _f:
+            cfg = json.load(_f)
         for dim in cfg.get("scoring", {}).get("dims", []):
             key = dim.get("key", "")
             curve = dim.get("curve")
