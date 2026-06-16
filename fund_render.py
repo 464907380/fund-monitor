@@ -249,14 +249,19 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         for dim_name in dim_names:
             val = _get_dim_value(r, dim_name)
             raw_val = r.get(_dim_value_to_key(dim_name))
-            color = "#bbb"
-            if isinstance(raw_val, (int, float)):
-                lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
-                if lower_better:
-                    color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
-                else:
-                    color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
-            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};white-space:nowrap;">{val}</td>')
+            if val in ("-", ""):
+                color = "#555"
+                style_extra = "font-style:italic;"
+            else:
+                color = "#bbb"
+                style_extra = ""
+                if isinstance(raw_val, (int, float)):
+                    lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
+                    if lower_better:
+                        color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
+                    else:
+                        color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
+            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}white-space:nowrap;">{val}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:12px;color:#888;white-space:nowrap;">{_html.escape(str(r.get("mgr","")))}</td>')
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
@@ -300,14 +305,19 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
             raw_val = r.get(_dim_value_to_key(dim_name))
-            color = "#bbb"
-            if isinstance(raw_val, (int, float)):
-                lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
-                if lower_better:
-                    color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
-                else:
-                    color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
-            parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:' + color + ';">' + val + '</td>')
+            if val in ("-", ""):
+                color = "#555"
+                style_extra = 'font-style:italic;'
+            else:
+                color = "#bbb"
+                style_extra = ""
+                if isinstance(raw_val, (int, float)):
+                    lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
+                    if lower_better:
+                        color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
+                    else:
+                        color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
+            parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:' + color + ';' + style_extra + '">' + val + '</td>')
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
     return "\n".join(parts)
