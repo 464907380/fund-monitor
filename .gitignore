@@ -55,4 +55,10 @@ Thumbs.db
 
 server.log
 .briefing_fund.html
-server.log
+
+# 运行时日志（非 fund_watch.log 的其他日志）
+monitor.log
+recommend.log
+
+# AI 辅助工具自动生成的目录
+.deep-copilot/
