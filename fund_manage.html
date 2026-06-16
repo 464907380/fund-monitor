@@ -1160,12 +1160,15 @@ async function runRecommendFromFilter() {
         } else if (!recAlive) {
           clearInterval(poll);
           if (prog) prog.style.width = '100%';
-          if (statusEl) statusEl.textContent = '✔ 推荐完成';
-          // 先恢复按钮，不然 fund-table 网络请求慢会卡住按钮文字
-          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+          if (statusEl) statusEl.textContent = '✔ 推荐完成，刷新表格...';
+          if (btn) btn.textContent = '⏳ 刷新表格...';
           // 等一秒确保结果文件已完全写入磁盘
           await new Promise(function(r){ setTimeout(r, 1000); });
-          // 刷新市场优选全维度表
+          // ---- 刷新两张表，按钮保持禁用 ----
+          // 表一：市场优选全维度表
+          if (statusEl) statusEl.textContent = '⏳ 刷新表格 (1/2)...';
+          if (btn) btn.textContent = '⏳ 刷新表格 (1/2)';
+          var tableOk = true;
           try {
             var rtResp = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
             if (rtResp.ok) {
@@ -1176,8 +1179,10 @@ async function runRecommendFromFilter() {
                 document.getElementById('recommendFullTableCard').style.display = '';
               }
             }
-          } catch(e) {}
-          // 刷新自选基金完整数据富表格
+          } catch(e) { tableOk = false; }
+          // 表二：自选基金完整数据富表格
+          if (statusEl) statusEl.textContent = '⏳ 刷新表格 (2/2)...';
+          if (btn) btn.textContent = '⏳ 刷新表格 (2/2)';
           try {
             var ftResp = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
             if (ftResp.ok) {
@@ -1188,10 +1193,15 @@ async function runRecommendFromFilter() {
                 document.getElementById('fundFullTableCard').style.display = '';
               }
             }
-          } catch(e) {}
+          } catch(e) { tableOk = false; }
+          // 两表刷新完毕，恢复按钮
+          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+          if (statusEl) statusEl.textContent = tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
+          if (prog) prog.style.width = '100%';
           setTimeout(function() {
             if (prog) prog.style.width = '0%';
-          }, 3000);
+            if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = '';
+          }, 4000);
         }
       } catch(e) {}
       if (Date.now() - startTime > MAX_WAIT) {
