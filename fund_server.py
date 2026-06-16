@@ -344,7 +344,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/api/fund-table":
             """为自选基金生成完整数据富表格（含评分）"""
             try:
-                import json
                 from fund_render import _web_rich_fund_table
                 from fund_watch import get
                 from fund_scoring import calc_score_detail
