@@ -541,60 +541,62 @@ def main() -> None:
     today_str = today.isoformat()
     log.info("====== 基金晚报 %s 开始 ======", today_str)
     write_heartbeat("fund_watch")
-    update_heartbeat("fund_briefing", progress=0, total=0, status="启动中...")
+    update_heartbeat("fund_briefing", progress=0, total=0, status="加载推荐数据...")
     try:
+        # 直接从推荐结果文件加载数据，不再单独拉取网络数据
+        rec_data = _load_recommend_data()
+        if not rec_data:
+            log.warning("推荐结果不存在，跳过晚报生成")
+            return
 
-        # 第一遍：拉取所有基金原始数据
+        rec_results = rec_data.get("results", [])
+        total_count = len(rec_results)
         raw_rows: list[dict] = []
         all_alerts: list[str] = []
-        total_steps = len(FUND_LIST) * 2 + 2  # 取数据N + 评分N + 市场优选 + 推送
-        for f in FUND_LIST:
-            name = "?"
-            try:
-                r, a = check(f["code"])
-                raw_rows.append(r)
-                all_alerts.extend(a)
-                name = r.get("name", "?")
-                log.info("  %s(%s) %s | 近1月%s | 近3月%s | 近1年%s", name, r["code"], r["day"], r["m1"], r["m3"], r["y1"])
-            except Exception as e:
-                log.error("❌ %s: %s", f["code"], e)
-            update_heartbeat("fund_briefing", progress=len(raw_rows), total=total_steps,
-                             status=f"取数据 {name}({f['code']})")
-    
-        # 计算评分（供展示使用）
-        for i, r in enumerate(raw_rows, 1):
-            d = {
-                "annual_return": r.get("_annual_return"),
-                "sharpe": r.get("_sharpe"),
-                "sortino": r.get("_sortino"),
-                "max_dd": r.get("_max_dd"),
-                "win_rate": r.get("_win_rate"),
-                "inst": r.get("_inst"),
-                "sc": r.get("_sc"),
-                "rate": r.get("_rate"),
-                "profit_ratio": r.get("_profit_ratio"),
-                "recovery": r.get("_recovery"),
-                "y1": r.get("_y1_raw"),
-                "sy3": r.get("_sy3"),  # 无近3年数据不评分（不回退到近6月）
-                "m1": r.get("m1"),      # 近1月收益（字符串 "+3.45%"）
-                "m3": r.get("m3"),      # 近3月收益（字符串）
-                "sy6": r.get("_sy6"),   # 近6月收益
-                "f5": r.get("f5"),      # 近一周收益（字符串 "+2.1%"）
-                "sy2": r.get("_sy2"),   # 近2年收益
-                "volatility": r.get("_volatility"),
-                "calmar": r.get("_calmar"),
-                "max_loss_days": r.get("_max_loss_days"),
+        total_steps = total_count + 2  # 整理N + 推送
+
+        # 将推荐结果转为晚报行格式
+        for i, item in enumerate(rec_results):
+            name = item.get("name", item.get("code", "?"))
+            code = item.get("code", "")
+            row = {
+                "code": code,
+                "name": name,
+                "name_short": name[:12],
+                "day": "-",
+                "f5": item.get("f5", ""),
+                "m1": item.get("m1", ""),
+                "m3": item.get("m3", ""),
+                "y1": item.get("y1", ""),
+                "score": item.get("score", 0),
+                "mgr": "-",
+                "annual_return": item.get("annual_return"),
+                "sharpe": item.get("sharpe"),
+                "sortino": item.get("sortino"),
+                "max_dd": item.get("max_dd"),
+                "win_rate": item.get("win_rate"),
+                "inst": item.get("inst"),
+                "sc": item.get("sc"),
+                "rate": item.get("rate"),
+                "profit_ratio": item.get("profit_ratio"),
+                "recovery": item.get("recovery"),
+                "sy3": item.get("sy3"),
+                "sy2": item.get("sy2"),
+                "volatility": item.get("volatility"),
+                "calmar": item.get("calmar"),
+                "max_loss_days": item.get("max_loss_days"),
+                "sy6": item.get("sy6"),
             }
-            r["score"], r["_score_detail"], r["_skipped_weight"] = calc_score_detail(d)
-            update_heartbeat("fund_briefing", progress=len(FUND_LIST) + i, total=total_steps,
-                             status=f"评分 {r.get('name_short','?')}({r['code']})")
-        update_heartbeat("fund_briefing", progress=len(FUND_LIST) + len(raw_rows) + 1, total=total_steps, status="获取市场优选")
-        rows = raw_rows
+            raw_rows.append(row)
+            log.info("  %s(%s) 评分%.1f", name, code, item.get("score", 0))
+            update_heartbeat("fund_briefing", progress=i + 1, total=total_steps,
+                             status=f"整理 {name[:18]}({code})")
 
         # 推送（两条通道共用推荐排行数据）
-        ranking_lines = _format_recommend_rankings() if rows else None
+        update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="获取市场优选")
+        ranking_lines = _format_recommend_rankings() if raw_rows else None
         update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="推送中")
-        push("📊 基金晚报", rows, all_alerts, today_str, ranking_lines)
+        push("📊 基金晚报", raw_rows, all_alerts, today_str, ranking_lines)
         update_heartbeat("fund_briefing", progress=total_steps, total=total_steps, status="完成")
         log.info("====== 基金晚报 %s 完成 ======", today_str)
     finally:
