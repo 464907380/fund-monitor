@@ -415,8 +415,13 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
 
 
 def _load_saved_recommend_data() -> list[dict]:
-    """从保存的结果文件直接读取推荐数据（无网络请求，用于快速刷新表格）"""
+    """从保存的结果文件直接读取推荐数据，并用当前 SCORE_DIMS 重新评分。
+
+    关键修复：即使用户移除了某些维度并保存权重后,
+    推荐列表的分数和明细会立刻反映最新维度配置，无需等待推荐子进程完成。
+    """
     try:
+        from fund_scoring import calc_score_detail
         data = _load_recommend_data()
         if not data:
             return []
@@ -425,10 +430,9 @@ def _load_saved_recommend_data() -> list[dict]:
             return []
         out = []
         for r in results[:_show_top]:
-            out.append({
+            entry = {
                 "n": r.get("name", ""),
                 "code": r.get("code", ""),
-                "score": r.get("score", 0),
                 "annual_return": r.get("annual_return", 0),
                 "m1": r.get("m1"),
                 "m3": r.get("m3"),
@@ -448,9 +452,20 @@ def _load_saved_recommend_data() -> list[dict]:
                 "volatility": r.get("volatility"),
                 "calmar": r.get("calmar"),
                 "max_loss_days": r.get("max_loss_days"),
-                "score_detail": [],
-                "_skipped_weight": 0,
-            })
+            }
+            # 用当前 SCORE_DIMS 重新评分，确保已移除的维度不会残留在总分或明细中
+            score_d = {k: entry.get(k) for k in (
+                "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
+                "annual_return", "sharpe", "sortino",
+                "profit_ratio", "win_rate", "recovery", "calmar",
+                "max_dd", "volatility", "max_loss_days",
+                "sc", "rate", "inst",
+            )}
+            score, details, skipped = calc_score_detail(score_d)
+            entry["score"] = score
+            entry["score_detail"] = details
+            entry["_skipped_weight"] = skipped
+            out.append(entry)
         return out
     except Exception:
         return []

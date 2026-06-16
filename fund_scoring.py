@@ -313,6 +313,7 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
     except Exception:
         cfg_dims = []
     if not cfg_dims:
+        log.warning("config.json 中未找到评分维度配置，使用内置默认值（共 %d 维）", len(_DEFAULT_DIMS))
         return _DEFAULT_DIMS
     result = []
     for d in cfg_dims:
@@ -328,10 +329,12 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
         if func and weight > 0:
             result.append((name, func, weight, desc))
     if not result:
+        log.warning("筛选后无有效评分维度，使用内置默认值（共 %d 维）", len(_DEFAULT_DIMS))
         return _DEFAULT_DIMS
     total = sum(w for _,_,w,_ in result)
     if abs(total - 1.0) > 0.001:
         result = [(n, f, w/total, d) for n,f,w,d in result]
+    log.info("评分维度加载完成：%d 维（来源：config.json）", len(result))
     return result
 
 
