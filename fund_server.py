@@ -10,6 +10,7 @@ import subprocess
 import http.server
 import threading
 import urllib.parse
+import concurrent.futures
 import urllib.request
 
 # 同目录模块
@@ -342,7 +343,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/fund-table":
-            """为自选基金生成完整数据富表格（含评分）"""
+            """为自选基金生成完整数据富表格（含评分）—— 并行拉取数据"""
             try:
                 from fund_render import _web_rich_fund_table
                 from fund_watch import get
@@ -354,25 +355,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         fund_list = json.load(_f)
                 else:
                     fund_list = []
-                rows = []
-                for f in fund_list:
+                rows: list[dict] = []
+
+                def _process_one(code: str) -> dict | None:
+                    """拉取一只基金数据并计算评分"""
                     try:
-                        d = get(f["code"])
+                        d = get(code)
                         if not d.get("n"):
-                            continue
+                            return None
                         navs = d.get("nav", [])
                         td = d.get("td")
                         day_s = f"{td:+.2f}%" if td is not None else ""
                         if len(navs) >= 5:
                             pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
                             d["f5"] = f"{pct:+.1f}%"
-                        # 所有维度原始值（_get_dim_value / _dim_value_to_key 按这些 key 查找）
                         row = {
-                            "code": f["code"], "name": d.get("n", ""),
+                            "code": code, "name": d.get("n", ""),
                             "name_short": (d.get("n", "") or "")[:12],
                             "day": day_s, "f5": d.get("f5", ""),
                             "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
-                            # 保留格式化字符串供 _color_inline 判断涨跌颜色
                             "_day": day_s, "_f5": d.get("f5", ""),
                             "_m1": f"{d['m1']:+.1f}%" if d.get("m1") is not None else "",
                             "_m3": f"{d['m3']:+.1f}%" if d.get("m3") is not None else "",
@@ -402,9 +403,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         row["score"] = score
                         row["_score_detail"] = details
                         row["_skipped_weight"] = skipped
-                        rows.append(row)
+                        return row
                     except Exception:
-                        continue
+                        return None
+
+                # 并行拉取所有基金数据（网络IO密集，20线程足够）
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                    fut_map = {executor.submit(_process_one, f["code"]): f["code"] for f in fund_list}
+                    for fut in concurrent.futures.as_completed(fut_map):
+                        result = fut.result()
+                        if result is not None:
+                            rows.append(result)
+
+                # 按 fund_list 原始顺序排序
+                order = {f["code"]: i for i, f in enumerate(fund_list)}
+                rows.sort(key=lambda r: order.get(r["code"], 999))
+
                 html = _web_rich_fund_table(rows)
                 self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
             except Exception as e:
