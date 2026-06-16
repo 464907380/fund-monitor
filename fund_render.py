@@ -213,7 +213,9 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
 
 
 def _web_rich_fund_table(rows: list[dict]) -> str:
-    """生成自选基金完整数据 HTML 表格（Web 版）"""
+    """生成自选基金完整数据 HTML 表格（Web 版，维度列动态跟随 SCORE_DIMS）"""
+    from fund_scoring import SCORE_DIMS
+    dim_names = [d[0] for d in SCORE_DIMS]
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 自选基金完整数据</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -225,35 +227,37 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近1月</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近3月</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近1年</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">评分</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">年化%</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">夏普</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">索提诺</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">回撤%</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">胜率%</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">经理</th>'
-             '</tr></thead><tbody>']
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">评分</th>']
+    # 动态维度列
+    for dn in dim_names:
+        parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
+    parts.append('<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">经理</th>'
+                 '</tr></thead><tbody>')
     for r in rows:
-        col = lambda v: f'style="color:#ef5350;"' if (isinstance(v, str) and v.startswith("+")) else (f'style="color:#66bb6a;"' if (isinstance(v, str) and v.startswith("-")) else 'style="color:#ccc;"')
-        parts.append(f'<tr>')
+        parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-family:Consolas;color:#888;">{_html.escape(str(r.get("code","")))}</td>')
         _warn = _skipped_icon(r.get("_skipped_weight", 0))
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#ccc;">{_html.escape(str(r.get("name_short","")))}{_warn}</td>')
-        _v = r.get("day",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
-        _v = r.get("f5",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
-        _v = r.get("m1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
-        _v = r.get("m3",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
-        _v = r.get("y1",""); parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;">{_html.escape(str(r.get("name_short","")))}{_warn}</td>')
+        for col, fcol in (("day","_day"),("f5","_f5"),("m1","_m1"),("m3","_m3"),("y1","_y1")):
+            _v = r.get(fcol, "")
+            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
-        _score_html = f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}</td>"
-        parts.append(_score_html)
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_annual_return"))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sharpe"))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_sortino"))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_max_dd"))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{_fmt(r.get("_win_rate"))}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:12px;color:#888;">{_html.escape(str(r.get("mgr","")))}</td>')
+        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}</td>")
+        # 动态维度列
+        for dim_name in dim_names:
+            val = _get_dim_value(r, dim_name)
+            raw_val = r.get(_dim_value_to_key(dim_name))
+            color = "#bbb"
+            if isinstance(raw_val, (int, float)):
+                lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
+                if lower_better:
+                    color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
+                else:
+                    color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
+            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};white-space:nowrap;">{val}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:12px;color:#888;white-space:nowrap;">{_html.escape(str(r.get("mgr","")))}</td>')
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
     return "\n".join(parts)
@@ -295,12 +299,10 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
-            # 判断颜色：数值型正绿负红，非数值灰
             raw_val = r.get(_dim_value_to_key(dim_name))
             color = "#bbb"
             if isinstance(raw_val, (int, float)):
-                # "较低越好"的维度：波动率、最大回撤、最大连跌天数、费率
-                lower_better = dim_name in ("\u6ce2\u52a8\u7387", "\u6700\u5927\u56de\u64a4", "\u6700\u5927\u8fde\u8dcc\u5929\u6570", "\u8d39\u7387")
+                lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
                 if lower_better:
                     color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
                 else:
@@ -333,9 +335,8 @@ def _save_briefing(rows: list[dict], alerts: list[str], today: str,
         web = re.sub(r'</body>', '', web)
         web = re.sub(r'<center>', '', web)
         web = re.sub(r'</center>', '', web)
-        # 追加完整数据表格
-        web += _web_rich_fund_table(rows)
-        web += _web_rich_recommend_table()
+        # 注：完整基金数据表格和推荐全维度表格不放在此处——
+        #     在「运行推荐」完成时由前端通过 /api/recommend-table 加载
         web = re.sub(r'\n{3,}', '\n\n', web)
         web = web.strip()
         # 注入评分明细弹窗 JS

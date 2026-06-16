@@ -292,17 +292,11 @@ h1 {
   </div>
 
   <div class="card" id="fundFullTableCard" style="display:none;">
-    <div class="list-header">
-      <span>📊 自选基金完整数据</span>
-    </div>
     <div class="divider"></div>
     <div id="fundFullTable" style="padding:0;font-size:12px;color:#ccc;"></div>
   </div>
 
   <div class="card" id="recommendFullTableCard" style="display:none;">
-    <div class="list-header">
-      <span>🏆 市场优选 TOP 20 （全维度）</span>
-    </div>
     <div class="divider"></div>
     <div id="recommendFullTable" style="padding:0;font-size:12px;color:#ccc;"></div>
   </div>
@@ -607,7 +601,33 @@ function updateHeartbeat() {
 
 loadFeatures();
 updateHeartbeat();
+// 页面加载时尝试恢复已保存的推荐/基金表格
+loadSavedTables();
 setInterval(updateHeartbeat, 10000);
+
+/** 页面加载时恢复已保存的推荐/自选基金表格 */
+async function loadSavedTables() {
+  try {
+    var rtResp = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
+    if (rtResp.ok) {
+      var rtHtml = await rtResp.text();
+      if (rtHtml.indexOf('<tbody>') > 0) {
+        var rtEl = document.getElementById('recommendFullTable');
+        if (rtEl) { rtEl.innerHTML = rtHtml; document.getElementById('recommendFullTableCard').style.display = ''; }
+      }
+    }
+  } catch(e) {}
+  try {
+    var ftResp = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
+    if (ftResp.ok) {
+      var ftHtml = await ftResp.text();
+      if (ftHtml.indexOf('<tbody>') > 0) {
+        var ftEl = document.getElementById('fundFullTable');
+        if (ftEl) { ftEl.innerHTML = ftHtml; document.getElementById('fundFullTableCard').style.display = ''; }
+      }
+    }
+  } catch(e) {}
+}
 
 async function loadHeartbeat() {
   const r = await fetch(API + '/api/heartbeat');
@@ -1117,6 +1137,13 @@ async function runRecommendFromFilter() {
   try {
     const r = await fetch(API + '/api/recommend', { method: 'POST' });
     const d = await r.json();
+    if (!d.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+      if (prog) prog.style.width = '0%';
+      if (statusEl) statusEl.textContent = '';
+      showMsg('✖ ' + (d.error || '启动失败'), 'fail');
+      return;
+    }
     var startTime = Date.now();
     var MAX_WAIT = 1800000;
     var poll = setInterval(async function() {
@@ -1134,6 +1161,8 @@ async function runRecommendFromFilter() {
           clearInterval(poll);
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '✔ 推荐完成';
+          // 先恢复按钮，不然 fund-table 网络请求慢会卡住按钮文字
+          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           // 等一秒确保结果文件已完全写入磁盘
           await new Promise(function(r){ setTimeout(r, 1000); });
           // 刷新市场优选全维度表
@@ -1142,10 +1171,24 @@ async function runRecommendFromFilter() {
             if (rtResp.ok) {
               var rtHtml = await rtResp.text();
               var rtEl = document.getElementById('recommendFullTable');
-              if (rtEl) rtEl.innerHTML = rtHtml;
+              if (rtEl) {
+                rtEl.innerHTML = rtHtml;
+                document.getElementById('recommendFullTableCard').style.display = '';
+              }
             }
           } catch(e) {}
-          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+          // 刷新自选基金完整数据富表格
+          try {
+            var ftResp = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
+            if (ftResp.ok) {
+              var ftHtml = await ftResp.text();
+              var ftEl = document.getElementById('fundFullTable');
+              if (ftEl) {
+                ftEl.innerHTML = ftHtml;
+                document.getElementById('fundFullTableCard').style.display = '';
+              }
+            }
+          } catch(e) {}
           setTimeout(function() {
             if (prog) prog.style.width = '0%';
           }, 3000);

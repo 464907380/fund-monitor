@@ -341,6 +341,78 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": True, "date": "", "results": []}))
             return
 
+        if parsed.path == "/api/fund-table":
+            """为自选基金生成完整数据富表格（含评分）"""
+            try:
+                import json
+                from fund_render import _web_rich_fund_table
+                from fund_watch import get
+                from fund_scoring import calc_score_detail
+                # 直接从文件读取基金列表（不使用缓存，因为页面可能刚增删过）
+                fl_path = os.path.join(_SCRIPT_DIR, "fund_list.json")
+                if os.path.exists(fl_path):
+                    with open(fl_path, encoding="utf-8") as _f:
+                        fund_list = json.load(_f)
+                else:
+                    fund_list = []
+                rows = []
+                for f in fund_list:
+                    try:
+                        d = get(f["code"])
+                        if not d.get("n"):
+                            continue
+                        navs = d.get("nav", [])
+                        td = d.get("td")
+                        day_s = f"{td:+.2f}%" if td is not None else ""
+                        if len(navs) >= 5:
+                            pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
+                            d["f5"] = f"{pct:+.1f}%"
+                        # 所有维度原始值（_get_dim_value / _dim_value_to_key 按这些 key 查找）
+                        row = {
+                            "code": f["code"], "name": d.get("n", ""),
+                            "name_short": (d.get("n", "") or "")[:12],
+                            "day": day_s, "f5": d.get("f5", ""),
+                            "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
+                            # 保留格式化字符串供 _color_inline 判断涨跌颜色
+                            "_day": day_s, "_f5": d.get("f5", ""),
+                            "_m1": f"{d['m1']:+.1f}%" if d.get("m1") is not None else "",
+                            "_m3": f"{d['m3']:+.1f}%" if d.get("m3") is not None else "",
+                            "_y1": f"{d['y1']:+.1f}%" if d.get("y1") is not None else "",
+                            "mgr": (d.get("mgr", "") or "")[:6],
+                            "annual_return": d.get("annual_return"),
+                            "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),
+                            "max_dd": d.get("max_dd"), "win_rate": d.get("win_rate"),
+                            "profit_ratio": d.get("profit_ratio"),
+                            "recovery": d.get("recovery"),
+                            "sy3": d.get("sy3"), "sy6": d.get("sy6"),
+                            "sy2": d.get("sy2"),
+                            "volatility": d.get("volatility"),
+                            "calmar": d.get("calmar"),
+                            "max_loss_days": d.get("max_loss_days"),
+                            "sc": d.get("sc"), "rate": d.get("rate"),
+                            "inst": d.get("inst"),
+                        }
+                        score_d = {k: d.get(k) for k in (
+                            "y1","m3","m1","f5","sy6","sy2","sy3",
+                            "annual_return","sharpe","sortino",
+                            "profit_ratio","win_rate","recovery","calmar",
+                            "max_dd","volatility","max_loss_days",
+                            "sc","rate","inst",
+                        )}
+                        score, details, skipped = calc_score_detail(score_d)
+                        row["score"] = score
+                        row["_score_detail"] = details
+                        row["_skipped_weight"] = skipped
+                        rows.append(row)
+                    except Exception:
+                        continue
+                html = _web_rich_fund_table(rows)
+                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
+            except Exception as e:
+                self._send(500, {"Content-Type": "text/html; charset=utf-8"},
+                           f"<p style=\"color:#ef5350;\">获取基金表格失败: {e}</p>".encode("utf-8"))
+            return
+
         if parsed.path == "/" or parsed.path == "/index.html":
             self._send_file("fund_manage.html")
             return
@@ -470,7 +542,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "show_top": int(body.get("show_top", 20)),
                 }
                 json.dump(cfg, open(_CONFIG_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-                import importlib, fund_render
+                # 重载 config 再重载 fund_render，让 _show_top 读到新值
+                import importlib, config, fund_render
+                importlib.reload(config)
                 importlib.reload(fund_render)
                 self._send(*_json_response({"ok": True, "message": "推荐配置已更新"}))
             except Exception as e:

@@ -593,11 +593,13 @@ def main() -> None:
 
         # 推送（两条通道共用推荐排行数据）
         ranking_lines = _format_recommend_rankings() if rows else None
-        update_heartbeat("fund_briefing", progress=total_steps, total=total_steps, status="推送中")
+        update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="推送中")
         push("📊 基金晚报", rows, all_alerts, today_str, ranking_lines)
+        update_heartbeat("fund_briefing", progress=total_steps, total=total_steps, status="完成")
         log.info("====== 基金晚报 %s 完成 ======", today_str)
     finally:
         clear_heartbeat("fund_watch")
+        clear_heartbeat("fund_briefing")
 
 
 if __name__ == "__main__":
