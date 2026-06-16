@@ -1134,9 +1134,11 @@ async function runRecommendFromFilter() {
           clearInterval(poll);
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '✔ 推荐完成';
-          // 立即刷新市场优选全维度表
+          // 等一秒确保结果文件已完全写入磁盘
+          await new Promise(function(r){ setTimeout(r, 1000); });
+          // 刷新市场优选全维度表
           try {
-            var rtResp = await fetch(API + '/api/recommend-table');
+            var rtResp = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
             if (rtResp.ok) {
               var rtHtml = await rtResp.text();
               var rtEl = document.getElementById('recommendFullTable');
