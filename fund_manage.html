@@ -306,6 +306,15 @@ h1 {
       <span>⚙️ 评分维度</span>
     </div>
     <div class="divider"></div>
+    <!-- 预设栏 -->
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px 12px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:#888;white-space:nowrap;">📁 预设</span>
+      <select id="presetSelect" style="flex:1;min-width:100px;max-width:180px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ccc;padding:4px 6px;font-size:12px;"></select>
+      <button onclick="loadPreset()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer;">📂 加载</button>
+      <button onclick="savePreset()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer;">💾 覆盖</button>
+      <button onclick="saveAsPreset()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer;">📝 另存为</button>
+      <button onclick="deletePreset()" style="background:rgba(255,255,255,0.08);color:#ef5350;border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer;">🗑</button>
+    </div>
     <div id="dimsList" style="font-size:12px;"></div>
     <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center;">
       <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;" class="dims-save-btn">💾 保存权重</button>
@@ -790,14 +799,20 @@ function _getCurvePoints(dimKey, serverCurve) {
 }
 
 
-async function loadDims() {
-  const r = await fetch(API + '/api/dims');
-  const d = await r.json();
-  if (!d.ok || !d.dims) return;
+async function loadDims(customDims) {
+  var dims;
+  if (customDims) {
+    dims = customDims;
+  } else {
+    const r = await fetch(API + '/api/dims');
+    const d = await r.json();
+    if (!d.ok || !d.dims) return;
+    dims = d.dims;
+  }
   const el = document.getElementById('dimsList');
   if (!el) return;
   const allKeys = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days'];
-  const usedKeys = d.dims.map(function(x){ return x.key; });
+  const usedKeys = dims.map(function(x){ return x.key; });
   
   el.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;" id="dimsTable"><thead><tr style="background:#2a2a2a;">'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">开关</th>'
@@ -809,7 +824,7 @@ async function loadDims() {
     + '</tr></thead><tbody>'
     + function() {
         var cats = {};
-        d.dims.forEach(function(dim) {
+        dims.forEach(function(dim) {
             var cat = dim.category || DIM_INFO[dim.key]?.cat || '';
             if (!cats[cat]) cats[cat] = [];
             cats[cat].push(dim);
@@ -1082,6 +1097,108 @@ async function resetDims() {
 }
 
 loadDims();
+loadPresets();
+
+// ── 预设管理 ──────────────────────────────────
+async function loadPresets() {
+  try {
+    const r = await fetch(API + '/api/dims-presets');
+    const d = await r.json();
+    if (!d.ok) return;
+    const sel = document.getElementById('presetSelect');
+    if (!sel) return;
+    sel.innerHTML = Object.keys(d.presets).map(function(name) {
+      return '<option value="' + htmlEscape(name) + '">' + htmlEscape(name) + '</option>';
+    }).join('');
+    if (d.current && d.presets[d.current]) sel.value = d.current;
+  } catch(e) {}
+}
+
+async function loadPreset() {
+  const sel = document.getElementById('presetSelect');
+  if (!sel) return;
+  const name = sel.value;
+  if (!name) return;
+  if (!confirm('加载预设将替换当前所有维度配置，确定继续？')) return;
+  try {
+    const r = await fetch(API + '/api/dims-presets');
+    const d = await r.json();
+    if (!d.ok) return;
+    const preset = d.presets[name];
+    if (!preset || !preset.dims) return;
+    loadDims(preset.dims);
+    markDimsDirty();
+    showMsg('✔ 已加载预设「' + name + '」，点击「保存权重」持久化', 'ok');
+  } catch(e) {}
+}
+
+async function savePreset() {
+  const sel = document.getElementById('presetSelect');
+  if (!sel) return;
+  const name = sel.value;
+  if (!name || name === '系统默认') {
+    showMsg('系统默认预设不可覆盖', 'fail');
+    return;
+  }
+  try {
+    const r = await fetch(API + '/api/dims-presets', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'save', name: name}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showMsg('✔ 预设已覆盖保存', 'ok');
+      loadPresets();
+    } else {
+      showMsg('✖ ' + (d.error || '保存失败'), 'fail');
+    }
+  } catch(e) { showMsg('✖ 保存失败', 'fail'); }
+}
+
+async function saveAsPreset() {
+  const name = prompt('请输入新预设名称：');
+  if (!name || !name.trim()) return;
+  try {
+    const r = await fetch(API + '/api/dims-presets', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'save_as', name: name.trim()}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showMsg('✔ 预设已保存', 'ok');
+      loadPresets();
+    } else {
+      showMsg('✖ ' + (d.error || '保存失败'), 'fail');
+    }
+  } catch(e) { showMsg('✖ 保存失败', 'fail'); }
+}
+
+async function deletePreset() {
+  const sel = document.getElementById('presetSelect');
+  if (!sel) return;
+  const name = sel.value;
+  if (!name || name === '系统默认') {
+    showMsg('系统默认预设不可删除', 'fail');
+    return;
+  }
+  if (!confirm('确定删除预设「' + name + '」？')) return;
+  try {
+    const r = await fetch(API + '/api/dims-presets', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'delete', name: name}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showMsg('✔ 预设已删除', 'ok');
+      loadPresets();
+    } else {
+      showMsg('✖ ' + (d.error || '删除失败'), 'fail');
+    }
+  } catch(e) { showMsg('✖ 删除失败', 'fail'); }
+}
 
 // 加载全市场筛选配置参数
 loadRecommendConfig();
