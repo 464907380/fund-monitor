@@ -1136,6 +1136,14 @@ async function runRecommendFromFilter() {
   if (statusEl) statusEl.textContent = '启动中...';
   try {
     const r = await fetch(API + '/api/recommend', { method: 'POST' });
+    if (!r.ok) {
+      // HTTP 错误（非 200），直接显示状态码
+      if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+      if (prog) prog.style.width = '0%';
+      if (statusEl) statusEl.textContent = '';
+      showMsg('✖ 服务错误: HTTP ' + r.status, 'fail');
+      return;
+    }
     const d = await r.json();
     if (!d.ok) {
       if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
@@ -1215,6 +1223,7 @@ async function runRecommendFromFilter() {
     if (prog) prog.style.width = '0%';
     if (statusEl) statusEl.textContent = '启动失败';
     if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+    showMsg('✖ 启动失败: ' + (e.message || e), 'fail');
   }
 }
 
