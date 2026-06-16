@@ -128,7 +128,7 @@ h1 {
   color: #81c784;
   border: 1px solid rgba(102,187,106,0.2);
 }
-.msg.err {
+.msg.err, .msg.fail {
   display: block;
   background: rgba(239,83,80,0.1);
   color: #ef9a9a;
@@ -406,6 +406,7 @@ function showMsg(text, type) {
   el.style.animation = 'none';
   el.offsetHeight;
   el.style.animation = 'fadeIn 0.2s';
+  el.style.display = 'block';
   setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 
@@ -563,7 +564,7 @@ async function loadFeatures() {
         <div class="feature-body">
           <div class="feature-name">${t.label}</div>
           <div class="feature-desc">${t.desc || ''}</div>
-          <div class="feature-info">${statusText}${t.next_run ? ' · 下次 ' + t.next_run : ''}</div>
+          <div class="feature-info">${statusText}${t.next_run ? ' · 下次 ' + t.next_run : ''}<span class="feature-running"></span></div>
         </div>
         <div class="feature-meta">
           <span class="feature-time">${t.time}</span>
@@ -892,7 +893,11 @@ async function loadDims() {
 
 function updateDimsTotal() {
   var total = 0;
-  document.querySelectorAll('#dimsTable tbody tr td:nth-child(3) input[type=number]').forEach(function(n){ total += parseInt(n.value) || 0; });
+  document.querySelectorAll('#dimsTable tbody tr').forEach(function(row) {
+    var cb = row.querySelector('input[type=checkbox]');
+    var inp = row.querySelector('td:nth-child(3) input[type=number]');
+    if (cb && inp && cb.checked) total += parseInt(inp.value) || 0;
+  });
   var el = document.getElementById('dimsTotal');
   if (!el) {
     el = document.createElement('div');
@@ -999,14 +1004,20 @@ function addCurvePoint(btn, key) {
 
 async function saveDims() {
   const btn = document.getElementById('dimsSaveBtn');
-  const prog = document.getElementById('saveProgress');
+  const progArea = document.getElementById('saveProgressArea');
+  const progFill = document.getElementById('saveProgressFill');
+  const progPct = document.getElementById('saveProgressPct');
+  const progText = document.getElementById('saveProgressText');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 保存中'; }
-  if (prog) { prog.classList.add('pulse'); }
+  if (progArea) progArea.style.display = '';
+  if (progFill) progFill.style.width = '30%';
+  if (progPct) progPct.textContent = '30%';
+  if (progText) progText.textContent = '正在保存...';
   const rows = document.querySelectorAll('#dimsTable tbody tr');
   const dims = [];
   rows.forEach(function(row) {
     var cb = row.querySelector('input[type=checkbox]');
-    if (!cb) return; // 跳过分类标题行
+    if (!cb) return;
     var num = row.querySelector('input[type=number]');
     var key = row.querySelector('td:nth-child(2) span').textContent;
     var name = row.querySelector('td:nth-child(2)').textContent.replace(key,'').trim();
@@ -1031,6 +1042,9 @@ async function saveDims() {
     dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc, curve: curvePoints, category: cat});
   });
   try {
+    if (progFill) progFill.style.width = '60%';
+    if (progPct) progPct.textContent = '60%';
+    if (progText) progText.textContent = '正在保存...';
     const controller = new AbortController();
     const timeout = setTimeout(function() { controller.abort(); }, 30000);
     const r = await fetch(API + '/api/dims', {
@@ -1041,19 +1055,31 @@ async function saveDims() {
     });
     clearTimeout(timeout);
     const d = await r.json();
+    if (progFill) progFill.style.width = '100%';
+    if (progPct) progPct.textContent = '100%';
+    if (progText) progText.textContent = '保存完成';
     if (d.ok) {
       showMsg('✔ 权重已保存', 'ok');
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
-      if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+      setTimeout(function() {
+        if (progArea) progArea.style.display = 'none';
+        if (progFill) progFill.style.width = '0%';
+        if (progPct) progPct.textContent = '0%';
+      }, 2000);
       try { loadDims(); } catch(e) {}
     } else {
-      if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
+      if (progFill) progFill.style.width = '0%';
+      if (progPct) progPct.textContent = '0%';
+      if (progText) progText.textContent = '';
+      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
       showMsg('✖ ' + (d.error || '保存失败'), 'fail');
     }
   } catch(e) {
-    if (prog) { prog.classList.remove('pulse'); prog.style.width = '0%'; }
-    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
+    if (progFill) progFill.style.width = '0%';
+    if (progPct) progPct.textContent = '0%';
+    if (progText) progText.textContent = '';
+    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+    if (progArea) progArea.style.display = 'none';
     showMsg('✖ 保存失败' + (e.name === 'AbortError' ? '（超时）' : ''), 'fail');
   }
 }
@@ -1125,12 +1151,18 @@ async function runRecommendFromFilter() {
     var topN = parseInt(document.getElementById('recTopN').value) || 200;
     var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
     var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
-    await fetch(API + '/api/recommend-config', {
+    var cfgResp = await fetch(API + '/api/recommend-config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop}),
     });
-  } catch(e) {}
+    var cfgData = await cfgResp.json();
+    if (!cfgData.ok) {
+      showMsg('⚠ 筛选参数保存失败: ' + (cfgData.error || '未知错误'), 'fail');
+    }
+  } catch(e) {
+    showMsg('⚠ 筛选参数保存失败: ' + (e.message || e), 'fail');
+  }
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 推荐中'; }
   if (prog) prog.style.width = '5%';
   if (statusEl) statusEl.textContent = '启动中...';
@@ -1286,7 +1318,7 @@ function showScoreDetail(items) {
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;max-width:500px;width:90%;";
 }
 
-loadDims();</script>
+</script>
 </body>
 </html>
 

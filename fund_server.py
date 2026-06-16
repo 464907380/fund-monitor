@@ -265,7 +265,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/dims":
             try:
-                dims = json.load(open(_CONFIG_PATH, encoding="utf-8")).get("scoring", {}).get("dims", [])
+                with open(_CONFIG_PATH, encoding="utf-8") as _fdims:
+                    dims = json.load(_fdims).get("scoring", {}).get("dims", [])
                 # 归一化权重，让页面展示实际生效的值
                 total = sum(d.get("weight", 0) for d in dims)
                 if total > 0 and abs(total - 1.0) > 0.001:
@@ -278,7 +279,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/recommend-config":
             try:
-                cfg = json.load(open(_CONFIG_PATH, encoding="utf-8"))
+                with open(_CONFIG_PATH, encoding="utf-8") as _frc:
+                    cfg = json.load(_frc)
                 rc = cfg.get("recommend", {})
                 self._send(*_json_response({
                     "ok": True,
@@ -530,11 +532,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not dims:
                     self._send(*_json_response({"ok": False, "error": "dims 不能为空"}, 400))
                     return
-                cfg = json.load(open(_CONFIG_PATH, encoding="utf-8"))
+                with open(_CONFIG_PATH, encoding="utf-8") as _fcfg2:
+                    cfg = json.load(_fcfg2)
                 if "scoring" not in cfg:
                     cfg["scoring"] = {}
                 cfg["scoring"]["dims"] = dims
-                json.dump(cfg, open(_CONFIG_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwcfg2:
+                    json.dump(cfg, _fwcfg2, indent=2, ensure_ascii=False)
                 # 重新加载评分模块使新配置生效
                 import importlib
                 import fund_scoring
@@ -548,13 +552,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/recommend-config":
             try:
-                cfg = json.load(open(_CONFIG_PATH, encoding="utf-8"))
+                with open(_CONFIG_PATH, encoding="utf-8") as _fcfg:
+                    cfg = json.load(_fcfg)
                 cfg["recommend"] = {
                     "top_n": int(body.get("top_n", 200)),
                     "min_y1_return": int(body.get("min_y1_return", 20)),
                     "show_top": int(body.get("show_top", 20)),
                 }
-                json.dump(cfg, open(_CONFIG_PATH, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwcfg:
+                    json.dump(cfg, _fwcfg, indent=2, ensure_ascii=False)
                 # 重载 config 再重载 fund_render，让 _show_top 读到新值
                 import importlib, config, fund_render
                 importlib.reload(config)
@@ -596,7 +602,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 def main():
     host = "127.0.0.1"
     port = int(sys.argv[1]) if len(sys.argv) > 1 else _PORT
-    server = http.server.HTTPServer((host, port), Handler)
+    server = http.server.ThreadingHTTPServer((host, port), Handler)
     print(f"🌐 基金管理页面：http://{host}:{port}")
     print("   按 Ctrl+C 停止服务")
     try:
