@@ -105,7 +105,15 @@ def _save_result(scored: list[tuple]) -> None:
             return
 
 
-        data = {
+        if not scored:
+        print("\n⚠️ 本次推荐未找到匹配基金，保留上次结果")
+        try:
+            os.remove(lock_file)
+        except OSError:
+            pass
+        return
+
+    data = {
             "date": datetime.date.today().isoformat(),
             "results": [
                 {"code": item[1], "name": item[2], "score": item[0],
