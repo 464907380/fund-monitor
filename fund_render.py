@@ -449,6 +449,7 @@ def _load_saved_recommend_data() -> list[dict]:
                 "sy3": r.get("sy3"),
                 "f5": r.get("f5"),
                 "sy2": r.get("sy2"),
+                "sy6": r.get("sy6"),
                 "volatility": r.get("volatility"),
                 "calmar": r.get("calmar"),
                 "max_loss_days": r.get("max_loss_days"),

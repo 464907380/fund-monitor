@@ -45,29 +45,6 @@ def _spawn_recommend() -> None:
     threading.Thread(target=_wait_and_cleanup, daemon=True).start()
 
 
-def _spawn_recommend_and_briefing() -> None:
-    """启动推荐，完成后自动清理心跳并连锁触发晚报生成"""
-    global _recommend_proc
-    script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
-    write_heartbeat("fund_recommend")
-    proc = subprocess.Popen(
-        [sys.executable, script],
-        cwd=_SCRIPT_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    with _proc_lock:
-        _recommend_proc = proc
-
-    def _chain(p=proc) -> None:
-        p.wait()
-        clear_heartbeat("fund_recommend")
-        # 推荐完成后自动触发晚报生成（使新权重应用到简报）
-        _spawn_briefing()
-
-    threading.Thread(target=_chain, daemon=True).start()
-
-
 def _spawn_briefing() -> None:
     """启动晚报生成，完成后自动清理心跳"""
     global _briefing_proc
