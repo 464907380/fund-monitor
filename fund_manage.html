@@ -160,6 +160,34 @@ h1 {
 .task-btn:active { transform: scale(0.95); }
 .start-btn:hover { color: #66bb6a; border-color: #66bb6a; }
 .stop-btn:hover { color: #ef5350; border-color: #ef5350; }
+
+/* 定时器状态徽章 */
+.timer-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.timer-badge.enabled {
+  background: rgba(66, 165, 245, 0.15);
+  color: #42a5f5;
+  border: 1px solid rgba(66, 165, 245, 0.3);
+}
+.timer-badge.running {
+  background: rgba(102, 187, 106, 0.15);
+  color: #66bb6a;
+  border: 1px solid rgba(102, 187, 106, 0.3);
+}
+.timer-badge.disabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: #666;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
 .feature-icon { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
 .feature-body { flex: 1; min-width: 0; }
 .feature-name { font-size: 15px; font-weight: 600; color: #e0e0e0; }
@@ -576,6 +604,14 @@ async function loadFeatures() {
   const el = document.getElementById('features');
   el.innerHTML = d.tasks.map(t => {
     const running = t.running;
+    let badgeHtml = '';
+    if (running) {
+      badgeHtml = '<span class="timer-badge running">▶ 正在运行</span>';
+    } else if (t.timer_enabled) {
+      badgeHtml = '<span class="timer-badge enabled">◉ 定时器已启用</span>';
+    } else {
+      badgeHtml = '<span class="timer-badge disabled">○ 定时器未启用</span>';
+    }
     const statusClass = running ? 'ok' : 'unknown';
     const statusText = running ? '运行中' : (t.last_result === '0' ? '上次成功' : t.last_result ? '上次失败' : '');
     return `
@@ -587,7 +623,7 @@ async function loadFeatures() {
           <div class="feature-info">${statusText}${t.next_run ? ' · 下次 ' + t.next_run : ''}<span class="feature-running"></span></div>
         </div>
         <div class="feature-meta">
-          <span class="feature-time">${t.time}</span>
+          <span class="feature-time">${t.time}</span>${badgeHtml}
           <span class="feature-status ${statusClass}"></span>
           <span class="task-actions">
             <button class="task-btn start-btn" onclick="startTask('${t.id}')" title="启动">▶</button>

@@ -209,37 +209,70 @@ def _json_response(data, status=200):
 
 
 def _check_task_status(taskname: str) -> dict:
-    """查询 Windows 计划任务状态"""
+    """查询计划任务/定时器状态（支持 Windows schtasks 和 Linux systemd）"""
     import subprocess
+    # 先尝试 Windows schtasks
     try:
         r = subprocess.run(
             ["schtasks", "/query", "/tn", taskname, "/fo", "LIST", "/v"],
             capture_output=True, text=True, timeout=10
         )
-        if r.returncode != 0:
-            return {"status": "未找到"}
-        out = r.stdout
-        result = {"status": "未知", "next_run": "", "last_run": "", "last_result": "", "ok": None}
-        for line in out.splitlines():
-            line = line.strip()
-            if line.startswith("Status:"):
-                result["status"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Next Run Time:"):
-                val = line.split(":", 1)[1].strip()
-                if val and val != "N/A":
-                    result["next_run"] = val
-            elif line.startswith("Last Run Time:"):
-                val = line.split(":", 1)[1].strip()
-                if val and val != "N/A":
-                    result["last_run"] = val
-            elif line.startswith("Last Result:"):
-                val = line.split(":", 1)[1].strip()
-                if val and val != "N/A":
-                    result["last_result"] = val
-        result["ok"] = (result["last_result"] == "0") if result["last_result"] is not None else None  # type: ignore[assignment]
+        if r.returncode == 0:
+            out = r.stdout
+            result = {"status": "未知", "next_run": "", "last_run": "", "last_result": "", "ok": None}
+            for line in out.splitlines():
+                line = line.strip()
+                if line.startswith("Status:"):
+                    result["status"] = line.split(":", 1)[1].strip()
+                elif line.startswith("Next Run Time:"):
+                    val = line.split(":", 1)[1].strip()
+                    if val and val != "N/A":
+                        result["next_run"] = val
+                elif line.startswith("Last Run Time:"):
+                    val = line.split(":", 1)[1].strip()
+                    if val and val != "N/A":
+                        result["last_run"] = val
+                elif line.startswith("Last Result:"):
+                    val = line.split(":", 1)[1].strip()
+                    if val and val != "N/A":
+                        result["last_result"] = val
+            result["ok"] = (result["last_result"] == "0") if result["last_result"] is not None else None
+            result["timer_enabled"] = result["status"] in ("Ready", "Running")
+            return result
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    # Windows schtasks 不可用，降级尝试 Linux systemd
+    try:
+        tid = taskname.lower().replace(" ", "-")
+        enabled = subprocess.run(
+            ["systemctl", "is-enabled", f"{tid}.timer"],
+            capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+        active = subprocess.run(
+            ["systemctl", "is-active", f"{tid}.timer"],
+            capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+        result = {
+            "status": active,
+            "next_run": "",
+            "last_run": "",
+            "last_result": "",
+            "ok": None,
+            "timer_enabled": enabled == "enabled",
+        }
+        # 获取下次触发时间
+        r = subprocess.run(
+            ["systemctl", "show", f"{tid}.timer", "--property=NextElapseUSecRealtime"],
+            capture_output=True, text=True, timeout=5
+        )
+        if r.returncode == 0:
+            val = r.stdout.strip().split("=", 1)[-1]
+            if val and val != "(null)":
+                result["next_run"] = val
         return result
-    except Exception as e:
-        return {"status": f"查询失败: {e}"}
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return {"status": "未找到", "timer_enabled": False}
 
 
 TASK_DEFS = [
