@@ -24,6 +24,59 @@ _recommend_proc: subprocess.Popen | None = None
 _briefing_proc: subprocess.Popen | None = None
 _proc_lock = threading.Lock()
 
+# 通用任务进程跟踪（供启停控制使用）
+_task_procs: dict[str, subprocess.Popen] = {}
+_task_scripts = {
+    "global_briefing": "global_briefing.py",
+    "fund_watch": "fund_watch.py",
+    "fund_monitor": "fund_monitor.py",
+}
+_task_heartbeats = {
+    "global_briefing": "global_briefing",
+    "fund_watch": "fund_briefing",
+    "fund_monitor": "fund_monitor",
+}
+
+
+def _spawn_task(task_id: str) -> bool:
+    """启动一个定时任务，返回是否成功"""
+    script_name = _task_scripts.get(task_id)
+    if not script_name:
+        return False
+    script = os.path.join(_SCRIPT_DIR, script_name)
+    hb_name = _task_heartbeats.get(task_id, task_id)
+    write_heartbeat(hb_name)
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, script],
+            cwd=_SCRIPT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        with _proc_lock:
+            _task_procs[task_id] = proc
+        def _wait_and_cleanup(p=proc, hb=hb_name, tid=task_id) -> None:
+            p.wait()
+            clear_heartbeat(hb)
+            with _proc_lock:
+                if _task_procs.get(tid) is p:
+                    del _task_procs[tid]
+        threading.Thread(target=_wait_and_cleanup, daemon=True).start()
+        return True
+    except Exception:
+        clear_heartbeat(hb_name)
+        return False
+
+
+def _stop_task(task_id: str) -> bool:
+    """停止一个正在运行的任务"""
+    with _proc_lock:
+        proc = _task_procs.get(task_id)
+        if proc and proc.poll() is None:
+            proc.terminate()
+            return True
+        return False
+
 
 def _spawn_recommend() -> None:
     """启动推荐任务，完成后自动清理心跳"""
@@ -608,6 +661,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 clear_heartbeat("fund_briefing")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/task/start":
+            task_id = body.get("task_id", "")
+            if task_id not in _task_scripts:
+                self._send(*_json_response({"ok": False, "error": f"未知任务: {task_id}"}, 400))
+                return
+            if _spawn_task(task_id):
+                self._send(*_json_response({"ok": True, "message": f"任务 {task_id} 已启动"}))
+            else:
+                self._send(*_json_response({"ok": False, "error": f"启动任务 {task_id} 失败"}, 500))
+            return
+
+        if self.path == "/api/task/stop":
+            task_id = body.get("task_id", "")
+            if task_id not in _task_scripts:
+                self._send(*_json_response({"ok": False, "error": f"未知任务: {task_id}"}, 400))
+                return
+            if _stop_task(task_id):
+                self._send(*_json_response({"ok": True, "message": f"任务 {task_id} 已停止"}))
+            else:
+                self._send(*_json_response({"ok": False, "error": f"任务 {task_id} 未在运行"}, 404))
             return
 
         if self.path == "/api/dims-presets":

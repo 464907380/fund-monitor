@@ -149,6 +149,17 @@ h1 {
 }
 .feature-row:last-child { border-bottom: none; }
 .feature-row:hover { background: rgba(255,255,255,0.02); border-radius: 6px; }
+
+.task-actions { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.task-btn {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px; color: #ccc; cursor: pointer; font-size: 11px;
+  padding: 2px 8px; line-height: 1.6; transition: all 0.15s;
+}
+.task-btn:hover { background: rgba(255,255,255,0.15); }
+.task-btn:active { transform: scale(0.95); }
+.start-btn:hover { color: #66bb6a; border-color: #66bb6a; }
+.stop-btn:hover { color: #ef5350; border-color: #ef5350; }
 .feature-icon { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
 .feature-body { flex: 1; min-width: 0; }
 .feature-name { font-size: 15px; font-weight: 600; color: #e0e0e0; }
@@ -578,10 +589,53 @@ async function loadFeatures() {
         <div class="feature-meta">
           <span class="feature-time">${t.time}</span>
           <span class="feature-status ${statusClass}"></span>
+          <span class="task-actions">
+            <button class="task-btn start-btn" onclick="startTask('${t.id}')" title="启动">▶</button>
+            <button class="task-btn stop-btn" onclick="stopTask('${t.id}')" title="停止">⏹</button>
+          </span>
         </div>
       </div>
     `;
   }).join('');
+}
+
+async function startTask(taskId) {
+  try {
+    const r = await fetch(API + '/api/task/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({task_id: taskId}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showMsg('✔ ' + (d.message || '任务已启动'), 'ok');
+    } else {
+      showMsg('✖ ' + (d.error || '启动失败'), 'fail');
+    }
+  } catch(e) {
+    showMsg('✖ 启动失败: ' + (e.message || e), 'fail');
+  }
+  setTimeout(loadFeatures, 2000);
+}
+
+async function stopTask(taskId) {
+  if (!confirm('确定停止任务「' + taskId + '」？')) return;
+  try {
+    const r = await fetch(API + '/api/task/stop', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({task_id: taskId}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showMsg('✔ ' + (d.message || '任务已停止'), 'ok');
+    } else {
+      showMsg('✖ ' + (d.error || '停止失败'), 'fail');
+    }
+  } catch(e) {
+    showMsg('✖ 停止失败: ' + (e.message || e), 'fail');
+  }
+  setTimeout(loadFeatures, 2000);
 }
 
 
