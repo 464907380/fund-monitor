@@ -600,13 +600,16 @@ async function loadFeatures() {
 }
 
 async function startTask(taskId) {
+  const btn = document.querySelector(`[data-task-id="${taskId}"] .start-btn`);
+  if (btn) btn.disabled = true;
   try {
     const r = await fetch(API + '/api/task/start', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({task_id: taskId}),
     });
-    const d = await r.json();
+    let d;
+    try { d = await r.json(); } catch(e) { d = {ok: false, error: '响应解析失败'}; }
     if (d.ok) {
       showMsg('✔ ' + (d.message || '任务已启动'), 'ok');
     } else {
@@ -615,18 +618,22 @@ async function startTask(taskId) {
   } catch(e) {
     showMsg('✖ 启动失败: ' + (e.message || e), 'fail');
   }
+  if (btn) btn.disabled = false;
   setTimeout(loadFeatures, 2000);
 }
 
 async function stopTask(taskId) {
   if (!confirm('确定停止任务「' + taskId + '」？')) return;
+  const btn = document.querySelector(`[data-task-id="${taskId}"] .stop-btn`);
+  if (btn) btn.disabled = true;
   try {
     const r = await fetch(API + '/api/task/stop', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({task_id: taskId}),
     });
-    const d = await r.json();
+    let d;
+    try { d = await r.json(); } catch(e) { d = {ok: false, error: '响应解析失败'}; }
     if (d.ok) {
       showMsg('✔ ' + (d.message || '任务已停止'), 'ok');
     } else {
@@ -635,6 +642,7 @@ async function stopTask(taskId) {
   } catch(e) {
     showMsg('✖ 停止失败: ' + (e.message || e), 'fail');
   }
+  if (btn) btn.disabled = false;
   setTimeout(loadFeatures, 2000);
 }
 
