@@ -1171,7 +1171,7 @@ function drawCurvePreview(key) {
     }
   }
   if (pts.length < 2) { container.innerHTML = ''; return; }
-  var W = 560, H = 150, pad = {t:10, r:10, b:22, l:38};
+  var W = 560, H = 200, pad = {t:14, r:12, b:26, l:42};
   var xMin = pts[0][0], xMax = pts[pts.length - 1][0];
   var yMin = 0, yMax = 100;
   if (xMax === xMin) xMax = xMin + 1;
@@ -1190,7 +1190,7 @@ function drawCurvePreview(key) {
     gridHtml += '<line x1="' + pad.l + '" y1="' + gy + '" x2="' + (W - pad.r) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>';
   }
   var dotsHtml = pts.map(function(p, i) {
-    return '<circle data-idx="' + i + '" cx="' + sx(p[0]).toFixed(1) + '" cy="' + sy(p[1]).toFixed(1) + '" r="6" fill="#42a5f5" stroke="#fff" stroke-width="2" style="cursor:grab;"/>';
+    return '<circle data-idx="' + i + '" cx="' + sx(p[0]).toFixed(1) + '" cy="' + sy(p[1]).toFixed(1) + '" r="7" fill="#42a5f5" stroke="#fff" stroke-width="2" style="cursor:grab;"/>';
   }).join('');
   var labelsHtml = pts.map(function(p) {
     return '<text class="clbl" x="' + sx(p[0]).toFixed(1) + '" y="' + (H - 3) + '" text-anchor="middle" fill="#aaa" font-size="9" font-family="Consolas">' + p[0] + '</text>';
