@@ -1153,6 +1153,28 @@ document.addEventListener('mouseup', function() {
   }
 });
 
+function addCurvePoint(btn, key) {
+  var tbl = document.getElementById('curve-tbl-' + key);
+  if (!tbl) return;
+  var rows = tbl.querySelectorAll('tr');
+  var lastVal = 100, lastScore = 100;
+  for (var i = rows.length - 1; i >= 0; i--) {
+    var inputs = rows[i].querySelectorAll('input[type=number]');
+    if (inputs.length >= 2) {
+      lastVal = parseFloat(inputs[0].value) + 10;
+      lastScore = parseFloat(inputs[1].value);
+      break;
+    }
+  }
+  var newRow = document.createElement('tr');
+  newRow.innerHTML = '<td style="padding:2px 4px;"><input type="number" step="any" value="' + lastVal + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + key + '\')"> →</td>'
+    + '<td style="padding:2px 4px;"><input type="number" step="any" value="' + lastScore + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + key + '\')"></td>'
+    + '<td style="padding:2px 4px;"><button onclick="this.closest(\'tr\').remove();markDimsDirty();drawCurvePreview(\'' + key + '\')" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button></td>';
+  tbl.querySelector('tr:last-child').before(newRow);
+  markDimsDirty();
+  drawCurvePreview(key);
+}
+
 function drawCurvePreview(key) {
   var container = document.getElementById('curve-preview-' + key);
   if (!container) return;
