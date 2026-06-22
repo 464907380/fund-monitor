@@ -1105,44 +1105,126 @@ function toggleCurveEditor(btn) {
     }
   }
 }
+// 曲线图表状态注册表（避免重复绑定事件）
+_curveChartState = {};
+_curveDragInited = false;
+_curveDragData = null;
+// 全局级拖拽事件（只绑一次）
+document.addEventListener('mousemove', function(evt) {
+  if (!_curveDragData) return;
+  var st = _curveChartState[_curveDragData.key];
+  if (!st) return;
+  var rect = st.svg.getBoundingClientRect();
+  var scX = st.W / rect.width, scY = st.H / rect.height;
+  var mx = (evt.clientX - rect.left) * scX;
+  var my = (evt.clientY - rect.top) * scY;
+  var idx = _curveDragData.idx;
+  function rx2(px) { return Math.round((st.xMin + (px - st.pad.l) / (st.W - st.pad.l - st.pad.r) * (st.xMax - st.xMin)) * 100) / 100; }
+  function ry2(py) { return Math.max(0, Math.min(100, Math.round((st.yMax - (py - st.pad.t) / (st.H - st.pad.t - st.pad.b) * (st.yMax - st.yMin)) * 100) / 100)); }
+  var newX = rx2(mx);
+  var newY = ry2(my);
+  if (idx > 0) { var pv = st.pts[idx-1][0]; if (newX < pv) newX = pv; }
+  if (idx < st.pts.length - 1) { var nv = st.pts[idx+1][0]; if (newX > nv) newX = nv; }
+  st.pts[idx] = [newX, newY];
+  if (st.inputsList && st.inputsList[idx]) {
+    st.inputsList[idx].xInp.value = newX;
+    st.inputsList[idx].yInp.value = newY;
+  }
+  markDimsDirty();
+  // 拖拽重绘（不重建DOM）
+  var pathD = st.pts.map(function(p, i) { return (i === 0 ? 'M' : 'L') + st.sx(p[0]).toFixed(1) + ',' + st.sy(p[1]).toFixed(1); }).join(' ');
+  st.path.setAttribute('d', pathD);
+  st.circles.forEach(function(c, i) {
+    if (i < st.pts.length) { c.setAttribute('cx', st.sx(st.pts[i][0]).toFixed(1)); c.setAttribute('cy', st.sy(st.pts[i][1]).toFixed(1)); }
+  });
+  st.labels.forEach(function(t, i) {
+    if (i < st.pts.length) { t.setAttribute('x', st.sx(st.pts[i][0]).toFixed(1)); t.textContent = st.pts[i][0]; }
+  });
+});
+document.addEventListener('mouseup', function() {
+  if (_curveDragData) {
+    var st = _curveChartState[_curveDragData.key];
+    if (st && st.svg) st.svg.style.cursor = '';
+    _curveDragData = null;
+  }
+});
+
 function drawCurvePreview(key) {
   var container = document.getElementById('curve-preview-' + key);
   if (!container) return;
   var tbl = document.getElementById('curve-tbl-' + key);
   if (!tbl) return;
-  var rows = tbl.querySelectorAll('tr');
+  // 读取断点数据
   var pts = [];
+  var inputsList = [];
+  var rows = tbl.querySelectorAll('tr');
   for (var i = 0; i < rows.length; i++) {
     var inputs = rows[i].querySelectorAll('input[type=number]');
     if (inputs.length >= 2) {
       var x = parseFloat(inputs[0].value);
       var y = parseFloat(inputs[1].value);
-      if (!isNaN(x) && !isNaN(y)) pts.push([x, y]);
+      if (!isNaN(x) && !isNaN(y)) { pts.push([x, y]); inputsList.push({xInp:inputs[0], yInp:inputs[1]}); }
     }
   }
   if (pts.length < 2) { container.innerHTML = ''; return; }
-  var W = 200, H = 80, pad = {t:6,r:6,b:16,l:30};
+  var W = 300, H = 140, pad = {t:10, r:10, b:22, l:38};
   var xMin = pts[0][0], xMax = pts[pts.length - 1][0];
   var yMin = 0, yMax = 100;
   if (xMax === xMin) xMax = xMin + 1;
   function sv(v, lo, hi, a, b) { return a + (v - lo) / (hi - lo) * (b - a); }
   function sx(v) { return sv(v, xMin, xMax, pad.l, W - pad.r); }
   function sy(v) { return sv(v, yMax, yMin, pad.t, H - pad.b); }
+  function rx(px) { return Math.round((xMin + (px - pad.l) / (W - pad.l - pad.r) * (xMax - xMin)) * 100) / 100; }
+  function ry(py) { return Math.max(0, Math.min(100, Math.round((yMax - (py - pad.t) / (H - pad.t - pad.b) * (yMax - yMin)) * 100) / 100)); }
+  var svgId = 'curve-svg-' + key;
+
+  // 创建/重建完整 SVG
   var pathD = pts.map(function(p, i) { return (i === 0 ? 'M' : 'L') + sx(p[0]).toFixed(1) + ',' + sy(p[1]).toFixed(1); }).join(' ');
-  var dots = pts.map(function(p) {
-    return '<circle cx="' + sx(p[0]).toFixed(1) + '" cy="' + sy(p[1]).toFixed(1) + '" r="2.5" fill="#42a5f5" stroke="#111" stroke-width="1"/>';
+  var gridHtml = '';
+  for (var g = 0; g <= 100; g += 20) {
+    var gy = sy(g);
+    gridHtml += '<line x1="' + pad.l + '" y1="' + gy + '" x2="' + (W - pad.r) + '" y2="' + gy + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>';
+  }
+  var dotsHtml = pts.map(function(p, i) {
+    return '<circle data-idx="' + i + '" cx="' + sx(p[0]).toFixed(1) + '" cy="' + sy(p[1]).toFixed(1) + '" r="6" fill="#42a5f5" stroke="#fff" stroke-width="2" style="cursor:grab;"/>';
   }).join('');
-  var labels = pts.map(function(p) {
-    return '<text x="' + sx(p[0]).toFixed(1) + '" y="' + (H - 2) + '" text-anchor="middle" fill="#666" font-size="8" font-family="Consolas">' + p[0] + '</text>';
+  var labelsHtml = pts.map(function(p) {
+    return '<text class="clbl" x="' + sx(p[0]).toFixed(1) + '" y="' + (H - 3) + '" text-anchor="middle" fill="#aaa" font-size="9" font-family="Consolas">' + p[0] + '</text>';
   }).join('');
-  container.innerHTML = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="background:rgba(0,0,0,0.3);border-radius:4px;">'
+  container.innerHTML = '<svg id="' + svgId + '" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="background:rgba(0,0,0,0.3);border-radius:6px;width:100%;max-width:300px;">'
     + '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>'
-    + '<path d="' + pathD + '" fill="none" stroke="#42a5f5" stroke-width="1.5" stroke-linejoin="round"/>'
-    + dots
-    + '<text x="' + (W - 4) + '" y="12" text-anchor="end" fill="#888" font-size="8" font-family="Consolas">100</text>'
-    + '<text x="' + (W - 4) + '" y="' + (H - 4) + '" text-anchor="end" fill="#888" font-size="8" font-family="Consolas">0</text>'
-    + labels
+    + gridHtml
+    + '<path class="cpath" d="' + pathD + '" fill="none" stroke="#42a5f5" stroke-width="2.5" stroke-linejoin="round"/>'
+    + dotsHtml
+    + '<text x="' + (W - 4) + '" y="14" text-anchor="end" fill="#888" font-size="9" font-family="Consolas">100</text>'
+    + '<text x="' + (W - 4) + '" y="' + (H - 6) + '" text-anchor="end" fill="#888" font-size="9" font-family="Consolas">0</text>'
+    + labelsHtml
     + '</svg>';
+
+  // 缓存 DOM 引用用于拖拽更新
+  var svgEl = document.getElementById(svgId);
+  var pathEl = svgEl.querySelector('.cpath');
+  var circleEls = svgEl.querySelectorAll('circle');
+  var labelEls = svgEl.querySelectorAll('.clbl');
+  _curveChartState[key] = {
+    svg: svgEl, path: pathEl, circles: circleEls, labels: labelEls,
+    pts: pts, inputsList: inputsList,
+    W:W, H:H, pad:pad, xMin:xMin, xMax:xMax,
+    sx: sx, sy: sy,
+  };
+
+  // mousedown：每个 SVG 独立绑定
+  if (!svgEl._dragBound) {
+    svgEl._dragBound = true;
+    svgEl.addEventListener('mousedown', function(evt) {
+      var t = evt.target;
+      if (t.tagName === 'circle' && t.hasAttribute('data-idx')) {
+        _curveDragData = {idx: parseInt(t.getAttribute('data-idx')), key: key};
+        this.style.cursor = 'grabbing';
+        evt.preventDefault();
+      }
+    });
+  }
 }
 
 
