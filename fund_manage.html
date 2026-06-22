@@ -396,6 +396,7 @@ input, select, button { font-family: inherit; outline: none; }
       <button onclick="saveAsPreset()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer;">📝 另存为</button>
       <button onclick="deletePreset()" style="background:rgba(255,255,255,0.08);color:#ef5350;border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer;">🗑</button>
     </div>
+    <div id="radarChartContainer" style="padding:8px 4px;text-align:center;"></div>
     <div id="dimsList" style="font-size:12px;"></div>
     <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center;">
       <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;" class="dims-save-btn">💾 保存权重</button>
@@ -1006,9 +1007,116 @@ async function loadDims(customDims) {
     + '<div id="addDimArea" style="padding:8px 4px;text-align:center;"></div>';
   renderAddDimBtn();
   updateDimsTotal();
+  drawRadarChart();
   // 重置按钮为绿色（未修改状态）
   var saveBtn = document.getElementById('dimsSaveBtn');
   if (saveBtn) saveBtn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)';
+}
+
+function drawRadarChart() {
+  var container = document.getElementById('radarChartContainer');
+  if (!container) return;
+  var rows = document.querySelectorAll('#dimsTable tbody tr');
+  var items = [];
+  rows.forEach(function(row) {
+    var cb = row.querySelector('input[type=checkbox]');
+    var inp = row.querySelector('td:nth-child(3) input[type=number]');
+    var nameEl = row.querySelector('td:nth-child(2)');
+    var keyEl = row.querySelector('td:nth-child(2) span');
+    if (!cb || !inp || !nameEl || !keyEl) return;
+    var key = keyEl.textContent;
+    var name = nameEl.textContent.replace(key, '').trim();
+    if (name.endsWith('\n')) name = name.slice(0, -1).trim();
+    var weight = cb.checked ? (parseInt(inp.value) || 0) : 0;
+    var cat = DIM_INFO[key] ? DIM_INFO[key].cat : 'other';
+    items.push({name: name, key: key, weight: weight, enabled: cb.checked, cat: cat});
+  });
+  if (items.length < 3) { container.innerHTML = ''; return; }
+
+  var catColors = {perf:'#66bb6a', risk:'#ef5350', quality:'#42a5f5', other:'#ab47bc'};
+  var catNames = {perf:'收益表现', risk:'风险指标', quality:'收益性价比', other:'基金特征'};
+  var S = 280, cx = S/2, cy = S/2, R = 110;
+  var n = items.length;
+  var angleStep = 2 * Math.PI / n;
+
+  // 构建 SVG
+  var svg = '<svg width="' + S + '" height="' + S + '" viewBox="0 0 ' + S + ' ' + S + '" style="background:rgba(0,0,0,0.2);border-radius:8px;max-width:100%;">';
+
+  // 同心参考圆
+  [0.25, 0.5, 0.75, 1].forEach(function(r) {
+    var rr = R * r;
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + rr + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>';
+    svg += '<text x="' + (cx + 2) + '" y="' + (cy - rr + 3) + '" fill="#444" font-size="8" font-family="Consolas">' + Math.round(r * 100) + '%</text>';
+  });
+
+  // 轴线 + 标签
+  for (var i = 0; i < n; i++) {
+    var angle = -Math.PI/2 + i * angleStep;
+    var x2 = cx + R * Math.cos(angle);
+    var y2 = cy + R * Math.sin(angle);
+    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x2 + '" y2="' + y2 + '" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>';
+
+    var labelR = R + 18;
+    var lx = cx + labelR * Math.cos(angle);
+    var ly = cy + labelR * Math.sin(angle);
+    var anchor = (Math.cos(angle) > 0.1) ? 'start' : (Math.cos(angle) < -0.1) ? 'end' : 'middle';
+    var vAlign = (Math.sin(angle) > 0.1) ? 'top' : (Math.sin(angle) < -0.1) ? 'bottom' : 'middle';
+    var dy = vAlign === 'top' ? 10 : (vAlign === 'bottom' ? -2 : 4);
+    var shortName = items[i].name.length > 5 ? items[i].name.slice(0, 4) + '..' : items[i].name;
+    svg += '<text x="' + lx + '" y="' + (ly + dy) + '" text-anchor="' + anchor + '" fill="#888" font-size="8" font-family="sans-serif">' + shortName + '</text>';
+  }
+
+  // 数据多边形（按类别分段上色）
+  var catSegments = {};
+  items.forEach(function(item, i) {
+    if (!catSegments[item.cat]) catSegments[item.cat] = [];
+    catSegments[item.cat].push(i);
+  });
+
+  // 画多边形（按类别分组绘制，每段不同颜色）
+  ['perf', 'risk', 'quality', 'other'].forEach(function(cat) {
+    var indices = catSegments[cat];
+    if (!indices || indices.length === 0) return;
+    var color = catColors[cat];
+    var points = '';
+    indices.forEach(function(idx) {
+      var angle = -Math.PI/2 + idx * angleStep;
+      var r = items[idx].weight / 100 * R;
+      points += (points ? ',' : '') + (cx + r * Math.cos(angle)).toFixed(1) + ',' + (cy + r * Math.sin(angle)).toFixed(1);
+    });
+    // 闭合到第一个点
+    if (indices.length > 0) {
+      var firstAngle = -Math.PI/2 + indices[0] * angleStep;
+      var firstR = items[indices[0]].weight / 100 * R;
+      points += ',' + (cx + firstR * Math.cos(firstAngle)).toFixed(1) + ',' + (cy + firstR * Math.sin(firstAngle)).toFixed(1);
+    }
+    svg += '<polygon points="' + points + '" fill="' + color + '" fill-opacity="0.2" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round"/>';
+  });
+
+  // 数据点标记
+  items.forEach(function(item, i) {
+    if (!item.enabled) return;
+    var angle = -Math.PI/2 + i * angleStep;
+    var r = item.weight / 100 * R;
+    var px = cx + r * Math.cos(angle);
+    var py = cy + r * Math.sin(angle);
+    svg += '<circle cx="' + px + '" cy="' + py + '" r="3" fill="' + catColors[item.cat] + '" stroke="#111" stroke-width="1"/>';
+  });
+
+  svg += '</svg>';
+
+  // 图例
+  var legendHtml = '<div style="display:flex;justify-content:center;gap:12px;margin-top:4px;font-size:10px;">';
+  ['perf', 'risk', 'quality', 'other'].forEach(function(cat) {
+    var hasItems = items.some(function(it) { return it.cat === cat; });
+    if (hasItems) {
+      legendHtml += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + catColors[cat] + ';margin-right:3px;"></span>'
+        + '<span style="color:#888;">' + catNames[cat] + '</span></span>';
+    }
+  });
+  legendHtml += '</div>';
+
+  container.innerHTML = svg + legendHtml;
 }
 
 function updateDimsTotal() {
@@ -1027,6 +1135,7 @@ function updateDimsTotal() {
   }
   var color = total === 100 ? '#66bb6a' : '#ef5350';
   el.innerHTML = '合计: <span style="font-weight:600;color:' + color + ';">' + total + '%</span>';
+  drawRadarChart();
 }
 function renderAddDimBtn() {
   const area = document.getElementById('addDimArea');
