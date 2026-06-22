@@ -286,6 +286,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
              '<thead><tr style="background:#2a2a2a;">'
              '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;white-space:nowrap;">#</th>'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金</th>'
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">涨跌</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">总分</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">年化%</th>']
     for dn in dims_shown:
@@ -300,6 +301,10 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
         warn = _skipped_icon(r.get("_skipped_weight", 0))
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))}{warn} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
+        # 涨跌（当日实时涨跌幅）
+        day_raw = r.get("day", "")
+        day_color = "#66bb6a" if day_raw.startswith("+") else ("#ef5350" if day_raw.startswith("-") else "#888")
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
         for dim_name in dims_shown:
@@ -465,6 +470,7 @@ def _load_saved_recommend_data() -> list[dict]:
                 "calmar": r.get("calmar"),
                 "max_loss_days": r.get("max_loss_days"),
                 "mgr": r.get("mgr", ""),
+                "day": r.get("day", ""),
             }
             # 用当前 SCORE_DIMS 重新评分，确保已移除的维度不会残留在总分或明细中
             score_d = {k: entry.get(k) for k in (
@@ -507,6 +513,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                 # 补充日涨跌/近一周收益（get 不计算这些字段）
                 navs = d.get("nav", [])
                 td = d.get("td")
+                d["day"] = f"{td:+.2f}%" if td is not None else ""
                 if navs and len(navs) >= 2:
                     if len(navs) >= 5:
                         d["f5"] = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"

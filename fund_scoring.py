@@ -95,169 +95,60 @@ def _load_dim_curves():
 # ── 单项评分函数（每项 0-100 分） ──────────────
 # 全部委托给 _score_piecewise + _DIM_CURVES
 
-def _score_annual_return(d: dict) -> float:
-    ann_ret = d.get("annual_return")
-    pts = _DIM_CURVES.get("annual_return", _DEFAULT_CURVES["annual_return"]).get("points", [])
-    return _score_piecewise(ann_ret, pts)
-
-
-def _score_y1(d: dict) -> float:
-    y1 = d.get("y1")
-    pts = _DIM_CURVES.get("y1", _DEFAULT_CURVES["y1"]).get("points", [])
-    return _score_piecewise(y1, pts)
-
-
-def _score_sharpe(d: dict) -> float:
-    sharpe = d.get("sharpe")
-    pts = _DIM_CURVES.get("sharpe", _DEFAULT_CURVES["sharpe"]).get("points", [])
-    return _score_piecewise(sharpe, pts)
-
-
-def _score_sortino(d: dict) -> float:
-    sortino = d.get("sortino")
-    pts = _DIM_CURVES.get("sortino", _DEFAULT_CURVES["sortino"]).get("points", [])
-    return _score_piecewise(sortino, pts)
-
-
-def _score_profit_ratio(d: dict) -> float:
-    pr = d.get("profit_ratio")
-    pts = _DIM_CURVES.get("profit_ratio", _DEFAULT_CURVES["profit_ratio"]).get("points", [])
-    return _score_piecewise(pr, pts)
-
-
-def _score_recovery(d: dict) -> float:
-    rec = d.get("recovery")
-    pts = _DIM_CURVES.get("recovery", _DEFAULT_CURVES["recovery"]).get("points", [])
-    return _score_piecewise(rec, pts)
-
-
-def _score_sy3(d: dict) -> float:
-    sy3 = d.get("sy3")
-    pts = _DIM_CURVES.get("sy3", _DEFAULT_CURVES["sy3"]).get("points", [])
-    return _score_piecewise(sy3, pts)
-
-
-def _score_sy6(d: dict) -> float:
-    sy6 = d.get("sy6")
-    pts = _DIM_CURVES.get("sy6", _DEFAULT_CURVES["sy6"]).get("points", [])
-    return _score_piecewise(sy6, pts)
-
-
-def _score_m1(d: dict) -> float:
-    """近1月收益评分（处理字符串格式）"""
-    raw = d.get("m1", "")
-    if isinstance(raw, str) and raw.endswith("%"):
-        m1 = float(raw.rstrip("%").lstrip("+"))
-    elif isinstance(raw, (int, float)):
-        m1 = float(raw)
+def _make_scorer(data_key: str, curve_key: str, parse_pct: bool = False) -> Callable:
+    """工厂函数：生成评分函数
+    data_key — 从数据字典中取值的键名
+    curve_key — 从 _DIM_CURVES 中取曲线配置的键名
+    parse_pct — 是否处理 "+3.5%" 格式的字符串
+    """
+    if parse_pct:
+        def _scorer(d: dict) -> float:
+            raw = d.get(data_key, "")
+            if isinstance(raw, str) and raw.endswith("%"):
+                val = float(raw.rstrip("%").lstrip("+"))
+            elif isinstance(raw, (int, float)):
+                val = float(raw)
+            else:
+                return 0.0
+            pts = _DIM_CURVES.get(curve_key, _DEFAULT_CURVES.get(curve_key, {})).get("points", [])
+            return _score_piecewise(val, pts)
     else:
-        return 0.0
-    pts = _DIM_CURVES.get("m1", _DEFAULT_CURVES["m1"]).get("points", [])
-    return _score_piecewise(m1, pts)
-
-
-def _score_m3(d: dict) -> float:
-    """近3月收益评分（处理字符串格式）"""
-    raw = d.get("m3", "")
-    if isinstance(raw, str) and raw.endswith("%"):
-        m3 = float(raw.rstrip("%").lstrip("+"))
-    elif isinstance(raw, (int, float)):
-        m3 = float(raw)
-    else:
-        return 0.0
-    pts = _DIM_CURVES.get("m3", _DEFAULT_CURVES["m3"]).get("points", [])
-    return _score_piecewise(m3, pts)
-
-
-def _score_f5(d: dict) -> float:
-    """近一周收益评分（处理字符串格式）"""
-    raw = d.get("f5", "")
-    if isinstance(raw, str) and raw.endswith("%"):
-        f5 = float(raw.rstrip("%").lstrip("+"))
-    elif isinstance(raw, (int, float)):
-        f5 = float(raw)
-    else:
-        return 0.0
-    pts = _DIM_CURVES.get("f5", _DEFAULT_CURVES["f5"]).get("points", [])
-    return _score_piecewise(f5, pts)
-
-
-def _score_sy2(d: dict) -> float:
-    sy2 = d.get("sy2")
-    pts = _DIM_CURVES.get("sy2", _DEFAULT_CURVES["sy2"]).get("points", [])
-    return _score_piecewise(sy2, pts)
-
-
-def _score_volatility(d: dict) -> float:
-    v = d.get("volatility")
-    pts = _DIM_CURVES.get("volatility", _DEFAULT_CURVES["volatility"]).get("points", [])
-    return _score_piecewise(v, pts)
-
-
-def _score_calmar(d: dict) -> float:
-    c = d.get("calmar")
-    pts = _DIM_CURVES.get("calmar", _DEFAULT_CURVES["calmar"]).get("points", [])
-    return _score_piecewise(c, pts)
-
-
-def _score_max_loss_days(d: dict) -> float:
-    m = d.get("max_loss_days")
-    pts = _DIM_CURVES.get("max_loss_days", _DEFAULT_CURVES["max_loss_days"]).get("points", [])
-    return _score_piecewise(m, pts)
-
-
-def _score_max_dd(d: dict) -> float:
-    max_dd = d.get("max_dd")
-    pts = _DIM_CURVES.get("max_dd", _DEFAULT_CURVES["max_dd"]).get("points", [])
-    return _score_piecewise(max_dd, pts)
-
-
-def _score_win_rate(d: dict) -> float:
-    win_rate = d.get("win_rate")
-    pts = _DIM_CURVES.get("win_rate", _DEFAULT_CURVES["win_rate"]).get("points", [])
-    return _score_piecewise(win_rate, pts)
-
-
-def _score_institutional(d: dict) -> float:
-    inst = d.get("inst")
-    pts = _DIM_CURVES.get("institutional", _DEFAULT_CURVES["institutional"]).get("points", [])
-    return _score_piecewise(inst, pts)
-
-
-def _score_scale(d: dict) -> float:
-    sc = d.get("sc")
-    pts = _DIM_CURVES.get("scale", _DEFAULT_CURVES["scale"]).get("points", [])
-    return _score_piecewise(sc, pts)
-
-
-def _score_rate(d: dict) -> float:
-    rate = d.get("rate")
-    pts = _DIM_CURVES.get("rate", _DEFAULT_CURVES["rate"]).get("points", [])
-    return _score_piecewise(rate, pts)
+        def _scorer(d: dict) -> float:
+            val = d.get(data_key)
+            pts = _DIM_CURVES.get(curve_key, _DEFAULT_CURVES.get(curve_key, {})).get("points", [])
+            return _score_piecewise(val, pts)
+    return _scorer
 
 
 # ── 评分维度注册表 ─────────────────────────────
+# curve_key → (data_key, needs_percent_parsing)
+# 曲线键名与数据键名不一致的已标注（如 scale→sc, institutional→inst）
+_SCORE_DEFS: dict[str, tuple[str, bool]] = {
+    "y1": ("y1", False),
+    "m3": ("m3", True),
+    "m1": ("m1", True),
+    "f5": ("f5", True),
+    "sy6": ("sy6", False),
+    "sy2": ("sy2", False),
+    "sy3": ("sy3", False),
+    "annual_return": ("annual_return", False),
+    "sharpe": ("sharpe", False),
+    "sortino": ("sortino", False),
+    "profit_ratio": ("profit_ratio", False),
+    "win_rate": ("win_rate", False),
+    "recovery": ("recovery", False),
+    "max_dd": ("max_dd", False),
+    "volatility": ("volatility", False),
+    "calmar": ("calmar", False),
+    "max_loss_days": ("max_loss_days", False),
+    "rate": ("rate", False),
+    "scale": ("sc", False),
+    "institutional": ("inst", False),
+}
+
 _SCORE_FUNCS: dict[str, Callable] = {
-    "y1": _score_y1,
-    "m3": _score_m3,
-    "m1": _score_m1,
-    "sharpe": _score_sharpe,
-    "win_rate": _score_win_rate,
-    "profit_ratio": _score_profit_ratio,
-    "sortino": _score_sortino,
-    "recovery": _score_recovery,
-    "sy6": _score_sy6,
-    "sy3": _score_sy3,
-    "max_dd": _score_max_dd,
-    "rate": _score_rate,
-    "scale": _score_scale,
-    "annual_return": _score_annual_return,
-    "institutional": _score_institutional,
-    "f5": _score_f5,
-    "sy2": _score_sy2,
-    "volatility": _score_volatility,
-    "calmar": _score_calmar,
-    "max_loss_days": _score_max_loss_days,
+    curve_key: _make_scorer(data_key, curve_key, parse_pct)
+    for curve_key, (data_key, parse_pct) in _SCORE_DEFS.items()
 }
 
 # 维度名称 → 数据字典 key 映射（用于取值展示）
@@ -285,21 +176,21 @@ _DIM_VALUE_KEYS: dict[str, str] = {
 }
 
 _DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
-    ("\u8fd11\u5e74\u6536\u76ca",    _score_y1,             0.10, "\u6700\u8fd1\u4e00\u5e74\u7684\u8868\u73b0\uff0c\u53cd\u6620\u57fa\u91d1\u8fd1\u671f\u8d5a\u94b1\u80fd\u529b"),
-    ("\u8fd13\u6708\u6536\u76ca",    _score_m3,             0.15, "\u8fd1\u4e09\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u4e2d\u671f\u8d8b\u52bf"),
-    ("\u590f\u666e\u6bd4\u7387",     _score_sharpe,         0.08, "\u6bcf\u627f\u53d7 1 \u4efd\u6ce2\u52a8\u80fd\u6362\u6765\u591a\u5c11\u989d\u5916\u6536\u76ca"),
-    ("\u4e0a\u884c\u80dc\u7387",     _score_win_rate,       0.07, "\u8d5a\u94b1\u5929\u6570\u5360\u603b\u4ea4\u6613\u5929\u6570\u7684\u6bd4\u4f8b"),
-    ("\u76c8\u4e8f\u6bd4",       _score_profit_ratio,   0.07, "\u5e73\u5747\u76c8\u5229\u00f7\u5e73\u5747\u4e8f\u635f\uff0c>1\u8bf4\u660e\u8d5a\u6bd4\u4e8f\u591a"),
-    ("\u7d22\u63d0\u8bfa\u6bd4\u7387",   _score_sortino,        0.08, "\u53ea\u8003\u8651\u4e0b\u8dcc\u6ce2\u52a8\uff0c\u66f4\u8d34\u8fd1\u771f\u5b9e\u98ce\u9669\u611f\u53d7"),
-    ("\u4fee\u590d\u7cfb\u6570",     _score_recovery,       0.06, "\u603b\u6536\u76ca\u00f7\u6700\u5927\u56de\u64a4\uff0c\u8861\u91cf\u8dcc\u4e0b\u53bb\u80fd\u4e0d\u80fd\u6da8\u56de\u6765"),
-    ("\u8fd16\u6708\u6536\u76ca",    _score_sy6,            0.06, "\u8fd1\u516d\u4e2a\u6708\u8868\u73b0\uff0c\u8865\u5145\u8fd11\u5e74\u7684\u4e2d\u77ed\u671f\u7ef4\u5ea6"),
-    ("\u8fd13\u5e74\u6536\u76ca",    _score_sy3,            0.07, "\u4ece\u51c0\u503c\u6570\u636e\u53d6\u7ea7750\u4e2a\u4ea4\u6613\u65e5\u7cbe\u786e\u8ba1\u7b97\uff0c\u770b\u7a7f\u8d8a\u725b\u718a\u80fd\u529b"),
-    ("\u8fd11\u6708\u6536\u76ca",    _score_m1,             0.10, "\u8fd1\u4e00\u4e2a\u6708\u6da8\u8dcc\u5e45\uff0c\u6355\u6349\u77ed\u671f\u52a8\u91cf"),
-    ("\u6700\u5927\u56de\u64a4",     _score_max_dd,         0.05, "\u5386\u53f2\u6700\u5927\u8dcc\u5e45"),
-    ("\u8d39\u7387",         _score_rate,           0.03, "\u7533\u8d2d\u8d39\u8d8a\u4f4e\u8d8a\u597d"),
-    ("\u57fa\u91d1\u89c4\u6a21",     _score_scale,          0.02, "1~50\u4ebf\u6700\u7406\u60f3\uff0c\u592a\u5c0f\u4e0d\u7075\u6d3b\u3001\u592a\u5927\u96be\u64cd\u4f5c"),
-    ("\u5e74\u5316\u6536\u76ca\u7387",    _score_annual_return,  0.04, "\u57fa\u91d1\u6210\u7acb\u4ee5\u6765\u5e74\u5316\u56de\u62a5"),
-    ("\u673a\u6784\u6301\u6709\u6bd4\u4f8b", _score_institutional,  0.02, "\u4e13\u4e1a\u673a\u6784\u8ba4\u53ef\u5ea6\uff0c\u5c0f\u5e45\u53c2\u8003"),
+    ("近1年收益",    _SCORE_FUNCS["y1"],             0.10, "最近一年的表现，反映基金近期赚钱能力"),
+    ("近3月收益",    _SCORE_FUNCS["m3"],             0.15, "近三个月涨跌幅，中期趋势"),
+    ("夏普比率",     _SCORE_FUNCS["sharpe"],         0.08, "每承受 1 份波动能换来多少额外收益"),
+    ("上行胜率",     _SCORE_FUNCS["win_rate"],       0.07, "赚钱天数占总交易天数的比例"),
+    ("盈亏比",       _SCORE_FUNCS["profit_ratio"],   0.07, "平均盈利÷平均亏损，>1说明赚比亏多"),
+    ("索提诺比率",   _SCORE_FUNCS["sortino"],        0.08, "只考虑下跌波动，更贴近真实风险感受"),
+    ("修复系数",     _SCORE_FUNCS["recovery"],       0.06, "总收益÷最大回撤，衡量跌下去能不能涨回来"),
+    ("近6月收益",    _SCORE_FUNCS["sy6"],            0.06, "近六个月表现，补充近1年的中短期维度"),
+    ("近3年收益",    _SCORE_FUNCS["sy3"],            0.07, "从净值数据取级750个交易日精确计算，看穿越牛熊能力"),
+    ("近1月收益",    _SCORE_FUNCS["m1"],             0.10, "近一个月涨跌幅，捕捉短期动量"),
+    ("最大回撤",     _SCORE_FUNCS["max_dd"],         0.05, "历史最大跌幅"),
+    ("费率",         _SCORE_FUNCS["rate"],           0.03, "申购费越低越好"),
+    ("基金规模",     _SCORE_FUNCS["scale"],          0.02, "1~50亿最理想，太小不灵活、太大难操作"),
+    ("年化收益率",    _SCORE_FUNCS["annual_return"],  0.04, "基金成立以来年化回报"),
+    ("机构持有比例", _SCORE_FUNCS["institutional"],  0.02, "专业机构认可度，小幅参考"),
 ]
 
 

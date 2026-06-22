@@ -395,14 +395,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/recommend-table":
-            """返回市场优选全维度表格 HTML（优先用缓存数据快速生成）"""
+            """返回市场优选全维度表格 HTML（用缓存数据快速生成，补充实时涨跌）"""
             try:
                 from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+                from fund_watch import _parse_real_time
                 _saved = _load_saved_recommend_data()
                 if _saved:
+                    # 单独补充实时涨跌（轻量请求，不拉全量数据）
+                    for entry in _saved:
+                        try:
+                            td = _parse_real_time(entry.get("code", ""))
+                            entry["day"] = f"{td:+.2f}%" if td is not None else ""
+                        except Exception:
+                            entry["day"] = entry.get("day", "")
                     html = _web_rich_recommend_table(_saved)
                 else:
-                    html = _web_rich_recommend_table()
+                    html = ""
                 if html:
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
                 else:

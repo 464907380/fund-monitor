@@ -990,10 +990,12 @@ async function loadDims(customDims) {
           + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
           + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + dim.key + '">'
           + pts.map(function(p, j) {
-            return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
+            return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + dim.key + '\')"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + dim.key + '\')"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty();drawCurvePreview(\'' + dim.key + '\')" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
           }).join('')
           + '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addCurvePoint(this,\'' + dim.key + '\')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
-          + '</table></td></tr>';
+          + '</table>'
+          + '<div id="curve-preview-' + dim.key + '" style="margin-top:6px;text-align:center;"></div>'
+          + '</td></tr>';
             });
         });
         return html;
@@ -1066,10 +1068,12 @@ function doAddDim() {
     + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
     + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + key + '">'
     + pts2.map(function(p, j) {
-      return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
+      return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + key + '\')"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + key + '\')"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty();drawCurvePreview(\'' + key + '\')" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
     }).join('')
     + '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addCurvePoint(this,\'' + key + '\')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
-    + '</table></td></tr>';
+    + '</table>'
+    + '<div id="curve-preview-' + key + '" style="margin-top:6px;text-align:center;"></div>'
+    + '</td></tr>';
   tbody.appendChild(curveSubRow);
   renderAddDimBtn();
   updateDimsTotal();
@@ -1092,29 +1096,53 @@ function toggleCurveEditor(btn) {
   var row = btn.closest('tr');
   var curveRow = row.nextElementSibling;
   if (curveRow && curveRow.classList.contains('curve-edit-row')) {
-    curveRow.style.display = curveRow.style.display === 'none' ? 'table-row' : 'none';
-  }
-}
-function addCurvePoint(btn, key) {
-  var tbl = document.getElementById('curve-tbl-' + key);
-  if (!tbl) return;
-  // 取最后一行断点的值作为参考
-  var rows = tbl.querySelectorAll('tr');
-  var lastVal = 100, lastScore = 100;
-  for (var i = rows.length - 1; i >= 0; i--) {
-    var inputs = rows[i].querySelectorAll('input[type=number]');
-    if (inputs.length >= 2) {
-      lastVal = parseFloat(inputs[0].value) + 10;
-      lastScore = parseFloat(inputs[1].value);
-      break;
+    var showing = curveRow.style.display === 'none';
+    curveRow.style.display = showing ? 'table-row' : 'none';
+    if (showing) {
+      // 获取曲线 key
+      var keyEl = row.querySelector('td:nth-child(2) span');
+      if (keyEl) drawCurvePreview(keyEl.textContent);
     }
   }
-  var newRow = document.createElement('tr');
-  newRow.innerHTML = '<td style="padding:2px 4px;"><input type="number" step="any" value="' + lastVal + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"> →</td>'
-    + '<td style="padding:2px 4px;"><input type="number" step="any" value="' + lastScore + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty()"></td>'
-    + '<td style="padding:2px 4px;"><button onclick="this.closest(\'tr\').remove();markDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button></td>';
-  tbl.querySelector('tr:last-child').before(newRow);
-  markDimsDirty();
+}
+function drawCurvePreview(key) {
+  var container = document.getElementById('curve-preview-' + key);
+  if (!container) return;
+  var tbl = document.getElementById('curve-tbl-' + key);
+  if (!tbl) return;
+  var rows = tbl.querySelectorAll('tr');
+  var pts = [];
+  for (var i = 0; i < rows.length; i++) {
+    var inputs = rows[i].querySelectorAll('input[type=number]');
+    if (inputs.length >= 2) {
+      var x = parseFloat(inputs[0].value);
+      var y = parseFloat(inputs[1].value);
+      if (!isNaN(x) && !isNaN(y)) pts.push([x, y]);
+    }
+  }
+  if (pts.length < 2) { container.innerHTML = ''; return; }
+  var W = 200, H = 80, pad = {t:6,r:6,b:16,l:30};
+  var xMin = pts[0][0], xMax = pts[pts.length - 1][0];
+  var yMin = 0, yMax = 100;
+  if (xMax === xMin) xMax = xMin + 1;
+  function sv(v, lo, hi, a, b) { return a + (v - lo) / (hi - lo) * (b - a); }
+  function sx(v) { return sv(v, xMin, xMax, pad.l, W - pad.r); }
+  function sy(v) { return sv(v, yMax, yMin, pad.t, H - pad.b); }
+  var pathD = pts.map(function(p, i) { return (i === 0 ? 'M' : 'L') + sx(p[0]).toFixed(1) + ',' + sy(p[1]).toFixed(1); }).join(' ');
+  var dots = pts.map(function(p) {
+    return '<circle cx="' + sx(p[0]).toFixed(1) + '" cy="' + sy(p[1]).toFixed(1) + '" r="2.5" fill="#42a5f5" stroke="#111" stroke-width="1"/>';
+  }).join('');
+  var labels = pts.map(function(p) {
+    return '<text x="' + sx(p[0]).toFixed(1) + '" y="' + (H - 2) + '" text-anchor="middle" fill="#666" font-size="8" font-family="Consolas">' + p[0] + '</text>';
+  }).join('');
+  container.innerHTML = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="background:rgba(0,0,0,0.3);border-radius:4px;">'
+    + '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>'
+    + '<path d="' + pathD + '" fill="none" stroke="#42a5f5" stroke-width="1.5" stroke-linejoin="round"/>'
+    + dots
+    + '<text x="' + (W - 4) + '" y="12" text-anchor="end" fill="#888" font-size="8" font-family="Consolas">100</text>'
+    + '<text x="' + (W - 4) + '" y="' + (H - 4) + '" text-anchor="end" fill="#888" font-size="8" font-family="Consolas">0</text>'
+    + labels
+    + '</svg>';
 }
 
 
@@ -1270,8 +1298,20 @@ async function loadPreset() {
     const preset = d.presets[name];
     if (!preset || !preset.dims) return;
     loadDims(preset.dims);
-    markDimsDirty();
-    showMsg('✔ 已加载预设「' + name + '」，点击「保存权重」持久化', 'ok');
+    // 自动保存到后端
+    const saveR = await fetch(API + '/api/dims', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({dims: preset.dims}),
+    });
+    const saveD = await saveR.json();
+    if (saveD.ok) {
+      showMsg('✔ 已加载并保存预设「' + name + '」', 'ok');
+      const btn = document.getElementById('dimsSaveBtn');
+      if (btn) btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)';
+    } else {
+      showMsg('✔ 已加载预设，但自动保存失败: ' + (saveD.error || ''), 'fail');
+    }
   } catch(e) {}
 }
 
@@ -1485,39 +1525,51 @@ async function runRecommendFromFilter() {
 }
 
 function showScoreDetail(items) {
-  var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;">'
+  var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;max-height:80vh;overflow-y:auto;">'
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">\u7ef4\u5ea6\u8bc4\u5206\u660e\u7ec6</div>'
-    + '<table style="width:100%;border-collapse:collapse;">'
+    + '<div style="margin-bottom:10px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;">';
+  var maxContrib = 0;
+  items.forEach(function(item){ var c = item[2] * item[1]; if (c > maxContrib) maxContrib = c; });
+  var total = 0, weightSum = 0;
+  items.forEach(function(item){
+    var name = item[0], score = item[1], weight = item[2], value = item[3];
+    var contrib = (value === null || value === undefined) ? 50 * weight : score * weight;
+    total += contrib; weightSum += weight;
+    var barPct = maxContrib > 0 ? (contrib / maxContrib * 100) : 0;
+    var scoreColor = score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350';
+    var barColor = score >= 80 ? 'rgba(102,187,106,0.4)' : score >= 40 ? 'rgba(255,167,38,0.4)' : 'rgba(239,83,80,0.4)';
+    var valStr = value !== null && value !== undefined ? (typeof value === 'number' ? value.toFixed(2) : value) : '-';
+    var barHtml = '<div style="display:flex;align-items:center;gap:6px;margin:2px 0;">'
+      + '<div style="flex:0 0 80px;text-align:right;color:#888;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + name + '</div>'
+      + '<div style="flex:1;height:14px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;position:relative;">'
+      + '<div style="width:' + barPct.toFixed(0) + '%;height:100%;background:' + barColor + ';border-radius:3px;"></div>'
+      + '</div>'
+      + '<div style="flex:0 0 28px;text-align:right;font-family:Consolas;font-size:10px;font-weight:600;color:' + scoreColor + ';">' + score.toFixed(0) + '</div>'
+      + '<div style="flex:0 0 28px;text-align:right;font-family:Consolas;font-size:10px;color:#888;">' + (weight * 100).toFixed(0) + '%</div>'
+      + '<div style="flex:0 0 36px;text-align:right;font-family:Consolas;font-size:10px;color:#888;">' + contrib.toFixed(1) + '</div>'
+      + '</div>';
+    html += barHtml;
+  });
+  var normTotal = weightSum > 0 ? (total / weightSum).toFixed(1) : '0.0';
+  html += '</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
     + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">\u7ef4\u5ea6</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u503c</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u5f97\u5206</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u6743\u91cd</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u8d21\u732e</th></tr></thead><tbody>';
-  var total = 0, weightSum = 0;
   items.forEach(function(item){
     var name = item[0], score = item[1], weight = item[2], value = item[3];
-    if (value === null || value === undefined) {
-      html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#888;">' + name + '</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#555;">-</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#ffa726;">50.0</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
-        + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (score * weight).toFixed(1) + '</td></tr>';
-      total += score * weight;
-      weightSum += weight;
-      return;
-    }
-    var contrib = (score * weight).toFixed(1);
-    total += score * weight;
-    weightSum += weight;
-    var valStr = value !== null && value !== undefined ? value : '-';
-    if (typeof valStr === 'number') valStr = valStr.toFixed(2);
-    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + name + '</td>'
-      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + valStr + '</td>'
-      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350') + ';">' + score.toFixed(1) + '</td>'
+    var isNull = (value === null || value === undefined);
+    var contrib = isNull ? 50 * weight : score * weight;
+    var valStr = isNull ? '-' : (typeof value === 'number' ? value.toFixed(2) : value);
+    var scoreColor = isNull ? '#ffa726' : (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350');
+    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:' + (isNull ? '#888' : '#e0e0e0') + ';">' + name + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (isNull ? '#555' : '#888') + ';">' + valStr + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + scoreColor + ';">' + (isNull ? '50.0' : score.toFixed(1)) + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
-      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib + '</td></tr>';
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib.toFixed(1) + '</td></tr>';
   });
-  var normTotal = weightSum > 0 ? (total / weightSum).toFixed(1) : '0.0';
   html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;" colspan="2">\u5408\u8ba1</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + normTotal + '</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + (weightSum * 100).toFixed(0) + '%</td>'
@@ -1533,7 +1585,7 @@ function showScoreDetail(items) {
   el.innerHTML = html;
   var btn = document.getElementById("__closeScoreBtn");
   if (btn) btn.onclick = function(){ el.style.display = "none"; };
-  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;max-width:500px;width:90%;";
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;max-width:520px;width:90%;max-height:90vh;overflow-y:auto;";
 }
 
 </script>
