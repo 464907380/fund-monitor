@@ -988,13 +988,15 @@ async function loadDims(customDims) {
           + '<tr class="curve-edit-row" style="display:none;background:rgba(255,255,255,0.02);">'
           + '<td colspan="6" style="padding:6px 12px;">'
           + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
+          + '<div style="display:flex;gap:12px;align-items:flex-start;">'
           + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + dim.key + '">'
           + pts.map(function(p, j) {
             return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + dim.key + '\')"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + dim.key + '\')"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty();drawCurvePreview(\'' + dim.key + '\')" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
           }).join('')
           + '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addCurvePoint(this,\'' + dim.key + '\')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
           + '</table>'
-          + '<div id="curve-preview-' + dim.key + '" style="margin-top:6px;text-align:center;"></div>'
+          + '<div id="curve-preview-' + dim.key + '" style="flex:1;min-width:0;"></div>'
+          + '</div>'
           + '</td></tr>';
             });
         });
@@ -1066,13 +1068,15 @@ function doAddDim() {
   var pts2 = _getCurvePoints(key, null);
   curveSubRow.innerHTML = '<td colspan="6" style="padding:6px 12px;">'
     + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
+    + '<div style="display:flex;gap:12px;align-items:flex-start;">'
     + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + key + '">'
     + pts2.map(function(p, j) {
       return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + key + '\')"> →</td><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markDimsDirty();drawCurvePreview(\'' + key + '\')"></td><td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markDimsDirty();drawCurvePreview(\'' + key + '\')" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
     }).join('')
     + '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addCurvePoint(this,\'' + key + '\')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
     + '</table>'
-    + '<div id="curve-preview-' + key + '" style="margin-top:6px;text-align:center;"></div>'
+    + '<div id="curve-preview-' + key + '" style="flex:1;min-width:0;"></div>'
+    + '</div>'
     + '</td></tr>';
   tbody.appendChild(curveSubRow);
   renderAddDimBtn();
@@ -1191,7 +1195,6 @@ function drawCurvePreview(key) {
   var labelsHtml = pts.map(function(p) {
     return '<text class="clbl" x="' + sx(p[0]).toFixed(1) + '" y="' + (H - 3) + '" text-anchor="middle" fill="#aaa" font-size="9" font-family="Consolas">' + p[0] + '</text>';
   }).join('');
-  container.style.textAlign = 'left';
   container.innerHTML = '<svg id="' + svgId + '" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="background:rgba(0,0,0,0.3);border-radius:6px;width:100%;">'
     + '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>'
     + gridHtml
