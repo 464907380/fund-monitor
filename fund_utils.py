@@ -215,39 +215,60 @@ def _strip_html(text: str) -> str:
 # ── 基金实时估算（fund_watch 和 fund_monitor 共用） ──────────
 
 def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
-    """获取基金实时估算涨跌幅，返回 (基金名, 估算涨跌幅%)"""
+    """获取基金当日涨跌幅，优先返回实际净值，降级到实时估算。
+    
+    优先级：
+      1. 天天基金历史净值 API（实际净值，收盘后可用）
+      2. 天天基金实时估值 API（盘中估算）
+      3. 新浪财经基金行情（最终降级）
+    返回 (基金名, 涨跌幅%)
+    """
     import urllib.request
+    import datetime
 
-    # 1-2. 天天基金实时估值（JSONP → JSON 解析，字段顺序不敏感）
+    now = datetime.datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    # 判断是否收盘（15:00 之后）
+    is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
+
+    # 1. 先尝试实际净值（历史净值 API）
+    actual: tuple[str, float] | None = None
+    try:
+        url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+        req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            gz_data = r.read().decode("utf-8")
+        m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
+        m_val = re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
+        if m_date and m_val and m_date.group(1) == today_str:
+            actual = (code, float(m_val.group(1)))
+    except Exception:
+        pass
+
+    # 收盘后直接返回实际净值（不纠结估算值）
+    if is_after_market and actual is not None:
+        return actual
+
+    # 2. 盘中或实际净值不可用 → 尝试实时估算
     for url in [api_url("fund_estimate", code=code), api_url("fund_estimate_fallback", code=code)]:
         try:
             gz = fetch(url)
-            # jsonpgz({"fundcode":"...","name":"...","gszzl":"..."})
             json_str = re.sub(r"^\w+\(", "", gz).rstrip(");")
             data = json.loads(json_str)
             return (data.get("name", code), float(data["gszzl"]))
         except Exception:
             continue
 
-    # 3. 天天基金历史净值 API（需 Referer，直接取今日净值涨跌幅）
-    try:
-        url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
-        req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            gz = r.read().decode("utf-8")
-        m = re.search(r'"JZZZL":"([-+\d.]+)"', gz)
-        if m:
-            return code, float(m.group(1))
-    except Exception:
-        pass
+    # 如果估算失败但实际净值可用，返回实际净值
+    if actual is not None:
+        return actual
 
-    # 4. 新浪财经基金行情
+    # 3. 新浪财经基金行情（最终降级）
     try:
         url = f"http://hq.sinajs.cn/list=of{code}"
         req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
             raw = r.read()
-        # Sina 返回 GBK 编码
         gz = raw.decode("gbk")
         m = re.search(r'"([^,]*),([-\d.]+),[-\d.]+,([-\d.]+),([-\d.]+),(\d{4}-\d{2}-\d{2})"', gz)
         if m:
