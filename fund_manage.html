@@ -1167,7 +1167,7 @@ function drawCurvePreview(key) {
     }
   }
   if (pts.length < 2) { container.innerHTML = ''; return; }
-  var W = 300, H = 140, pad = {t:10, r:10, b:22, l:38};
+  var W = 560, H = 150, pad = {t:10, r:10, b:22, l:38};
   var xMin = pts[0][0], xMax = pts[pts.length - 1][0];
   var yMin = 0, yMax = 100;
   if (xMax === xMin) xMax = xMin + 1;
@@ -1191,7 +1191,8 @@ function drawCurvePreview(key) {
   var labelsHtml = pts.map(function(p) {
     return '<text class="clbl" x="' + sx(p[0]).toFixed(1) + '" y="' + (H - 3) + '" text-anchor="middle" fill="#aaa" font-size="9" font-family="Consolas">' + p[0] + '</text>';
   }).join('');
-  container.innerHTML = '<svg id="' + svgId + '" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="background:rgba(0,0,0,0.3);border-radius:6px;width:100%;max-width:300px;">'
+  container.style.textAlign = 'left';
+  container.innerHTML = '<svg id="' + svgId + '" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="background:rgba(0,0,0,0.3);border-radius:6px;width:100%;">'
     + '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>'
     + gridHtml
     + '<path class="cpath" d="' + pathD + '" fill="none" stroke="#42a5f5" stroke-width="2.5" stroke-linejoin="round"/>'
