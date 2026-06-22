@@ -1033,6 +1033,8 @@ function drawRadarChart() {
   });
   if (items.length < 3) { container.innerHTML = ''; return; }
 
+  var catColors = {perf:'#66bb6a', risk:'#ef5350', quality:'#42a5f5', other:'#ab47bc'};
+  var catNames = {perf:'收益表现', risk:'风险指标', quality:'收益性价比', other:'基金特征'};
   var S = 280, cx = S/2, cy = S/2, R = 110;
   var n = items.length;
   var angleStep = 2 * Math.PI / n;
@@ -1064,67 +1066,55 @@ function drawRadarChart() {
     svg += '<text x="' + lx + '" y="' + (ly + dy) + '" text-anchor="' + anchor + '" fill="#888" font-size="8" font-family="sans-serif">' + shortName + '</text>';
   }
 
-  // 绘制单一多边形（所有维度连成一体）
-  var allPoints = '';
-  var allEnabled = [];
+  // 数据多边形（按类别分段上色）
+  var catSegments = {};
   items.forEach(function(item, i) {
-    if (item.enabled) allEnabled.push(i);
+    if (!catSegments[item.cat]) catSegments[item.cat] = [];
+    catSegments[item.cat].push(i);
   });
-  if (allEnabled.length > 0) {
-    allEnabled.forEach(function(idx) {
+
+  // 画多边形（按类别分组绘制，每段不同颜色）
+  ['perf', 'risk', 'quality', 'other'].forEach(function(cat) {
+    var indices = catSegments[cat];
+    if (!indices || indices.length === 0) return;
+    var color = catColors[cat];
+    var points = '';
+    indices.forEach(function(idx) {
       var angle = -Math.PI/2 + idx * angleStep;
       var r = items[idx].weight / 100 * R;
-      allPoints += (allPoints ? ',' : '') + (cx + r * Math.cos(angle)).toFixed(1) + ',' + (cy + r * Math.sin(angle)).toFixed(1);
+      points += (points ? ',' : '') + (cx + r * Math.cos(angle)).toFixed(1) + ',' + (cy + r * Math.sin(angle)).toFixed(1);
     });
-    // 闭合
-    if (allEnabled.length > 0) {
-      var fa = -Math.PI/2 + allEnabled[0] * angleStep;
-      var fr = items[allEnabled[0]].weight / 100 * R;
-      allPoints += ',' + (cx + fr * Math.cos(fa)).toFixed(1) + ',' + (cy + fr * Math.sin(fa)).toFixed(1);
+    // 闭合到第一个点
+    if (indices.length > 0) {
+      var firstAngle = -Math.PI/2 + indices[0] * angleStep;
+      var firstR = items[indices[0]].weight / 100 * R;
+      points += ',' + (cx + firstR * Math.cos(firstAngle)).toFixed(1) + ',' + (cy + firstR * Math.sin(firstAngle)).toFixed(1);
     }
-    // 渐变填充（中心透明 → 边缘半透明蓝色）
-    svg += '<defs><radialGradient id="rg" cx="50%" cy="50%" r="50%">'
-      + '<stop offset="0%" stop-color="#42a5f5" stop-opacity="0.02"/>'
-      + '<stop offset="100%" stop-color="#42a5f5" stop-opacity="0.25"/>'
-      + '</radialGradient></defs>';
-    svg += '<polygon points="' + allPoints + '" fill="url(#rg)" stroke="#42a5f5" stroke-width="1.5" stroke-linejoin="round" stroke-opacity="0.6"/>';
-  }
+    svg += '<polygon points="' + points + '" fill="' + color + '" fill-opacity="0.2" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round"/>';
+  });
 
-  // 数据点按权重着色
-  function weightColor(w) {
-    if (w <= 0) return '#444';
-    if (w < 5) return '#42a5f5';
-    if (w < 10) return '#66bb6a';
-    if (w < 15) return '#ffa726';
-    return '#ef5350';
-  }
+  // 数据点标记
   items.forEach(function(item, i) {
     if (!item.enabled) return;
     var angle = -Math.PI/2 + i * angleStep;
     var r = item.weight / 100 * R;
     var px = cx + r * Math.cos(angle);
     var py = cy + r * Math.sin(angle);
-    var color = weightColor(item.weight);
-    svg += '<circle cx="' + px + '" cy="' + py + '" r="3.5" fill="' + color + '" stroke="#111" stroke-width="1"/>';
-    // 权重标签
-    if (item.weight >= 8) {
-      var lr = r + 12;
-      var lx = cx + lr * Math.cos(angle);
-      var ly = cy + lr * Math.sin(angle);
-      svg += '<text x="' + lx + '" y="' + (ly + 3) + '" text-anchor="middle" fill="' + color + '" font-size="7" font-family="Consolas">' + item.weight + '%</text>';
-    }
+    svg += '<circle cx="' + px + '" cy="' + py + '" r="3" fill="' + catColors[item.cat] + '" stroke="#111" stroke-width="1"/>';
   });
 
   svg += '</svg>';
 
-  // 权重色图例
-  var legendHtml = '<div style="display:flex;justify-content:center;gap:8px;margin-top:4px;font-size:10px;flex-wrap:wrap;">'
-    + '<span style="color:#888;">权重: </span>'
-    + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#42a5f5;margin-right:2px;"></span><span style="color:#666;">&lt;5%</span></span>'
-    + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#66bb6a;margin-right:2px;"></span><span style="color:#666;">5-10%</span></span>'
-    + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#ffa726;margin-right:2px;"></span><span style="color:#666;">10-15%</span></span>'
-    + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#ef5350;margin-right:2px;"></span><span style="color:#666;">&gt;15%</span></span>'
-    + '</div>';
+  // 图例
+  var legendHtml = '<div style="display:flex;justify-content:center;gap:12px;margin-top:4px;font-size:10px;">';
+  ['perf', 'risk', 'quality', 'other'].forEach(function(cat) {
+    var hasItems = items.some(function(it) { return it.cat === cat; });
+    if (hasItems) {
+      legendHtml += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + catColors[cat] + ';margin-right:3px;"></span>'
+        + '<span style="color:#888;">' + catNames[cat] + '</span></span>';
+    }
+  });
+  legendHtml += '</div>';
 
   container.innerHTML = svg + legendHtml;
 }
