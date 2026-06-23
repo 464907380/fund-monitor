@@ -34,6 +34,7 @@ except ImportError:
 _TOP = CFG.get("recommend", {}).get("top_n", 200)
 SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
+_SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
@@ -281,6 +282,13 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
         """单只基金评分（供并行使用）"""
         try:
             d = get(code)
+            # 筛选缺失收益表现维度的基金
+            if _SKIP_MISSING_PERF:
+                perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
+                missing = [k for k in perf_keys if d.get(k) is None or d.get(k) == ""]
+                if missing:
+                    log.debug("跳过 %s(%s): 缺失收益维度 %s", name, code, missing)
+                    return None
             # 计算近一周涨跌幅
             navs = d.get("nav", [])
             f5_val = ""
