@@ -411,28 +411,35 @@ def _dim_value_to_key(dim_name: str) -> str | None:
 
 
 def _get_dim_value(r: dict, dim_name: str) -> str:
-    """根据维度名称从推荐结果中取值"""
+    """根据维度名称从推荐结果中取值，缺失统一返回 '-'"""
+    def _v(key, decimals=1):
+        v = r.get(key)
+        if v is None or v == "":
+            return "-"
+        if isinstance(v, float):
+            return f"{v:.{decimals}f}"
+        return str(v)
     mapping = {
-        "近1年收益": lambda: f'{r.get("y1", 0):.1f}' if isinstance(r.get("y1"), (int, float)) else str(r.get("y1", "")),
-        "近3月收益": lambda: f'{r.get("m3", 0):.1f}' if isinstance(r.get("m3"), (int, float)) else str(r.get("m3", "")),
-        "近1月收益": lambda: f'{r.get("m1", 0):.1f}' if isinstance(r.get("m1"), (int, float)) else str(r.get("m1", "")),
-        "近一周收益": lambda: str(r.get("f5", "")),
-        "近2年收益": lambda: f'{r.get("sy2", 0):.1f}' if isinstance(r.get("sy2"), (int, float)) else "",
-        "夏普比率": lambda: _fmt(r.get("sharpe")),
-        "上行胜率": lambda: _fmt(r.get("win_rate")),
-        "盈亏比": lambda: _fmt(r.get("profit_ratio")),
-        "索提诺比率": lambda: _fmt(r.get("sortino")),
-        "修复系数": lambda: _fmt(r.get("recovery")),
-        "近3年收益": lambda: f'{r.get("sy3", 0):.1f}' if isinstance(r.get("sy3"), (int, float)) else "",
-        "近6月收益": lambda: f'{r.get("sy6", 0):.1f}' if isinstance(r.get("sy6"), (int, float)) else "",
-        "波动率": lambda: _fmt(r.get("volatility")),
-        "卡玛比率": lambda: _fmt(r.get("calmar")),
-        "最大连跌天数": lambda: _fmt(r.get("max_loss_days")),
-        "费率": lambda: _fmt(r.get("rate")),
-        "最大回撤": lambda: _fmt(r.get("max_dd")),
-        "基金规模": lambda: _fmt(r.get("sc")),
-        "年化收益率": lambda: f'{r.get("annual_return", 0):.1f}' if isinstance(r.get("annual_return"), (int, float)) else str(r.get("annual_return", "")),
-        "机构持有比例": lambda: _fmt(r.get("inst")),
+        "近1年收益": lambda: _v("y1"),
+        "近3月收益": lambda: _v("m3"),
+        "近1月收益": lambda: _v("m1"),
+        "近一周收益": lambda: _v("f5"),
+        "近2年收益": lambda: _v("sy2"),
+        "夏普比率": lambda: _v("sharpe", 2),
+        "上行胜率": lambda: _v("win_rate", 2),
+        "盈亏比": lambda: _v("profit_ratio", 2),
+        "索提诺比率": lambda: _v("sortino", 2),
+        "修复系数": lambda: _v("recovery", 2),
+        "近3年收益": lambda: _v("sy3"),
+        "近6月收益": lambda: _v("sy6"),
+        "波动率": lambda: _v("volatility", 2),
+        "卡玛比率": lambda: _v("calmar", 2),
+        "最大连跌天数": lambda: _v("max_loss_days", 1),
+        "费率": lambda: _v("rate", 2),
+        "最大回撤": lambda: _v("max_dd", 2),
+        "基金规模": lambda: _v("sc", 2),
+        "年化收益率": lambda: _v("annual_return"),
+        "机构持有比例": lambda: _v("inst", 2),
     }
     fn = mapping.get(dim_name)
     return fn() if fn else "-"
