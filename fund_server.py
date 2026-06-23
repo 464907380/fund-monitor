@@ -415,9 +415,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 用腾讯财经接口批量获取实时涨跌（速度快，不需要Referer）
                 if holds:
                     codes_str = ",".join(
-                        ("sh" + h["c"]) if h["c"].startswith("6") or h["c"].startswith("8")
-                        else ("sz" + h["c"]) if not h["c"].startswith("hk")
-                        else h["c"]
+                        (h.get("m", "sz") + h["c"])
                         for h in holds
                     )
                     try:

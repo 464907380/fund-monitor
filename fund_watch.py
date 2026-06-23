@@ -182,7 +182,16 @@ def _parse_holdings(code: str) -> list[dict] | None:
                 pct = float(pct_str.replace("%", ""))
             except ValueError:
                 pct = 0
-            holds.append({"n": name, "c": code_s, "p": pct})
+            # 从链接中推断市场：116→港股, 0→深市, 1→沪市
+            href_match = re.search(r'href=["\'](?:[^"\']*[/.])(\d+)\.(\d+)["\']', cells[1])
+            market = "sz"  # 默认深市
+            if href_match:
+                prefix = href_match.group(1)
+                if prefix == "116":
+                    market = "hk"
+                elif prefix == "1":
+                    market = "sh"
+            holds.append({"n": name, "c": code_s, "p": pct, "m": market})
         return holds if holds else None
     except Exception as e:
         log.debug("拉取重仓股失败 %s: %s", code, e)
