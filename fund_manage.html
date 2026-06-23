@@ -1842,8 +1842,8 @@ function showHoldings(code, name) {
     document.body.appendChild(el);
   }
   el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:480px;">'
-    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:4px;">\U0001f4c8 ' + name + ' <span style="color:#666;font-size:11px;">' + code + '</span></div>'
-    + '<div style="font-size:11px;color:#555;margin-bottom:10px;">前5大持仓（点击外部关闭）</div>'
+    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:4px;">\ud83d\udcc8 ' + name + ' <span style="color:#666;font-size:11px;">' + code + '</span></div>'
+    + '<div style="font-size:11px;color:#555;margin-bottom:10px;">前10大持仓（点击外部关闭）</div>'
     + '<div id="holdingsContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
     + '</div>';
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:90%;max-width:480px;";

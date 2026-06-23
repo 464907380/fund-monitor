@@ -249,8 +249,9 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                 _warn_title = 'title="缺失: ' + ', '.join(_missing_dims) + f' | 中性分贡献+{_neutral:.1f}分"'
             _warn = f'<span style="cursor:help;" {_warn_title}>{_warn}</span>'
         _fcode = r.get("code", "")
-        _fname = _html.escape(str(r.get("name_short", "")))
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'{_fcode}\',\'{_fname}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_fname}</span>{_warn}</td>')
+        _fname_js = str(r.get("name_short", "")).replace("\\", "\\\\").replace("'", "\\'")
+        _fname_html = _html.escape(str(r.get("name_short", "")))
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'{_fcode}\',\'{_fname_js}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_fname_html}</span>{_warn}</td>')
         for col, fcol in (("day","_day"),("f5","_f5"),("m1","_m1"),("m3","_m3"),("y1","_y1")):
             _v = r.get(fcol, "")
             parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
@@ -327,9 +328,9 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
                 neutral_contrib = r.get("_skipped_weight", 0) * 50
                 warn_title = 'title="缺失维度: ' + ', '.join(missing_dims) + f' | 均取中性分50, 贡献+{neutral_contrib:.1f}分"'
             warn = f'<span style="cursor:help;" {warn_title}>{warn}</span>'
-        _fund_name = _html.escape(str(r.get("n", "")))
+        _fund_name = str(r.get("n", "")).replace("\\", "\\\\").replace("'", "\\'")
         _fund_code = r.get("code", "")
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;"><span onclick="showHoldings(\'{_fund_code}\',\'{_fund_name}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_fund_name}</span>{warn} <span style="color:#666;font-family:Consolas;font-size:12px;">{_fund_code}</span></td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;"><span onclick="showHoldings(\'{_fund_code}\',\'{_fund_name}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_html.escape(str(r.get("n","")))}</span>{warn} <span style="color:#666;font-family:Consolas;font-size:12px;">{_fund_code}</span></td>')
         # 涨跌（当日实时涨跌幅）
         day_raw = r.get("day", "")
         day_color = "#66bb6a" if day_raw.startswith("+") else ("#ef5350" if day_raw.startswith("-") else "#888")
