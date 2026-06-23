@@ -478,7 +478,7 @@ def test_calc_score_transparent():
         "m3": 50.0,                             # 近3月 +50%
     }
     score = _calc_score(d)
-        assert 55 <= score <= 100  # 应该高分（新分段曲线计算结果略有变化）
+    assert 55 <= score <= 100  # 应该高分（新分段曲线计算结果略有变化）
     # 一只各项指标都差的基金
     d2 = {
         "annual_return": -5.0,                  # 亏钱
