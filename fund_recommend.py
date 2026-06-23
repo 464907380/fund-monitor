@@ -289,14 +289,14 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
                 f5_val = f"{pct:+.1f}%"
             d["f5"] = f5_val
             score = _calc_score(d)
-            ar = d.get("annual_return", 0)
+            ar = d.get("annual_return")
             return (score, code, name, ar,
-                    d.get("m1", ""), d.get("m3", ""), d.get("y1", ""),
-                    d.get("sharpe", 0), d.get("sortino", 0),
-                    d.get("max_dd", 0), d.get("win_rate", 0),
-                    d.get("inst", 0), d.get("sc", 0), d.get("rate", 0),
-                    d.get("profit_ratio", 0), d.get("recovery", 0),
-                    0 if d.get("sy3") is None else d["sy3"],
+                    d.get("m1"), d.get("m3"), d.get("y1"),
+                    d.get("sharpe"), d.get("sortino"),
+                    d.get("max_dd"), d.get("win_rate"),
+                    d.get("inst"), d.get("sc"), d.get("rate"),
+                    d.get("profit_ratio"), d.get("recovery"),
+                    d.get("sy3"),
                     f5_val,
                     d.get("sy2"),
                     d.get("volatility"),

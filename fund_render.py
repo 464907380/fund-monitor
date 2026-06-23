@@ -310,7 +310,9 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         day_color = "#66bb6a" if day_raw.startswith("+") else ("#ef5350" if day_raw.startswith("-") else "#888")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;">{r.get("annual_return",0):.1f}</td>')
+        ar_val = r.get("annual_return")
+        ar_display = f"{ar_val:.1f}" if isinstance(ar_val, (int, float)) else "—"
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;" title="年化收益率">{ar_display}</td>')
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
             raw_val = r.get(_dim_value_to_key(dim_name))
@@ -376,7 +378,7 @@ def _fmt(v) -> str:
     """格式化数值，None/空返回 '-'"""
     if v is None or v == "":
         return "-"
-    if isinstance(v, float):
+    if isinstance(v, (int, float)):
         return f"{v:.2f}"
     return str(v)
 
@@ -416,7 +418,7 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
         v = r.get(key)
         if v is None or v == "":
             return "-"
-        if isinstance(v, float):
+        if isinstance(v, (int, float)):
             return f"{v:.{decimals}f}"
         return str(v)
     mapping = {
