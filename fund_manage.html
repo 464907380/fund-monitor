@@ -400,6 +400,7 @@ input, select, button { font-family: inherit; outline: none; }
     <div style="padding:12px 4px 0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center;">
       <button onclick="saveDims()" id="dimsSaveBtn" style="background:linear-gradient(135deg,#66bb6a,#43a047);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;" class="dims-save-btn">💾 保存权重</button>
       <button onclick="resetDims()" style="background:rgba(255,255,255,0.08);color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer;">重置</button>
+      <button onclick="calibrateCurves()" id="calibrateBtn" style="background:linear-gradient(135deg,#ffa726,#f57c00);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">📐 自动校准</button>
     </div>
     <div id="saveProgressArea" style="padding:6px 4px 2px;display:none;">
       <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#888;">
@@ -1430,6 +1431,27 @@ async function resetDims() {
   } else {
     showMsg('✖ ' + (d.error || '重置失败'), 'fail');
   }
+}
+
+async function calibrateCurves() {
+  if (!confirm('基于当前推荐数据自动校准评分曲线，确定继续？')) return;
+  var btn = document.getElementById('calibrateBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 校准中'; }
+  try {
+    const r = await fetch(API + '/api/dims/calibrate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showMsg('✔ ' + (d.message || '校准完成'), 'ok');
+      loadDims();
+    } else {
+      showMsg('✖ ' + (d.error || '校准失败'), 'fail');
+    }
+  } catch(e) {
+    showMsg('✖ 校准失败: ' + (e.message || e), 'fail');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
 }
 
 loadDims();

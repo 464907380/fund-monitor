@@ -688,6 +688,82 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if self.path == "/api/dims/calibrate":
+            """基于推荐数据的百分位自动校准评分曲线"""
+            try:
+                rec_path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
+                if not os.path.exists(rec_path):
+                    self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
+                    return
+                with open(rec_path, encoding="utf-8") as _fr:
+                    rec_data = json.load(_fr).get("results", [])
+                if not rec_data:
+                    self._send(*_json_response({"ok": False, "error": "推荐结果为空"}, 400))
+                    return
+                with open(_CONFIG_PATH, encoding="utf-8") as _fc:
+                    cfg = json.load(_fc)
+                dims = cfg.get("scoring", {}).get("dims", [])
+                if not dims:
+                    self._send(*_json_response({"ok": False, "error": "评分维度配置为空"}, 400))
+                    return
+
+                # "越低越好"的维度
+                lower_better = {"波动率", "最大回撤", "最大连跌天数", "费率"}
+                # 需要解析百分号字符串的字段
+                pct_keys = {"f5"}
+
+                import statistics
+                for dim in dims:
+                    key = dim.get("key", "")
+                    name = dim.get("name", "")
+                    vals = []
+                    for r in rec_data:
+                        v = r.get(key)
+                        if key in pct_keys and isinstance(v, str) and "%" in v:
+                            v = float(v.replace("%", "").replace("+", ""))
+                        if v is not None and isinstance(v, (int, float)):
+                            vals.append(float(v))
+                    if len(vals) < 10:
+                        continue  # 数据不足不校准
+                    vals.sort()
+                    n = len(vals)
+                    percentiles = [0, 20, 40, 50, 60, 80, 100]
+                    pts = []
+                    for p in percentiles:
+                        idx = min(int(n * p / 100), n - 1)
+                        pts.append(vals[idx])
+                    # 根据"越高越好/越低越好"确定映射方向
+                    is_lower = name in lower_better
+                    # 构建曲线断点: [原始值, 得分]
+                    if is_lower:
+                        # 越低越好: 最小值→100分, 最大值→0分
+                        curve = [[pts[-1], 0], [pts[3], 50], [pts[0], 100]]
+                        # 取中位数作为分界，添加中间点使曲线平滑
+                        for i in [4, 2, 1]:
+                            if i < len(pts) and pts[i] != pts[0] and pts[i] != pts[-1]:
+                                score = round((1 - i / (len(pts) - 1)) * 100)
+                                curve.append([pts[i], score])
+                    else:
+                        # 越高越好: 最小值→0分, 最大值→100分
+                        curve = [[pts[0], 0], [pts[3], 50], [pts[-1], 100]]
+                        for i in [1, 2, 4, 5]:
+                            if i < len(pts) and pts[i] != pts[0] and pts[i] != pts[-1]:
+                                score = round(i / (len(pts) - 1) * 100)
+                                curve.append([pts[i], score])
+                    # 按原始值排序
+                    curve.sort(key=lambda x: x[0])
+                    dim["curve"] = {"points": curve}
+
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fw:
+                    json.dump(cfg, _fw, indent=2, ensure_ascii=False)
+                import importlib
+                import fund_scoring
+                importlib.reload(fund_scoring)
+                self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if self.path == "/api/monitor-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _fmc:
