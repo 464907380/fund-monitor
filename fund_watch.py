@@ -153,37 +153,40 @@ def _parse_real_time(code: str) -> float | None:
 
 
 def _parse_holdings(code: str) -> list[dict] | None:
-    """获取前5大持仓明细（使用 csv.reader 处理名称含逗号的情况）"""
-    urls = [
-        api_url("fund_holdings", code=code),
-        api_url("fund_holdings", code=code),
-    ]
-    last_err = None
-    for url in urls:
-        try:
-            jj = fetch(url)
-            cm = re.search(r'content:"([^"]+)"', jj, re.DOTALL)
-            if not cm:
+    """获取前10大持仓明细（含股票名称/代码/占比），同时返回实时涨跌幅"""
+    import html as _html
+    url = api_url("fund_holdings", code=code)
+    try:
+        jj = fetch(url)
+        cm = re.search(r'content:"(.+?)"', jj, re.DOTALL)
+        if not cm:
+            return None
+        content = cm.group(1)
+        content = content.replace('\\n', '\n').replace('\\"', '"').replace('\\/', '/')
+        content = _html.unescape(content)
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', content, re.DOTALL)
+        holds = []
+        for row in rows:
+            cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+            if len(cells) < 7:
                 continue
-            holds = []
-            for line in cm.group(1).split("\\n"):
-                reader = csv.reader([line])
-                for parts in reader:
-                    if len(parts) < 6:
-                        continue
-                    try:
-                        int(parts[0])
-                        holds.append({"n": parts[2], "c": parts[1], "p": float(parts[5]) if parts[5] else 0})
-                    except (ValueError, IndexError):
-                        pass
-            if holds:
-                return holds
-        except Exception as e:
-            last_err = e
-            continue
-    if last_err:
-        log.debug("拉取重仓股失败 %s: %s", code, last_err)
-    return None
+            clean = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+            try:
+                idx = int(clean[0])
+            except (ValueError, IndexError):
+                continue
+            code_s = clean[1] if len(clean) > 1 else ""
+            name = clean[2] if len(clean) > 2 else ""
+            pct_str = clean[6] if len(clean) > 6 else "0"
+            try:
+                pct = float(pct_str.replace("%", ""))
+            except ValueError:
+                pct = 0
+            holds.append({"n": name, "c": code_s, "p": pct})
+        return holds if holds else None
+    except Exception as e:
+        log.debug("拉取重仓股失败 %s: %s", code, e)
+        return None
 
 
 # ── 评分相关解析 ──────────────────────────────

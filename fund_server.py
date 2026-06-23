@@ -410,8 +410,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
                     return
                 from fund_watch import _parse_holdings
-                holds = _parse_holdings(code)
-                self._send(*_json_response({"ok": True, "code": code, "holdings": holds or []}))
+                from fund_utils import fetch
+                holds = _parse_holdings(code) or []
+                # 用腾讯财经接口批量获取实时涨跌（速度快，不需要Referer）
+                if holds:
+                    codes_str = ",".join(
+                        ("sh" + h["c"]) if h["c"].startswith("6") or h["c"].startswith("8")
+                        else ("sz" + h["c"]) if not h["c"].startswith("hk")
+                        else h["c"]
+                        for h in holds
+                    )
+                    try:
+                        raw = fetch(api_url("tencent_realtime", code=codes_str))
+                        for line in raw.strip().split(";"):
+                            if not line:
+                                continue
+                            parts = line.split("~")
+                            if len(parts) > 32:
+                                code_from_resp = parts[2] if len(parts) > 2 else ""
+                                price = float(parts[3]) if parts[3] else 0
+                                prev_close = float(parts[4]) if parts[4] else 0
+                                chg = round((price - prev_close) / prev_close * 100, 2) if prev_close else None
+                                for h in holds:
+                                    if h["c"] == code_from_resp:
+                                        h["chg"] = chg
+                                        break
+                    except Exception:
+                        pass
+                self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return

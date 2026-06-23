@@ -1860,11 +1860,21 @@ function showHoldings(code, name) {
       var tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
         + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">股票</th>'
         + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th></tr></thead><tbody>';
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实时涨跌</th></tr></thead><tbody>';
       d.holdings.forEach(function(h){
+        var chgStr = '';
+        var chgColor = '#888';
+        if (h.chg !== null && h.chg !== undefined) {
+          chgStr = (h.chg > 0 ? '+' : '') + h.chg.toFixed(2) + '%';
+          chgColor = h.chg > 0 ? '#ef5350' : '#66bb6a';
+        } else {
+          chgStr = '-';
+        }
         tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(h.n || '') + '</td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
-          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td></tr>';
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td></tr>';
       });
       tbl += '</tbody></table>';
       content.innerHTML = tbl;
