@@ -522,6 +522,11 @@ def _load_saved_recommend_data() -> list[dict]:
             entry["score"] = score
             entry["score_detail"] = details
             entry["_skipped_weight"] = skipped
+            # 如果启用了「筛掉缺失收益数据」，跳过缺失收益维度的基金
+            if CFG.get("recommend", {}).get("skip_missing_perf", False):
+                perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
+                if any(entry.get(k) is None or entry.get(k) == "" for k in perf_keys):
+                    continue
             out.append(entry)
         return out
     except Exception:
