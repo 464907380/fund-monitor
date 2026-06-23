@@ -254,7 +254,8 @@ def get(code: str) -> dict:
     else:
         if nav := _parse_net_trend(data):
             d["nav"] = nav
-    if td := _parse_real_time(code):
+    td = _parse_real_time(code)
+    if td is not None:
         d["td"] = td
     if holds := _parse_holdings(code):
         d["holds"] = holds
