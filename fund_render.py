@@ -238,6 +238,16 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-family:Consolas;color:#888;">{_html.escape(str(r.get("code","")))}</td>')
         _warn = _skipped_icon(r.get("_skipped_weight", 0))
+        _warn_title = ""
+        if _warn:
+            _missing_dims = []
+            for _d in (r.get("_score_detail") or []):
+                if len(_d) >= 4 and _d[3] is None:
+                    _missing_dims.append(f"{_d[0]}({_d[2]*100:.0f}%)")
+            if _missing_dims:
+                _neutral = r.get("_skipped_weight", 0) * 50
+                _warn_title = 'title="缺失: ' + ', '.join(_missing_dims) + f' | 中性分贡献+{_neutral:.1f}分"'
+            _warn = f'<span style="cursor:help;" {_warn_title}>{_warn}</span>'
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;">{_html.escape(str(r.get("name_short","")))}{_warn}</td>')
         for col, fcol in (("day","_day"),("f5","_f5"),("m1","_m1"),("m3","_m3"),("y1","_y1")):
             _v = r.get(fcol, "")
@@ -305,6 +315,16 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
         warn = _skipped_icon(r.get("_skipped_weight", 0))
+        warn_title = ""
+        if warn:
+            missing_dims = []
+            for d_item in detail:
+                if len(d_item) >= 4 and d_item[3] is None:
+                    missing_dims.append(f"{d_item[0]}({d_item[2]*100:.0f}%)")
+            if missing_dims:
+                neutral_contrib = r.get("_skipped_weight", 0) * 50
+                warn_title = 'title="缺失维度: ' + ', '.join(missing_dims) + f' | 均取中性分50, 贡献+{neutral_contrib:.1f}分"'
+            warn = f'<span style="cursor:help;" {warn_title}>{warn}</span>'
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;">{_html.escape(str(r.get("n","")))}{warn} <span style="color:#666;font-family:Consolas;font-size:12px;">{r.get("code","")}</span></td>')
         # 涨跌（当日实时涨跌幅）
         day_raw = r.get("day", "")
