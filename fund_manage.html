@@ -1834,6 +1834,47 @@ function showScoreDetail(items) {
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;max-width:520px;width:90%;max-height:90vh;overflow-y:auto;";
 }
 
+function showHoldings(code, name) {
+  var el = document.getElementById("holdingsModal");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "holdingsModal";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:480px;">'
+    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:4px;">\U0001f4c8 ' + name + ' <span style="color:#666;font-size:11px;">' + code + '</span></div>'
+    + '<div style="font-size:11px;color:#555;margin-bottom:10px;">前5大持仓（点击外部关闭）</div>'
+    + '<div id="holdingsContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
+    + '</div>';
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:90%;max-width:480px;";
+  el.onclick = function(){ el.style.display = 'none'; };
+
+  fetch(API + '/api/holdings?code=' + code)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var content = document.getElementById('holdingsContent');
+      if (!d.ok || !d.holdings || d.holdings.length === 0) {
+        content.innerHTML = '<span style="color:#666;">暂无持仓数据</span>';
+        return;
+      }
+      var tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
+        + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">股票</th>'
+        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th></tr></thead><tbody>';
+      d.holdings.forEach(function(h){
+        tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(h.n || '') + '</td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td></tr>';
+      });
+      tbl += '</tbody></table>';
+      content.innerHTML = tbl;
+    })
+    .catch(function(){
+      var content = document.getElementById('holdingsContent');
+      if (content) content.innerHTML = '<span style="color:#ef5350;">加载失败</span>';
+    });
+}
+
 </script>
 </body>
 </html>

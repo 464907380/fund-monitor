@@ -402,6 +402,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/holdings":
+            try:
+                q = urllib.parse.parse_qs(parsed.query)
+                code = q.get("code", [""])[0]
+                if not code:
+                    self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
+                    return
+                from fund_watch import _parse_holdings
+                holds = _parse_holdings(code)
+                self._send(*_json_response({"ok": True, "code": code, "holdings": holds or []}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/monitor-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _fmc:
