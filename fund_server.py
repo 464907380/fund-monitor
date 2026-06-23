@@ -751,7 +751,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 需要解析百分号字符串的字段
                 pct_keys = {"f5"}
 
-                import statistics
                 for dim in dims:
                     key = dim.get("key", "")
                     name = dim.get("name", "")
@@ -766,31 +765,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         continue  # 数据不足不校准
                     vals.sort()
                     n = len(vals)
-                    percentiles = [0, 20, 40, 50, 60, 80, 100]
+                    # 每10%一个百分位点，共11个点，粒度更细
+                    percentiles = list(range(0, 101, 10))
                     pts = []
                     for p in percentiles:
                         idx = min(int(n * p / 100), n - 1)
                         pts.append(vals[idx])
-                    # 根据"越高越好/越低越好"确定映射方向
+                    # 去重：相邻值相同则保留一个（避免曲线上出现平线断点）
+                    uniq = []
+                    for v in pts:
+                        if not uniq or abs(v - uniq[-1]) > 1e-9:
+                            uniq.append(v)
+                    pts = uniq
+                    # 重新计算对应的百分位索引
                     is_lower = name in lower_better
-                    # 构建曲线断点: [原始值, 得分]
-                    if is_lower:
-                        # 越低越好: 最小值→100分, 最大值→0分
-                        curve = [[pts[-1], 0], [pts[3], 50], [pts[0], 100]]
-                        # 取中位数作为分界，添加中间点使曲线平滑
-                        for i in [4, 2, 1]:
-                            if i < len(pts) and pts[i] != pts[0] and pts[i] != pts[-1]:
-                                score = round((1 - i / (len(pts) - 1)) * 100)
-                                curve.append([pts[i], score])
-                    else:
-                        # 越高越好: 最小值→0分, 最大值→100分
-                        curve = [[pts[0], 0], [pts[3], 50], [pts[-1], 100]]
-                        for i in [1, 2, 4, 5]:
-                            if i < len(pts) and pts[i] != pts[0] and pts[i] != pts[-1]:
-                                score = round(i / (len(pts) - 1) * 100)
-                                curve.append([pts[i], score])
-                    # 按原始值排序
-                    curve.sort(key=lambda x: x[0])
+                    curve = []
+                    n_pts = len(pts)
+                    for i, v in enumerate(pts):
+                        pct_pos = i / (n_pts - 1) if n_pts > 1 else 0.5
+                        if is_lower:
+                            score = round((1 - pct_pos) * 100)
+                        else:
+                            score = round(pct_pos * 100)
+                        curve.append([v, score])
                     dim["curve"] = {"points": curve}
 
                 with open(_CONFIG_PATH, "w", encoding="utf-8") as _fw:
