@@ -483,7 +483,7 @@ def _load_saved_recommend_data() -> list[dict]:
         if not results:
             return []
         out = []
-        for r in results[:_show_top]:
+        for r in results:
             entry = {
                 "n": r.get("name", ""),
                 "code": r.get("code", ""),
@@ -528,7 +528,9 @@ def _load_saved_recommend_data() -> list[dict]:
                 if any(entry.get(k) is None or entry.get(k) == "" for k in perf_keys):
                     continue
             out.append(entry)
-        return out
+        # 按新评分重新排序，取前 _show_top 条
+        out.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return out[:_show_top]
     except Exception:
         return []
 
