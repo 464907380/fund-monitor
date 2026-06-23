@@ -438,6 +438,63 @@ input, select, button { font-family: inherit; outline: none; }
     </div>
   </div>
 
+  <!-- ⚙️ 盘中监控阈值设置 -->
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+      <span style="font-size:13px;font-weight:600;color:#ccc;">🔔 盘中监控阈值</span>
+      <span style="font-size:11px;color:#666;cursor:pointer;" onclick="loadMonitorConfig()">⟳ 刷新</span>
+    </div>
+    <div class="divider"></div>
+    <div style="font-size:12px;color:#888;padding:4px 0;" id="monitorConfigArea">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <label style="color:#888;">基金单次急跌</label>
+          <input type="number" id="mc_alert_drop_once" value="-3" step="0.5" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ef5350;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">基金单次急涨</label>
+          <input type="number" id="mc_alert_jump_once" value="5" step="0.5" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#66bb6a;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">基金累计跌超</label>
+          <input type="number" id="mc_alert_accum_drop" value="-7" step="1" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ef5350;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">基金累计涨超</label>
+          <input type="number" id="mc_accum_jump" value="10" step="1" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#66bb6a;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">个股单次急跌</label>
+          <input type="number" id="mc_stock_drop_red" value="-5" step="0.5" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ef5350;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">个股单次急涨</label>
+          <input type="number" id="mc_stock_jump_red" value="7" step="0.5" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#66bb6a;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">个股累计跌超</label>
+          <input type="number" id="mc_stock_accum_drop_red" value="-10" step="1" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ef5350;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">个股累计涨超</label>
+          <input type="number" id="mc_stock_accum_jump_red" value="12" step="1" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#66bb6a;padding:4px 8px;font-family:Consolas;"> %
+        </div>
+        <div>
+          <label style="color:#888;">轮询间隔</label>
+          <select id="mc_poll_interval" style="width:80px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ccc;padding:4px 6px;font-size:12px;">
+            <option value="300">5分钟</option>
+            <option value="600" selected>10分钟</option>
+            <option value="900">15分钟</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+        <button onclick="saveMonitorConfig()" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:6px 16px;font-size:12px;cursor:pointer;">💾 保存阈值</button>
+        <span id="mcSaveStatus" style="font-size:11px;color:#888;"></span>
+      </div>
+    </div>
+  </div>
+
   <div class="card add-card">
     <div class="add-section">
       <label>✦ 添加基金（多个用空格/逗号分隔）</label>
@@ -1507,6 +1564,59 @@ async function loadRecommendConfig() {
       if (el4) el4.value = d.config.show_top || 20;
     }
   } catch(e) {}
+}
+loadMonitorConfig();
+async function loadMonitorConfig() {
+  try {
+    const r = await fetch(API + '/api/monitor-config');
+    const d = await r.json();
+    if (!d.ok || !d.config) return;
+    var map = {
+      mc_alert_drop_once: 'alert_drop_once', mc_alert_jump_once: 'alert_jump_once',
+      mc_alert_accum_drop: 'alert_accum_drop', mc_accum_jump: 'accum_jump',
+      mc_stock_drop_red: 'stock_alert_drop_red', mc_stock_jump_red: 'stock_alert_jump_red',
+      mc_stock_accum_drop_red: 'stock_alert_accum_drop_red', mc_stock_accum_jump_red: 'stock_alert_accum_jump_red',
+    };
+    for (var elId in map) {
+      var el = document.getElementById(elId);
+      if (el) el.value = d.config[map[elId]] !== undefined ? d.config[map[elId]] : el.value;
+    }
+    var pollEl = document.getElementById('mc_poll_interval');
+    if (pollEl) pollEl.value = String(d.config.poll_interval_seconds || 600);
+  } catch(e) {}
+}
+async function saveMonitorConfig() {
+  var btn = document.querySelector('#monitorConfigArea button');
+  if (btn) btn.disabled = true;
+  var statusEl = document.getElementById('mcSaveStatus');
+  if (statusEl) statusEl.textContent = '保存中...';
+  try {
+    var body = {
+      alert_drop_once: parseFloat(document.getElementById('mc_alert_drop_once').value) || -3,
+      alert_jump_once: parseFloat(document.getElementById('mc_alert_jump_once').value) || 5,
+      alert_accum_drop: parseFloat(document.getElementById('mc_alert_accum_drop').value) || -7,
+      accum_jump: parseFloat(document.getElementById('mc_accum_jump').value) || 10,
+      stock_alert_drop_red: parseFloat(document.getElementById('mc_stock_drop_red').value) || -5,
+      stock_alert_jump_red: parseFloat(document.getElementById('mc_stock_jump_red').value) || 7,
+      stock_alert_accum_drop_red: parseFloat(document.getElementById('mc_stock_accum_drop_red').value) || -10,
+      stock_alert_accum_jump_red: parseFloat(document.getElementById('mc_stock_accum_jump_red').value) || 12,
+      poll_interval_seconds: parseInt(document.getElementById('mc_poll_interval').value) || 600,
+    };
+    const r = await fetch(API + '/api/monitor-config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      if (statusEl) { statusEl.textContent = '✔ 已保存'; statusEl.style.color = '#66bb6a'; }
+      setTimeout(function() { if (statusEl) statusEl.textContent = ''; }, 3000);
+    } else {
+      if (statusEl) { statusEl.textContent = '✖ ' + (d.error || '保存失败'); statusEl.style.color = '#ef5350'; }
+    }
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = '✖ 保存失败'; statusEl.style.color = '#ef5350'; }
+  }
+  if (btn) btn.disabled = false;
 }
 async function runRecommendFromFilter() {
   var btn = document.getElementById('recFilterBtn');

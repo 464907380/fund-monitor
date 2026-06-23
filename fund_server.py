@@ -45,7 +45,6 @@ def _spawn_task(task_id: str) -> bool:
         return False
     script = os.path.join(_SCRIPT_DIR, script_name)
     hb_name = _task_heartbeats.get(task_id, task_id)
-    write_heartbeat(hb_name)
     try:
         proc = subprocess.Popen(
             [sys.executable, script],
@@ -53,6 +52,14 @@ def _spawn_task(task_id: str) -> bool:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        # 确认进程已成功启动且仍在运行，再写心跳
+        try:
+            proc.wait(timeout=3)
+            # 进程在3秒内退出了（很可能是启动失败）
+            return False
+        except subprocess.TimeoutExpired:
+            pass  # 进程还在运行，正常
+        write_heartbeat(hb_name)
         with _proc_lock:
             _task_procs[task_id] = proc
         def _wait_and_cleanup(p=proc, hb=hb_name, tid=task_id) -> None:
@@ -394,6 +401,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/monitor-config":
+            try:
+                with open(_CONFIG_PATH, encoding="utf-8") as _fmc:
+                    cfg = json.load(_fmc)
+                mc = cfg.get("fund_monitor", {})
+                self._send(*_json_response({
+                    "ok": True,
+                    "config": {
+                        "alert_drop_once": mc.get("alert_drop_once", -3),
+                        "alert_jump_once": mc.get("alert_jump_once", 5),
+                        "alert_accum_drop": mc.get("alert_accum_drop", -7),
+                        "accum_jump": mc.get("accum_jump", 10),
+                        "stock_alert_drop_red": mc.get("stock_alert_drop_red", -5),
+                        "stock_alert_jump_red": mc.get("stock_alert_jump_red", 7),
+                        "stock_alert_accum_drop_red": mc.get("stock_alert_accum_drop_red", -10),
+                        "stock_alert_accum_jump_red": mc.get("stock_alert_accum_jump_red", 12),
+                        "poll_interval_seconds": mc.get("poll_interval_seconds", 600),
+                    }
+                }))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/recommend-table":
             """返回市场优选全维度表格 HTML（用缓存数据快速生成，补充实时涨跌）"""
             try:
@@ -654,6 +684,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_scoring)
                 importlib.reload(fund_render)
                 self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/monitor-config":
+            try:
+                with open(_CONFIG_PATH, encoding="utf-8") as _fmc:
+                    cfg = json.load(_fmc)
+                cfg["fund_monitor"] = {
+                    "alert_drop_once": float(body.get("alert_drop_once", -3)),
+                    "alert_jump_once": float(body.get("alert_jump_once", 5)),
+                    "alert_accum_drop": float(body.get("alert_accum_drop", -7)),
+                    "accum_jump": float(body.get("accum_jump", 10)),
+                    "stock_alert_drop_red": float(body.get("stock_alert_drop_red", -5)),
+                    "stock_alert_jump_red": float(body.get("stock_alert_jump_red", 7)),
+                    "stock_alert_accum_drop_red": float(body.get("stock_alert_accum_drop_red", -10)),
+                    "stock_alert_accum_jump_red": float(body.get("stock_alert_accum_jump_red", 12)),
+                    "poll_interval_seconds": int(body.get("poll_interval_seconds", 600)),
+                }
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwmc:
+                    json.dump(cfg, _fwmc, indent=2, ensure_ascii=False)
+                self._send(*_json_response({"ok": True, "message": "监控配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
