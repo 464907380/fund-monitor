@@ -113,20 +113,21 @@ def _build_briefing_html(rows: list[dict], alerts: list[str], today: str,
     # 表格行
     row_htmls = []
     for r in rows:
-        _code = _html.escape(str(r.get("code", "")))
-        _name = _html.escape(str(r.get("name_short", "")))
-        _day = _html.escape(str(r.get("day", "")))
-        _m1 = _html.escape(str(r.get("m1", "")))
-        _m3 = _html.escape(str(r.get("m3", "")))
-        _y1 = _html.escape(str(r.get("y1", "")))
+        _code = _html.escape(str(r.get("code") or ""))
+        _name = _html.escape(str(r.get("name_short") or ""))
+        _day = _html.escape(str(r.get("day") or ""))
+        _m1 = _html.escape(str(r.get("m1") or ""))
+        _m3 = _html.escape(str(r.get("m3") or ""))
+        _y1 = _html.escape(str(r.get("y1") or ""))
+        _f5 = _html.escape(str(r.get("f5") or ""))
         row_htmls.append("<tr>"
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-family:Consolas;font-size:12px;color:#888;white-space:nowrap;">{_code}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;font-size:13px;color:#ccc;white-space:nowrap;">{_name}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["day"])}">{_day}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["f5"])}">{_html.escape(str(r.get("f5","")))}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m1"])}">{_m1}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["m3"])}">{_m3}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r["y1"])}">{_y1}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("day"))}">{_day}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("f5"))}">{_f5}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("m1"))}">{_m1}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("m3"))}">{_m3}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("y1"))}">{_y1}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-size:12px;font-weight:600;color:#66bb6a;white-space:nowrap;">{r.get("score","")}</td>'
             + "</tr>"
         )
@@ -192,7 +193,7 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
     ]
     for r in rows:
         md_lines.append(
-            f"|{r['code']}|{r['name_short']}|{r['day']}|{r['f5']}|{r['m1']}|{r['m3']}|{r['y1']}|{r.get('score','')}|{r['mgr']}|"
+            f"|{r.get('code','')}|{r.get('name_short','')}|{r.get('day','')}|{r.get('f5','')}|{r.get('m1','')}|{r.get('m3','')}|{r.get('y1','')}|{r.get('score','')}|{r.get('mgr','')}|"
         )
 
     # 推荐排行
@@ -626,9 +627,9 @@ def _format_recommend_rankings() -> list[str]:
             code = r.get("code", "")
             score = r.get("score", 0)
             ar = r.get("annual_return", 0) or 0
-            m1 = f"{r.get('m1', 0):+.1f}" if isinstance(r.get("m1"), (int, float)) else str(r.get("m1", ""))
-            m3 = f"{r.get('m3', 0):+.1f}" if isinstance(r.get("m3"), (int, float)) else str(r.get("m3", ""))
-            y1 = f"{r.get('y1', 0):+.1f}" if isinstance(r.get("y1"), (int, float)) else str(r.get("y1", ""))
+            m1 = f"{r.get('m1', 0):+.1f}" if isinstance(r.get("m1"), (int, float)) else (str(r.get("m1")) if r.get("m1") is not None else "-")
+            m3 = f"{r.get('m3', 0):+.1f}" if isinstance(r.get("m3"), (int, float)) else (str(r.get("m3")) if r.get("m3") is not None else "-")
+            y1 = f"{r.get('y1', 0):+.1f}" if isinstance(r.get("y1"), (int, float)) else (str(r.get("y1")) if r.get("y1") is not None else "-")
             sharpe = r.get("sharpe", 0) or 0
             dd = r.get("max_dd", 0) or 0
             sy3 = r.get("sy3", 0) or 0
