@@ -474,24 +474,46 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
 
 
 def _load_saved_recommend_data() -> list[dict]:
-    """从候选文件读取基金代码列表，返回含有 code/n/y1 的条目（评分由调用方实时计算）"""
+    """从保存的结果文件读取推荐数据，并用当前 SCORE_DIMS 重新评分。"""
     try:
+        from fund_scoring import calc_score_detail
         data = _load_recommend_data()
         if not data:
             return []
-        candidates = data.get("candidates", [])
-        if not candidates:
+        results = data.get("results", [])
+        if not results:
             return []
         out = []
-        for r in candidates:
-            out.append({
+        for r in results:
+            entry = {
                 "n": r.get("name", ""),
                 "code": r.get("code", ""),
-                "y1": r.get("y1"),
-                "score": 0,  # 占位，实际评分由调用方实时计算
-            })
-        # 按 y1 排序取前 _show_top 条
-        out.sort(key=lambda x: x.get("y1", 0) or 0, reverse=True)
+                "annual_return": r.get("annual_return", 0),
+                "m1": r.get("m1"), "m3": r.get("m3"), "y1": r.get("y1"),
+                "sharpe": r.get("sharpe"), "sortino": r.get("sortino"),
+                "max_dd": r.get("max_dd"), "win_rate": r.get("win_rate"),
+                "inst": r.get("inst"), "sc": r.get("sc"), "rate": r.get("rate"),
+                "profit_ratio": r.get("profit_ratio"),
+                "recovery": r.get("recovery"), "sy3": r.get("sy3"),
+                "f5": r.get("f5"), "sy2": r.get("sy2"),
+                "sy6": r.get("sy6"),
+                "volatility": r.get("volatility"), "calmar": r.get("calmar"),
+                "max_loss_days": r.get("max_loss_days"),
+                "mgr": r.get("mgr", ""), "day": r.get("day", ""),
+            }
+            score_d = {k: entry.get(k) for k in (
+                "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
+                "annual_return", "sharpe", "sortino",
+                "profit_ratio", "win_rate", "recovery", "calmar",
+                "max_dd", "volatility", "max_loss_days",
+                "sc", "rate", "inst",
+            )}
+            score, details, skipped = calc_score_detail(score_d)
+            entry["score"] = score
+            entry["score_detail"] = details
+            entry["_skipped_weight"] = skipped
+            out.append(entry)
+        out.sort(key=lambda x: x.get("score", 0), reverse=True)
         return out[:_show_top]
     except Exception:
         return []
@@ -574,16 +596,15 @@ def _load_recommend_data() -> dict | None:
 
 
 def _format_recommend_rankings() -> list[str]:
-    """生成推荐排名的 Markdown 表格（实时拉取）"""
+    """生成推荐排名的 Markdown 表格（从缓存数据读取）"""
     lines: list[str] = []
     try:
         from fund_recommend import _load_result, _TOP
 
-        # 检查候选数据是否存在
+        # 检查推荐数据是否存在及过期
         recs = _load_result()
         if recs:
             try:
-                # recs 是 [{code, name, y1}, ...] 格式，没有顶层 date 字段
                 # 从文件读取日期
                 import json as _json
                 _path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
@@ -601,64 +622,13 @@ def _format_recommend_rankings() -> list[str]:
             except (ValueError, KeyError, TypeError):
                 pass
 
-        if not recs:
+        # 使用保存的推荐结果数据，用当前曲线重算评分
+        fresh = _load_saved_recommend_data()
+        if not fresh:
             lines.append("")
             lines.append("💡 **想看看市场上有哪些优秀基金？**")
             lines.append("   运行 python fund_recommend.py（约16分钟）")
             lines.append("   之后晚报自动展示推荐排行")
-            return lines
-
-        # 实时拉取 TOP N 的深度数据并评分
-        from fund_watch import get_scoring_data
-        from fund_scoring import calc_score_detail
-        import concurrent.futures
-
-        _top_codes = [(r["code"], r.get("name", "")) for r in recs[:_show_top]]
-        _entries: list[dict] = []
-
-        def _fetch_one(code: str, name: str) -> dict | None:
-            try:
-                d = get_scoring_data(code)
-                if not d.get("n"):
-                    return None
-                navs = d.get("nav", [])
-                f5_str = ""
-                if len(navs) >= 5:
-                    pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
-                    f5_str = f"{pct:+.1f}%"
-                d["f5"] = f5_str
-                score_d = {k: d.get(k) for k in (
-                    "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
-                    "annual_return", "sharpe", "sortino",
-                    "profit_ratio", "win_rate", "recovery", "calmar",
-                    "max_dd", "volatility", "max_loss_days",
-                    "sc", "rate", "inst",
-                )}
-                score, details, skipped = calc_score_detail(score_d)
-                return {
-                    "n": d.get("n", name), "code": code,
-                    "score": score, "score_detail": details,
-                    "_skipped_weight": skipped,
-                    "annual_return": d.get("annual_return"),
-                    "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
-                    "sharpe": d.get("sharpe"), "max_dd": d.get("max_dd"),
-                    "sy3": d.get("sy3"),
-                }
-            except Exception:
-                return None
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            _fut_map = {executor.submit(_fetch_one, code, name): code for code, name in _top_codes}
-            for _fut in concurrent.futures.as_completed(_fut_map):
-                _r = _fut.result()
-                if _r:
-                    _entries.append(_r)
-
-        _entries.sort(key=lambda x: x.get("score", 0), reverse=True)
-
-        if not _entries:
-            lines.append("")
-            lines.append("💡 暂无推荐数据")
             return lines
 
         lines.append("")
@@ -668,20 +638,12 @@ def _format_recommend_rankings() -> list[str]:
         lines.append(f"|{'排名':<4}|{'代码':<7}|{'基金名':<18}|{'评分':<5}|{'年化%':<6}|{'近1月':<7}|{'近3月':<7}|{'近1年':<7}|{'夏普':<5}|{'回撤':<5}|{'近3年':<6}|")
         lines.append(f"|:---:|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
         medals = ["🥇", "🥈", "🥉"]
-        for i, r in enumerate(_entries[:_show_top], 1):
+        for i, r in enumerate(fresh[:_show_top], 1):
             badge = medals[i - 1] if i <= 3 else f" {i}."
             name = (r.get("n", "") or "")[:18]
             code = r.get("code", "")
             score = r.get("score", 0)
-            ar = r.get("annual_return", "") or ""
-            ar_str = f"{ar:.1f}" if isinstance(ar, (int, float)) else "-"
-            m1 = f"{r.get('m1', 0):+.1f}" if isinstance(r.get("m1"), (int, float)) else "-"
-            m3 = f"{r.get('m3', 0):+.1f}" if isinstance(r.get("m3"), (int, float)) else "-"
-            y1 = f"{r.get('y1', 0):+.1f}" if isinstance(r.get("y1"), (int, float)) else "-"
-            sharpe = r.get("sharpe", 0) or 0
-            dd = r.get("max_dd", 0) or 0
-            sy3 = r.get("sy3", 0) or 0
-            lines.append(f"|{badge:<4}|{code:<7}|{name:<18}|{score:<5.1f}|{ar_str:<6}%|{m1:<7s}|{m3:<7s}|{y1:<7s}|{sharpe:<5.2f}|{dd:<5.1f}%|{sy3:<5.1f}%|")
+            ar = r.get("annual_return", 0) or 0
             m1 = f"{r.get('m1', 0):+.1f}" if isinstance(r.get("m1"), (int, float)) else (str(r.get("m1")) if r.get("m1") is not None else "-")
             m3 = f"{r.get('m3', 0):+.1f}" if isinstance(r.get("m3"), (int, float)) else (str(r.get("m3")) if r.get("m3") is not None else "-")
             y1 = f"{r.get('y1', 0):+.1f}" if isinstance(r.get("y1"), (int, float)) else (str(r.get("y1")) if r.get("y1") is not None else "-")

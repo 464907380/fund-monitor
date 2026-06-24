@@ -479,86 +479,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/recommend-table":
-            """返回市场优选全维度表格 HTML（实时拉取评分数据）"""
+            """返回市场优选全维度表格 HTML（从缓存文件读取）"""
             try:
-                from fund_render import _web_rich_recommend_table, _show_top
-                from fund_watch import get_scoring_data, _parse_real_time
-                from fund_scoring import calc_score_detail
-
-                rec_path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
-                if not os.path.exists(rec_path):
-                    self._send(200, {"Content-Type": "text/html; charset=utf-8"},
-                               "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
-                    return
-                with open(rec_path, encoding="utf-8") as _fr:
-                    rec_data = json.load(_fr).get("candidates", [])
-                if not rec_data:
-                    self._send(200, {"Content-Type": "text/html; charset=utf-8"},
-                               "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
-                    return
-
-                # 取 TOP N 基金代码（按 y1 排序取前 _show_top）
-                rec_data.sort(key=lambda x: x.get("y1", 0) or 0, reverse=True)
-                top_codes = [(r["code"], r.get("name", "")) for r in rec_data[:_show_top]]
-
-                def _fetch_one(code: str, name: str) -> dict | None:
-                    """拉取一只基金的实时评分数据"""
-                    try:
-                        d = get_scoring_data(code)
-                        if not d.get("n"):
-                            return None
-                        # 计算近一周涨跌幅
-                        navs = d.get("nav", [])
-                        f5_str = ""
-                        if len(navs) >= 5:
-                            pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
-                            f5_str = f"{pct:+.1f}%"
-                        d["f5"] = f5_str
-                        # 实时涨跌
-                        td = _parse_real_time(code)
-                        day_str = f"{td:+.2f}%" if td is not None else ""
-                        # 评分
-                        score_d = {k: d.get(k) for k in (
-                            "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
-                            "annual_return", "sharpe", "sortino",
-                            "profit_ratio", "win_rate", "recovery", "calmar",
-                            "max_dd", "volatility", "max_loss_days",
-                            "sc", "rate", "inst",
-                        )}
-                        score, details, skipped = calc_score_detail(score_d)
-                        return {
-                            "n": d.get("n", name), "code": code,
-                            "day": day_str, "score": score,
-                            "score_detail": details, "_skipped_weight": skipped,
-                            "annual_return": d.get("annual_return"),
-                            "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
-                            "f5": f5_str, "sy6": d.get("sy6"),
-                            "sy2": d.get("sy2"), "sy3": d.get("sy3"),
-                            "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),
-                            "profit_ratio": d.get("profit_ratio"),
-                            "win_rate": d.get("win_rate"),
-                            "recovery": d.get("recovery"), "calmar": d.get("calmar"),
-                            "max_dd": d.get("max_dd"),
-                            "volatility": d.get("volatility"),
-                            "max_loss_days": d.get("max_loss_days"),
-                            "sc": d.get("sc"), "rate": d.get("rate"),
-                            "inst": d.get("inst"), "mgr": d.get("mgr", "")[:6],
-                        }
-                    except Exception:
-                        return None
-
-                entries: list[dict] = []
-                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-                    fut_map = {executor.submit(_fetch_one, code, name): code for code, name in top_codes}
-                    for fut in concurrent.futures.as_completed(fut_map):
-                        result = fut.result()
-                        if result is not None:
-                            entries.append(result)
-
-                # 按实时评分重新排序
-                entries.sort(key=lambda x: x.get("score", 0), reverse=True)
-                html = _web_rich_recommend_table(entries)
-                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
+                from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+                from fund_watch import _parse_real_time
+                _saved = _load_saved_recommend_data()
+                if _saved:
+                    # 单独补充实时涨跌（轻量请求）
+                    for entry in _saved:
+                        try:
+                            td = _parse_real_time(entry.get("code", ""))
+                            entry["day"] = f"{td:+.2f}%" if td is not None else ""
+                        except Exception:
+                            entry["day"] = entry.get("day", "")
+                    html = _web_rich_recommend_table(_saved)
+                else:
+                    html = ""
+                if html:
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
+                else:
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
             except Exception as e:
                 self._send(500, {"Content-Type": "text/html; charset=utf-8"},
                            f"<p style=\"color:#ef5350;\">获取推荐表格失败: {e}</p>".encode("utf-8"))
@@ -810,9 +750,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
                     return
                 with open(rec_path, encoding="utf-8") as _fr:
-                    rec_data = json.load(_fr).get("candidates", [])
+                    rec_data = json.load(_fr).get("results", [])
                 if not rec_data:
-                    self._send(*_json_response({"ok": False, "error": "暂无候选数据，请先运行推荐"}, 400))
+                    self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
                     return
                 with open(_CONFIG_PATH, encoding="utf-8") as _fc:
                     cfg = json.load(_fc)
@@ -821,7 +761,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "评分维度配置为空"}, 400))
                     return
 
-                # 从候选文件取代码，实时拉取维度数据用于校准
+                # 从推荐结果取维度值用于校准
                 codes = [(r["code"], r.get("name", "")) for r in rec_data]
                 if len(codes) > 1000:
                     codes = codes[:1000]

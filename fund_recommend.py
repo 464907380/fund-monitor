@@ -1,15 +1,16 @@
 """
-基金推荐工具 — 从全市场筛选候选基金（评分由前端实时计算）
+基金推荐工具 — 从全市场筛选候选基金并评分
 
 流程：
   1. 拉取全市场排行
   2. 按 y1 > min_y1_return 筛选
-  3. 保存候选列表 (code, name, y1) 到文件
-  4. 前端展示时实时拉取 TOP N 的深度数据并评分
+  3. 筛掉缺失收益数据（可选）
+  4. 并行评分 → 保存结果到文件
+  5. 前端展示时直接读取保存的评分结果
 
 用法：
-  python fund_recommend.py                    # 更新候选列表
-  python fund_recommend.py --load             # 查看候选数量
+  python fund_recommend.py                    # 运行推荐
+  python fund_recommend.py --load             # 查看上次结果
   python fund_recommend.py --add 基金代码     # 将基金加入 fund_list.json
 """
 import sys
@@ -24,16 +25,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from fund_utils import update_heartbeat
 
 try:
-    from fund_watch import log, fetch, get_scoring_data
+    from fund_watch import log, fetch
+    from fund_scoring import _calc_score, SCORE_DIMS
     from config import api_url, CFG
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
+    sys.exit(1)
     sys.exit(1)
 
 # ── 配置 ──────────────────────────────────────
 _TOP = CFG.get("recommend", {}).get("top_n", 200)
 SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
+_SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
@@ -102,8 +106,8 @@ def _filter_candidates(rows: list) -> list[dict]:
     return candidates
 
 
-def _save_candidates(candidates: list[dict]) -> bool:
-    """保存候选基金列表到文件"""
+def _save_result(results: list[dict]) -> bool:
+    """保存评分结果到文件"""
     lock_file = _RESULT_FILE + ".lock"
     try:
         for _ in range(30):
@@ -116,17 +120,17 @@ def _save_candidates(candidates: list[dict]) -> bool:
             print("⚠️ 无法获取文件锁，跳过保存")
             return False
 
-        if not candidates:
+        if not results:
             print("\n⚠️ 未找到匹配基金，保留上次结果")
             return False
 
         data = {
             "date": datetime.date.today().isoformat(),
-            "candidates": candidates,
+            "results": results,
         }
         with open(_RESULT_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"\n📁 已保存 {len(candidates)} 只候选基金到 {_RESULT_FILE}")
+        print(f"\n📁 已保存 {len(results)} 只基金评分结果到 {_RESULT_FILE}")
         return True
     finally:
         try:
@@ -136,14 +140,14 @@ def _save_candidates(candidates: list[dict]) -> bool:
 
 
 def _load_result() -> list[dict] | None:
-    """加载候选列表"""
+    """加载上次推荐结果"""
     if not os.path.exists(_RESULT_FILE):
         return None
     try:
         with open(_RESULT_FILE, encoding="utf-8") as f:
             data = json.load(f)
-        print(f"📁 候选列表 ({data.get('date', '未知日期')})")
-        return data.get("candidates", [])
+        print(f"📁 上次推荐结果 ({data.get('date', '未知日期')})")
+        return data.get("results", [])
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -170,16 +174,62 @@ def _add_to_fund_list(code: str, name: str = "") -> bool:
         return False
 
 
-def _print_results(candidates: list[dict]) -> None:
-    """打印候选基金列表"""
-    for i, r in enumerate(candidates[:SHOW_TOP], 1):
-        print(f"  {i}. {r['name']} ({r['code']}) — y1={r['y1']:.1f}%")
+def _print_results(results: list[dict]) -> None:
+    """打印评分结果"""
+    from fund_scoring import SCORE_DIMS
+    medals = ["🥇", "🥈", "🥉"]
+    for i, r in enumerate(results[:SHOW_TOP], 1):
+        badge = medals[i - 1] if i <= 3 else f" {i}."
+        print(f"{badge} {r['name']} ({r['code']}) — {r['score']:.1f}分  年化{r.get('annual_return',0):.1f}%")
+    print()
+    print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
+
+
+def _score_one(code: str, name: str) -> dict | None:
+    """单只基金评分"""
+    try:
+        from fund_watch import get as _get
+        d = _get(code)
+        if not d.get("n"):
+            return None
+        # 筛掉缺失收益数据
+        if _SKIP_MISSING_PERF:
+            perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
+            if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in perf_keys):
+                log.debug("跳过 %s(%s): 缺失收益维度", name, code)
+                return None
+        # 计算近一周涨跌幅
+        navs = d.get("nav", [])
+        f5_val = ""
+        if len(navs) >= 5:
+            pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
+            f5_val = f"{pct:+.1f}%"
+        d["f5"] = f5_val
+        score = _calc_score(d)
+        return {
+            "code": code, "name": name, "score": score,
+            "annual_return": d.get("annual_return"),
+            "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
+            "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),
+            "max_dd": d.get("max_dd"), "win_rate": d.get("win_rate"),
+            "inst": d.get("inst"), "sc": d.get("sc"), "rate": d.get("rate"),
+            "profit_ratio": d.get("profit_ratio"),
+            "recovery": d.get("recovery"), "sy3": d.get("sy3"),
+            "f5": f5_val, "sy2": d.get("sy2"),
+            "volatility": d.get("volatility"), "calmar": d.get("calmar"),
+            "max_loss_days": d.get("max_loss_days"), "sy6": d.get("sy6"),
+            "mgr": (d.get("mgr") or "")[:6],
+            "day": f"{d.get('td'):+.2f}%" if d.get("td") is not None else "",
+        }
+    except Exception as e:
+        log.debug("跳过 %s: %s", code, e)
+        return None
 
 
 def main() -> None:
     try:
         print("=" * 60)
-        print("🔍 发现候选基金")
+        print("🔍 基金优选推荐 — 全市场深度评分")
         print("=" * 60)
 
         print(f"\n📥 获取全市场基金排行 (TOP {_TOP})...")
@@ -189,45 +239,40 @@ def main() -> None:
 
         candidates = _filter_candidates(rows)
         print(f"   y1 >= {_MIN_Y1}% 筛选后: {len(candidates)} 只")
+        est_min = len(candidates) * 2 // 60
+        print(f"   ⏱ 预计评分耗时约 {est_min} 分钟")
 
-        # 筛掉缺失收益数据的基金（需拉取深度数据判断）
-        _skip_missing = CFG.get("recommend", {}).get("skip_missing_perf", False)
-        if _skip_missing and candidates:
-            print(f"\n📥 正在拉取深度数据以筛掉缺失收益的基金...")
-            _perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
-            _filtered = []
-            _total = len(candidates)
-            with ThreadPoolExecutor(max_workers=20) as executor:
-                def _check_one(c: dict) -> dict | None:
-                    try:
-                        d = get_scoring_data(c["code"])
-                        if not d.get("n"):
-                            return None
-                        if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in _perf_keys):
-                            return None
-                        return c
-                    except Exception:
-                        return None
-                _futs = {executor.submit(_check_one, c): c for c in candidates}
-                for i, _fut in enumerate(as_completed(_futs), 1):
-                    _r = _fut.result()
-                    if _r:
-                        _filtered.append(_r)
-                    if i % 50 == 0:
-                        print(f"     进度: {i}/{_total}")
-            candidates = _filtered
-            print(f"   筛掉缺失收益数据后: {len(candidates)} 只")
+        # ── 并行评分 ──
+        scored: list[dict] = []
+        total = len(candidates)
+        print(f"\n{'进度':<8} {'代码':<7} {'基金名':<20} {'年化':<8} {'评分':<6}")
+        print("-" * 55)
 
-        if candidates:
-            update_heartbeat("fund_recommend", progress=1, total=1, status="保存候选列表")
-            _save_candidates(candidates)
-            print(f"\n🏆 候选基金 TOP {min(SHOW_TOP, len(candidates))}")
-            print("=" * 40)
-            _print_results(candidates)
+        with ThreadPoolExecutor(max_workers=30) as executor:
+            futs = {executor.submit(_score_one, c["code"], c["name"]): c for c in candidates}
+            for i, fut in enumerate(as_completed(futs), 1):
+                c = futs[fut]
+                result = fut.result()
+                if result:
+                    scored.append(result)
+                    ar = result.get("annual_return")
+                    ar_str = f"{ar:.1f}%" if isinstance(ar, (int, float)) else "?"
+                    print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {ar_str:<8} {result['score']:<6.1f}")
+                else:
+                    print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'跳过':<8}")
+                update_heartbeat("fund_recommend", progress=i, total=total + 1,
+                                 status=f"评分 {c['name'][:18]}({c['code']})")
 
+        # ── 排序保存 ──
+        scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+        update_heartbeat("fund_recommend", progress=total + 1, total=total + 1, status="保存结果")
+        _save_result(scored)
+
+        print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
+        print("=" * 50)
+        _print_results(scored)
         print()
-        print("💡 前端展示时会实时拉取深度数据并评分")
-        print("   一键加入监控: python fund_recommend.py --add 基金代码")
+        print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
     finally:
         print("  推荐任务完成")
 
