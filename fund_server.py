@@ -490,13 +490,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
                     return
                 with open(rec_path, encoding="utf-8") as _fr:
-                    rec_data = json.load(_fr).get("results", [])
+                    rec_data = json.load(_fr).get("candidates", [])
                 if not rec_data:
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"},
                                "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
                     return
 
-                # 取 TOP N 基金代码（优先选原始评分高的）
+                # 取 TOP N 基金代码（按 y1 排序取前 _show_top）
+                rec_data.sort(key=lambda x: x.get("y1", 0) or 0, reverse=True)
                 top_codes = [(r["code"], r.get("name", "")) for r in rec_data[:_show_top]]
 
                 def _fetch_one(code: str, name: str) -> dict | None:
@@ -808,9 +809,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
                     return
                 with open(rec_path, encoding="utf-8") as _fr:
-                    rec_data = json.load(_fr).get("results", [])
+                    rec_data = json.load(_fr).get("candidates", [])
                 if not rec_data:
-                    self._send(*_json_response({"ok": False, "error": "推荐结果为空"}, 400))
+                    self._send(*_json_response({"ok": False, "error": "暂无候选数据，请先运行推荐"}, 400))
                     return
                 with open(_CONFIG_PATH, encoding="utf-8") as _fc:
                     cfg = json.load(_fc)
@@ -819,17 +820,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "评分维度配置为空"}, 400))
                     return
 
+                # 从候选文件取代码，实时拉取维度数据用于校准
+                codes = [(r["code"], r.get("name", "")) for r in rec_data]
+                if len(codes) > 1000:
+                    codes = codes[:1000]
+
                 # "越低越好"的维度
                 lower_better = {"波动率", "最大回撤", "最大连跌天数", "费率"}
                 # 需要解析百分号字符串的字段
                 pct_keys = {"f5"}
 
+                # 并行拉取实时数据
+                from fund_watch import get_scoring_data
+                all_data: list[dict] = []
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                    _fut_map = {executor.submit(get_scoring_data, code): code for code, _ in codes}
+                    for _fut in concurrent.futures.as_completed(_fut_map):
+                        _d = _fut.result()
+                        if _d and _d.get("n"):
+                            all_data.append(_d)
+
                 for dim in dims:
                     key = dim.get("key", "")
                     name = dim.get("name", "")
                     vals = []
-                    for r in rec_data:
-                        v = r.get(key)
+                    for d in all_data:
+                        v = d.get(key)
                         if key in pct_keys and isinstance(v, str) and "%" in v:
                             v = float(v.replace("%", "").replace("+", ""))
                         if v is not None and isinstance(v, (int, float)):
