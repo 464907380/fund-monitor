@@ -216,7 +216,7 @@ def md_content(rows: list[dict], alerts: list[str], today: str,
 def _web_rich_fund_table(rows: list[dict]) -> str:
     """生成自选基金完整数据 HTML 表格（Web 版，维度列动态跟随 SCORE_DIMS）"""
     from fund_scoring import SCORE_DIMS
-    dim_names = [d[0] for d in SCORE_DIMS]
+    dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 自选基金完整数据</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -224,10 +224,6 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">代码</th>'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金名</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">涨跌</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近5日</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近1月</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近3月</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">近1年</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">评分</th>']
     # 动态维度列
     for dn in dim_names:
@@ -252,9 +248,8 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         _fname_js = str(r.get("name_short", "")).replace("\\", "\\\\").replace("'", "\\'")
         _fname_html = _html.escape(str(r.get("name_short", "")))
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'{_fcode}\',\'{_fname_js}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_fname_html}</span>{_warn}</td>')
-        for col, fcol in (("day","_day"),("f5","_f5"),("m1","_m1"),("m3","_m3"),("y1","_y1")):
-            _v = r.get(fcol, "")
-            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        _v = r.get("_day", "")
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
@@ -296,7 +291,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
     if not fresh:
         return ""
     from fund_scoring import SCORE_DIMS
-    dim_names = [d[0] for d in SCORE_DIMS]
+    dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
     dims_shown = dim_names
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              f'<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP {_show_top} \uff08\u5168\u7ef4\u5ea6\uff09</p>'
@@ -305,8 +300,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
              '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;white-space:nowrap;">#</th>'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">涨跌</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">总分</th>'
-             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">年化%</th>']
+             '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">总分</th>']
     for dn in dims_shown:
         parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
     parts.append('</tr></thead><tbody>')
@@ -336,9 +330,6 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         day_color = "#66bb6a" if day_raw.startswith("+") else ("#ef5350" if day_raw.startswith("-") else "#888")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
-        ar_val = r.get("annual_return")
-        ar_display = f"{ar_val:.1f}" if isinstance(ar_val, (int, float)) else "—"
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:#ccc;" title="年化收益率">{ar_display}</td>')
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
             raw_val = r.get(_dim_value_to_key(dim_name))
