@@ -110,6 +110,7 @@ def _spawn_recommend() -> bool:
             p.wait()
             clear_heartbeat("fund_recommend")
             with _proc_lock:
+                global _recommend_proc
                 if _recommend_proc is p:
                     _recommend_proc = None
 

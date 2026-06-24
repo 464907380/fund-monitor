@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from fund_utils import update_heartbeat
 
 try:
-    from fund_watch import log, fetch
+    from fund_watch import log, fetch, get_scoring_data
     from config import api_url, CFG
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
@@ -188,8 +188,35 @@ def main() -> None:
         print(f"   获取到 {len(rows)} 只基金")
 
         candidates = _filter_candidates(rows)
-        print(f"   筛选后: {len(candidates)} 只")
-        print(f"   条件: y1 >= {_MIN_Y1}%")
+        print(f"   y1 >= {_MIN_Y1}% 筛选后: {len(candidates)} 只")
+
+        # 筛掉缺失收益数据的基金（需拉取深度数据判断）
+        _skip_missing = CFG.get("recommend", {}).get("skip_missing_perf", False)
+        if _skip_missing and candidates:
+            print(f"\n📥 正在拉取深度数据以筛掉缺失收益的基金...")
+            _perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
+            _filtered = []
+            _total = len(candidates)
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                def _check_one(c: dict) -> dict | None:
+                    try:
+                        d = get_scoring_data(c["code"])
+                        if not d.get("n"):
+                            return None
+                        if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in _perf_keys):
+                            return None
+                        return c
+                    except Exception:
+                        return None
+                _futs = {executor.submit(_check_one, c): c for c in candidates}
+                for i, _fut in enumerate(as_completed(_futs), 1):
+                    _r = _fut.result()
+                    if _r:
+                        _filtered.append(_r)
+                    if i % 50 == 0:
+                        print(f"     进度: {i}/{_total}")
+            candidates = _filtered
+            print(f"   筛掉缺失收益数据后: {len(candidates)} 只")
 
         if candidates:
             update_heartbeat("fund_recommend", progress=1, total=1, status="保存候选列表")
