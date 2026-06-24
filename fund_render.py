@@ -86,7 +86,7 @@ def _pipe_table_to_html(ranking_lines: list[str]) -> str:
                         num_str = cell.replace("%", "").replace("+", "").replace(",", "")
                         if num_str.lstrip("-").replace(".", "").isdigit():
                             num = float(num_str)
-                            cell_color = "#66bb6a" if num > 0 else ("#ef5350" if num < 0 else "#bbb")
+                            cell_color = "#ef5350" if num > 0 else ("#66bb6a" if num < 0 else "#bbb")
                     except (ValueError, TypeError):
                         pass
                     cp += f"<td style=\"padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:{cell_color};white-space:nowrap;\">{_html.escape(cell)}</td>" 
@@ -217,6 +217,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     """生成自选基金完整数据 HTML 表格（Web 版，维度列动态跟随 SCORE_DIMS）"""
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
+    _RETURN_DIMS = {"近一周收益","近1月收益","近3月收益","近6月收益","近1年收益","近2年收益","近3年收益","年化收益率"}
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 自选基金完整数据</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -272,6 +273,8 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                     lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
                     if lower_better:
                         color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
+                    elif dim_name in _RETURN_DIMS:
+                        color = "#ef5350" if raw_val > 0 else ("#66bb6a" if raw_val < 0 else "#bbb")
                     else:
                         color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
             parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}white-space:nowrap;" {title_attr}>{display_val}</td>')
@@ -293,6 +296,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
     dims_shown = dim_names
+    _RETURN_DIMS = {"近一周收益","近1月收益","近3月收益","近6月收益","近1年收益","近2年收益","近3年收益","年化收益率"}
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              f'<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP {_show_top} \uff08\u5168\u7ef4\u5ea6\uff09</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -327,7 +331,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;"><span onclick="showHoldings(\'{_fund_code}\',\'{_fund_name}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_html.escape(str(r.get("n","")))}</span>{warn} <span style="color:#666;font-family:Consolas;font-size:12px;">{_fund_code}</span></td>')
         # 涨跌（当日实时涨跌幅）
         day_raw = r.get("day", "")
-        day_color = "#66bb6a" if day_raw.startswith("+") else ("#ef5350" if day_raw.startswith("-") else "#888")
+        day_color = "#ef5350" if day_raw.startswith("+") else ("#66bb6a" if day_raw.startswith("-") else "#888")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
@@ -347,6 +351,8 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
                     lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
                     if lower_better:
                         color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
+                    elif dim_name in _RETURN_DIMS:
+                        color = "#ef5350" if raw_val > 0 else ("#66bb6a" if raw_val < 0 else "#bbb")
                     else:
                         color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
             parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}" {title_attr}>{display_val}</td>')
