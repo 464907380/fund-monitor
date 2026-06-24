@@ -285,7 +285,7 @@ def _run_scoring_pipeline(candidates: list) -> list[tuple]:
             # 筛选缺失收益表现维度的基金
             if _SKIP_MISSING_PERF:
                 perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
-                missing = [k for k in perf_keys if d.get(k) is None or d.get(k) == ""]
+                missing = [k for k in perf_keys if d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0)]
                 if missing:
                     log.debug("跳过 %s(%s): 缺失收益维度 %s", name, code, missing)
                     return None
