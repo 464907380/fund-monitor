@@ -18,6 +18,9 @@ fund_watch.log
 .monitor_state.json
 
 # 全球指数缓存（自动生成）
+
+# 用户监控列表（通过页面增删，非代码）
+fund_list.json
 .global_cache.json
 
 # 涨跌家数历史（自动生成）
