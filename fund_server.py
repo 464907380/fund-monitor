@@ -85,25 +85,39 @@ def _stop_task(task_id: str) -> bool:
         return False
 
 
-def _spawn_recommend() -> None:
-    """启动推荐任务，完成后自动清理心跳"""
+def _spawn_recommend() -> bool:
+    """启动推荐任务，返回是否成功"""
     global _recommend_proc
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
-    write_heartbeat("fund_recommend")
-    proc = subprocess.Popen(
-        [sys.executable, script],
-        cwd=_SCRIPT_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    with _proc_lock:
-        _recommend_proc = proc
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, script],
+            cwd=_SCRIPT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # 确认进程已成功启动且仍在运行，再写心跳
+        try:
+            proc.wait(timeout=3)
+            return False  # 进程在3秒内退出=启动失败
+        except subprocess.TimeoutExpired:
+            pass  # 进程还在运行，正常
+        write_heartbeat("fund_recommend")
+        with _proc_lock:
+            _recommend_proc = proc
 
-    def _wait_and_cleanup(p=proc) -> None:
-        p.wait()
+        def _wait_and_cleanup(p=proc) -> None:
+            p.wait()
+            clear_heartbeat("fund_recommend")
+            with _proc_lock:
+                if _recommend_proc is p:
+                    _recommend_proc = None
+
+        threading.Thread(target=_wait_and_cleanup, daemon=True).start()
+        return True
+    except Exception:
         clear_heartbeat("fund_recommend")
-
-    threading.Thread(target=_wait_and_cleanup, daemon=True).start()
+        return False
 
 
 def _spawn_briefing() -> None:
@@ -464,26 +478,85 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/recommend-table":
-            """返回市场优选全维度表格 HTML（用缓存数据快速生成，补充实时涨跌）"""
+            """返回市场优选全维度表格 HTML（实时拉取评分数据）"""
             try:
-                from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
-                from fund_watch import _parse_real_time
-                _saved = _load_saved_recommend_data()
-                if _saved:
-                    # 单独补充实时涨跌（轻量请求，不拉全量数据）
-                    for entry in _saved:
-                        try:
-                            td = _parse_real_time(entry.get("code", ""))
-                            entry["day"] = f"{td:+.2f}%" if td is not None else ""
-                        except Exception:
-                            entry["day"] = entry.get("day", "")
-                    html = _web_rich_recommend_table(_saved)
-                else:
-                    html = ""
-                if html:
-                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
-                else:
-                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
+                from fund_render import _web_rich_recommend_table, _show_top
+                from fund_watch import get_scoring_data, _parse_real_time
+                from fund_scoring import calc_score_detail
+
+                rec_path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
+                if not os.path.exists(rec_path):
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"},
+                               "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
+                    return
+                with open(rec_path, encoding="utf-8") as _fr:
+                    rec_data = json.load(_fr).get("results", [])
+                if not rec_data:
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"},
+                               "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
+                    return
+
+                # 取 TOP N 基金代码（优先选原始评分高的）
+                top_codes = [(r["code"], r.get("name", "")) for r in rec_data[:_show_top]]
+
+                def _fetch_one(code: str, name: str) -> dict | None:
+                    """拉取一只基金的实时评分数据"""
+                    try:
+                        d = get_scoring_data(code)
+                        if not d.get("n"):
+                            return None
+                        # 计算近一周涨跌幅
+                        navs = d.get("nav", [])
+                        f5_str = ""
+                        if len(navs) >= 5:
+                            pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
+                            f5_str = f"{pct:+.1f}%"
+                        d["f5"] = f5_str
+                        # 实时涨跌
+                        td = _parse_real_time(code)
+                        day_str = f"{td:+.2f}%" if td is not None else ""
+                        # 评分
+                        score_d = {k: d.get(k) for k in (
+                            "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
+                            "annual_return", "sharpe", "sortino",
+                            "profit_ratio", "win_rate", "recovery", "calmar",
+                            "max_dd", "volatility", "max_loss_days",
+                            "sc", "rate", "inst",
+                        )}
+                        score, details, skipped = calc_score_detail(score_d)
+                        return {
+                            "n": d.get("n", name), "code": code,
+                            "day": day_str, "score": score,
+                            "score_detail": details, "_skipped_weight": skipped,
+                            "annual_return": d.get("annual_return"),
+                            "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
+                            "f5": f5_str, "sy6": d.get("sy6"),
+                            "sy2": d.get("sy2"), "sy3": d.get("sy3"),
+                            "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),
+                            "profit_ratio": d.get("profit_ratio"),
+                            "win_rate": d.get("win_rate"),
+                            "recovery": d.get("recovery"), "calmar": d.get("calmar"),
+                            "max_dd": d.get("max_dd"),
+                            "volatility": d.get("volatility"),
+                            "max_loss_days": d.get("max_loss_days"),
+                            "sc": d.get("sc"), "rate": d.get("rate"),
+                            "inst": d.get("inst"), "mgr": d.get("mgr", "")[:6],
+                        }
+                    except Exception:
+                        return None
+
+                entries: list[dict] = []
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                    fut_map = {executor.submit(_fetch_one, code, name): code for code, name in top_codes}
+                    for fut in concurrent.futures.as_completed(fut_map):
+                        result = fut.result()
+                        if result is not None:
+                            entries.append(result)
+
+                # 按实时评分重新排序
+                entries.sort(key=lambda x: x.get("score", 0), reverse=True)
+                html = _web_rich_recommend_table(entries)
+                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
             except Exception as e:
                 self._send(500, {"Content-Type": "text/html; charset=utf-8"},
                            f"<p style=\"color:#ef5350;\">获取推荐表格失败: {e}</p>".encode("utf-8"))
@@ -849,8 +922,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if _recommend_proc and _recommend_proc.poll() is None:
                         self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
                         return
-                _spawn_recommend()
-                self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
+                if _spawn_recommend():
+                    self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
+                else:
+                    self._send(*_json_response({"ok": False, "error": "推荐任务启动失败"}, 500))
             except Exception as e:
                 clear_heartbeat("fund_recommend")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
