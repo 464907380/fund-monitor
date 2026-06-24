@@ -10,7 +10,8 @@ from email.header import Header
 from email.mime.text import MIMEText
 
 from config import CFG
-from fund_scoring import SCORE_DIMS
+from fund_scoring import SCORE_DIMS, _score_piecewise
+import sys as _sys
 from fund_utils import HISTORY_DIR, log, _color_inline, _strip_html, _send_smtp, send_wechat
 from fund_utils import get_secret as _get_secret
 
@@ -217,7 +218,6 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     """生成自选基金完整数据 HTML 表格（Web 版，维度列动态跟随 SCORE_DIMS）"""
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
-    _RETURN_DIMS = {"近一周收益","近1月收益","近3月收益","近6月收益","近1年收益","近2年收益","近3年收益","年化收益率"}
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 自选基金完整数据</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -269,14 +269,8 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                 style_extra = ""
                 title_attr = ""
                 display_val = val
-                if isinstance(raw_val, (int, float)):
-                    lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
-                    if lower_better:
-                        color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
-                    elif dim_name in _RETURN_DIMS:
-                        color = "#ef5350" if raw_val > 0 else ("#66bb6a" if raw_val < 0 else "#bbb")
-                    else:
-                        color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
+                if raw_val is not None and raw_val != "":
+                    color = _curve_color(dim_name, raw_val)
             parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}white-space:nowrap;" {title_attr}>{display_val}</td>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:12px;color:#888;white-space:nowrap;">{_html.escape(str(r.get("mgr","")))}</td>')
         parts.append('</tr>')
@@ -296,7 +290,6 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
     dims_shown = dim_names
-    _RETURN_DIMS = {"近一周收益","近1月收益","近3月收益","近6月收益","近1年收益","近2年收益","近3年收益","年化收益率"}
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              f'<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP {_show_top} \uff08\u5168\u7ef4\u5ea6\uff09</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -347,14 +340,8 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
                 style_extra = ""
                 title_attr = ""
                 display_val = val
-                if isinstance(raw_val, (int, float)):
-                    lower_better = dim_name in ("波动率", "最大回撤", "最大连跌天数", "费率")
-                    if lower_better:
-                        color = "#66bb6a" if raw_val <= 10 else ("#ef5350" if raw_val >= 30 else "#ffa726")
-                    elif dim_name in _RETURN_DIMS:
-                        color = "#ef5350" if raw_val > 0 else ("#66bb6a" if raw_val < 0 else "#bbb")
-                    else:
-                        color = "#66bb6a" if raw_val > 0 else ("#ef5350" if raw_val < 0 else "#bbb")
+                if raw_val is not None and raw_val != "":
+                    color = _curve_color(dim_name, raw_val)
             parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}" {title_attr}>{display_val}</td>')
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
@@ -468,6 +455,38 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
     }
     fn = mapping.get(dim_name)
     return fn() if fn else "-"
+
+
+def _curve_color(dim_name: str, raw_val) -> str:
+    """基于评分曲线返回颜色：高分(≥80)绿、中分(40~80)橙、低分(<40)红"""
+    # 处理百分比字符串 "+3.5%" → 3.5
+    if isinstance(raw_val, str):
+        raw_val = raw_val.strip()
+        if raw_val.endswith("%"):
+            try:
+                raw_val = float(raw_val.rstrip("%").lstrip("+"))
+            except (ValueError, TypeError):
+                return "#bbb"
+    if not isinstance(raw_val, (int, float)):
+        return "#bbb"
+    # dim_name → curve_key（部分维度的数据key和曲线key不同）
+    _CURVE_KEY_MAP = {"基金规模": "scale"}
+    curve_key = _CURVE_KEY_MAP.get(dim_name) or _dim_value_to_key(dim_name)
+    curves = _sys.modules.get("fund_scoring")
+    if curves is None:
+        return "#bbb"
+    dim_curves = getattr(curves, "_DIM_CURVES", None)
+    if curve_key and dim_curves and curve_key in dim_curves:
+        points = dim_curves[curve_key].get("points", [])
+        if points and len(points) >= 2:
+            score = _score_piecewise(raw_val, points)
+            if score >= 80:
+                return "#66bb6a"   # 绿 - 优秀
+            elif score >= 40:
+                return "#ffa726"   # 橙 - 中等
+            else:
+                return "#ef5350"   # 红 - 偏差
+    return "#bbb"
 
 
 def _load_saved_recommend_data() -> list[dict]:
