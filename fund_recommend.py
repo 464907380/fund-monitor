@@ -192,19 +192,19 @@ def _score_one(code: str, name: str) -> dict | None:
         d = _get(code)
         if not d.get("n"):
             return None
-        # 筛掉缺失收益数据
-        if _SKIP_MISSING_PERF:
-            perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
-            if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in perf_keys):
-                log.debug("跳过 %s(%s): 缺失收益维度", name, code)
-                return None
-        # 计算近一周涨跌幅
+        # 计算近一周涨跌幅（需在缺失检查前计算，因为 f5 不在原始数据中）
         navs = d.get("nav", [])
         f5_val = ""
         if len(navs) >= 5:
             pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
             f5_val = f"{pct:+.1f}%"
         d["f5"] = f5_val
+        # 筛掉缺失收益数据
+        if _SKIP_MISSING_PERF:
+            perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
+            if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in perf_keys):
+                log.debug("跳过 %s(%s): 缺失收益维度", name, code)
+                return None
         score = _calc_score(d)
         return {
             "code": code, "name": name, "score": score,
