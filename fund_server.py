@@ -121,25 +121,36 @@ def _spawn_recommend() -> bool:
         return False
 
 
-def _spawn_briefing() -> None:
-    """启动晚报生成，完成后自动清理心跳"""
+def _spawn_briefing() -> bool:
+    """启动晚报生成，完成后自动清理心跳，返回是否成功"""
     global _briefing_proc
     script = os.path.join(_SCRIPT_DIR, "fund_watch.py")
-    write_heartbeat("fund_briefing")
-    proc = subprocess.Popen(
-        [sys.executable, script],
-        cwd=_SCRIPT_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    with _proc_lock:
-        _briefing_proc = proc
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, script],
+            cwd=_SCRIPT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # 确认进程已成功启动且仍在运行，再写心跳
+        try:
+            proc.wait(timeout=3)
+            return False  # 进程在3秒内退出=启动失败
+        except subprocess.TimeoutExpired:
+            pass  # 进程还在运行，正常
+        write_heartbeat("fund_briefing")
+        with _proc_lock:
+            _briefing_proc = proc
 
-    def _wait_and_cleanup(p=proc) -> None:
-        p.wait()
+        def _wait_and_cleanup(p=proc) -> None:
+            p.wait()
+            clear_heartbeat("fund_briefing")
+
+        threading.Thread(target=_wait_and_cleanup, daemon=True).start()
+        return True
+    except Exception:
         clear_heartbeat("fund_briefing")
-
-    threading.Thread(target=_wait_and_cleanup, daemon=True).start()
+        return False
 
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -894,8 +905,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if _briefing_proc and _briefing_proc.poll() is None:
                         self._send(*_json_response({"ok": False, "error": "晚报生成任务正在运行中"}))
                         return
-                _spawn_briefing()
-                self._send(*_json_response({"ok": True, "message": "晚报生成已启动，约需 2 分钟"}))
+                if _spawn_briefing():
+                    self._send(*_json_response({"ok": True, "message": "晚报生成已启动，约需 2 分钟"}))
+                else:
+                    self._send(*_json_response({"ok": False, "error": "晚报生成启动失败"}, 500))
             except Exception as e:
                 clear_heartbeat("fund_briefing")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
