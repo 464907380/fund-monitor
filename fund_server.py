@@ -9,6 +9,7 @@ import sys
 import subprocess
 import http.server
 import threading
+import time
 import urllib.parse
 import concurrent.futures
 import urllib.request
@@ -154,6 +155,9 @@ def _spawn_briefing() -> bool:
 
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# ── fund-table 缓存 ──
+_fund_table_cache: tuple[float, str] | None = None
+_FUND_TABLE_CACHE_TTL = 30  # 秒
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
 _CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
 _PORT = 8080
@@ -496,13 +500,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 from fund_watch import _parse_real_time
                 _saved = _load_saved_recommend_data()
                 if _saved:
-                    # 单独补充实时涨跌（轻量请求）
-                    for entry in _saved:
+                    # 并行补充实时涨跌
+                    def _fill_day(e: dict) -> None:
                         try:
-                            td = _parse_real_time(entry.get("code", ""))
-                            entry["day"] = f"{td:+.2f}%" if td is not None else ""
+                            td = _parse_real_time(e.get("code", ""))
+                            e["day"] = f"{td:+.2f}%" if td is not None else ""
                         except Exception:
-                            entry["day"] = entry.get("day", "")
+                            e["day"] = e.get("day", "")
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as _exe:
+                        list(_exe.map(_fill_day, _saved))
                     html = _web_rich_recommend_table(_saved)
                 else:
                     html = ""
@@ -549,6 +555,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/fund-table":
             """为自选基金生成完整数据富表格（含评分）—— 并行拉取数据"""
+            # 短缓存：30秒内不重复拉取
+            global _fund_table_cache
+            now = time.time()
+            if _fund_table_cache and now - _fund_table_cache[0] < _FUND_TABLE_CACHE_TTL:
+                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _fund_table_cache[1].encode("utf-8"))
+                return
             try:
                 from fund_render import _web_rich_fund_table
                 from fund_watch import get
@@ -625,6 +637,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 rows.sort(key=lambda r: order.get(r["code"], 999))
 
                 html = _web_rich_fund_table(rows)
+                _fund_table_cache = (now, html)
                 self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
             except Exception as e:
                 self._send(500, {"Content-Type": "text/html; charset=utf-8"},
