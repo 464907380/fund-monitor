@@ -600,8 +600,11 @@ def main() -> None:
         # 推送（两条通道共用推荐排行数据）
         update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="获取市场优选")
         ranking_lines = _format_recommend_rankings() if raw_rows else None
+        # 主表只展示自选基金，推荐排行单独生成
+        self_codes = {f["code"] for f in FUND_LIST}
+        self_rows = [r for r in raw_rows if r["code"] in self_codes]
         update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="推送中")
-        push("📊 基金晚报", raw_rows, all_alerts, today_str, ranking_lines)
+        push("📊 基金晚报", self_rows, all_alerts, today_str, ranking_lines)
         update_heartbeat("fund_briefing", progress=total_steps, total=total_steps, status="完成")
         log.info("====== 基金晚报 %s 完成 ======", today_str)
     finally:
