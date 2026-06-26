@@ -603,6 +603,59 @@ def main() -> None:
         # 主表只展示自选基金，推荐排行单独生成
         self_codes = {f["code"] for f in FUND_LIST}
         self_rows = [r for r in raw_rows if r["code"] in self_codes]
+        # 补充推荐结果中缺失的自选基金（评分过低未入选推荐列表的基金）
+        found_codes = {r["code"] for r in self_rows}
+        missing_codes = self_codes - found_codes
+        if missing_codes:
+            log.info("补充 %d 只自选基金数据（未在推荐结果中）: %s", len(missing_codes), ",".join(sorted(missing_codes)))
+            update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status=f"补充{len(missing_codes)}只自选基金...")
+            for code in sorted(missing_codes):
+                try:
+                    d = get(code)
+                    if not d.get("n"):
+                        log.warning("  跳过 %s：未获取到数据", code)
+                        continue
+                    navs = d.get("nav", [])
+                    td = d.get("td")
+                    day_s = f"{td:+.2f}%" if td is not None else ""
+                    f5_s = ""
+                    if len(navs) >= 5:
+                        pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
+                        f5_s = f"{pct:+.1f}%"
+                    score_d = {k: d.get(k) for k in (
+                        "y1","m3","m1","f5","sy6","sy2","sy3",
+                        "annual_return","sharpe","sortino",
+                        "profit_ratio","win_rate","recovery","calmar",
+                        "max_dd","volatility","max_loss_days",
+                        "sc","rate","inst",
+                    )}
+                    score, details, skipped = calc_score_detail(score_d)
+                    name = d.get("n", code)
+                    row = {
+                        "code": code, "name": name, "name_short": name[:12],
+                        "day": day_s,
+                        "f5": f5_s,
+                        "m1": f"{d['m1']:+.1f}%" if d.get("m1") is not None else "",
+                        "m3": f"{d['m3']:+.1f}%" if d.get("m3") is not None else "",
+                        "y1": f"{d['y1']:+.1f}%" if d.get("y1") is not None else "",
+                        "score": score,
+                        "mgr": (d.get("mgr", "") or "")[:6],
+                        "annual_return": d.get("annual_return"),
+                        "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),
+                        "max_dd": d.get("max_dd"), "win_rate": d.get("win_rate"),
+                        "profit_ratio": d.get("profit_ratio"),
+                        "recovery": d.get("recovery"),
+                        "sy3": d.get("sy3"), "sy2": d.get("sy2"),
+                        "sy6": d.get("sy6"),
+                        "volatility": d.get("volatility"),
+                        "calmar": d.get("calmar"),
+                        "max_loss_days": d.get("max_loss_days"),
+                        "inst": d.get("inst"), "sc": d.get("sc"), "rate": d.get("rate"),
+                    }
+                    self_rows.append(row)
+                    log.info("  ✅ %s(%s) 评分%.1f（补充获取）", name, code, score)
+                except Exception as e:
+                    log.warning("  跳过 %s：获取失败 %s", code, e)
         update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="推送中")
         push("📊 基金晚报", self_rows, all_alerts, today_str, ranking_lines)
         update_heartbeat("fund_briefing", progress=total_steps, total=total_steps, status="完成")
