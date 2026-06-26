@@ -568,7 +568,7 @@ def main() -> None:
                 "code": code,
                 "name": name,
                 "name_short": name[:12],
-                "day": "-",
+                "day": item.get("day", "-"),
                 "f5": item.get("f5", ""),
                 "m1": item.get("m1", ""),
                 "m3": item.get("m3", ""),
