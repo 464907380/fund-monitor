@@ -79,18 +79,27 @@ def _pipe_table_to_html(ranking_lines: list[str]) -> str:
                 header_done = True
             else:
                 cp += '<tr>'
-                for c in clean.strip("|").split("|"):
+                for ci, c in enumerate(clean.strip("|").split("|")):
                     cell = c.strip()
-                    # 判断颜色：数值正绿负红
+                    # 列对齐：基金名（第3列，索引2）靠左
+                    align = "left" if ci == 2 else "center"
+                    # 颜色：评分（第4列，索引3）按值渐变
                     cell_color = "#bbb"
-                    try:
-                        num_str = cell.replace("%", "").replace("+", "").replace(",", "")
-                        if num_str.lstrip("-").replace(".", "").isdigit():
-                            num = float(num_str)
-                            cell_color = "#ef5350" if num > 0 else ("#66bb6a" if num < 0 else "#bbb")
-                    except (ValueError, TypeError):
-                        pass
-                    cp += f"<td style=\"padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:{cell_color};white-space:nowrap;\">{_html.escape(cell)}</td>" 
+                    if ci == 3:
+                        try:
+                            sv = float(cell)
+                            cell_color = "#66bb6a" if sv >= 80 else "#ffa726" if sv >= 40 else "#ef5350"
+                        except (ValueError, TypeError):
+                            pass
+                    else:
+                        try:
+                            num_str = cell.replace("%", "").replace("+", "").replace(",", "")
+                            if num_str.lstrip("-").replace(".", "").isdigit():
+                                num = float(num_str)
+                                cell_color = "#ef5350" if num > 0 else ("#66bb6a" if num < 0 else "#bbb")
+                        except (ValueError, TypeError):
+                            pass
+                    cp += f"<td style=\"padding:3px 6px;text-align:{align};border-bottom:1px solid #333;color:{cell_color};white-space:nowrap;\">{_html.escape(cell)}</td>" 
                 cp += '</tr>'
             continue
         if not in_table:
