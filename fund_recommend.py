@@ -188,7 +188,7 @@ def _print_results(results: list[dict]) -> None:
 def _score_one(code: str, name: str) -> dict | None:
     """单只基金评分"""
     try:
-        from fund_watch import get_scoring_data as _get
+        from fund_watch import get as _get
         d = _get(code)
         if not d.get("n"):
             return None
@@ -239,7 +239,7 @@ def main() -> None:
 
         candidates = _filter_candidates(rows)
         print(f"   y1 >= {_MIN_Y1}% 筛选后: {len(candidates)} 只")
-        est_min = len(candidates) * 1 // 60
+        est_min = len(candidates) * 2 // 60
         print(f"   ⏱ 预计评分耗时约 {est_min} 分钟")
 
         # ── 并行评分 ──
