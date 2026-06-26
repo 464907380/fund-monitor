@@ -215,6 +215,7 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
     盘中检查基金持仓个股的涨跌，返回警报列表。
     stock_states: 个股状态字典（key=f"{fund_code}:{stock_code}"）
     """
+    now = datetime.datetime.now().strftime("%H:%M")
     alerts: list[str] = []
     holds = _get_fund_holdings(fund_code)
     if not holds:
@@ -251,12 +252,12 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
         diff = chg - prev
         if diff <= STOCK_DROP_RED:
             alerts.append(
-                f"🔴 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
+                f"🔴 <font color=\"warning\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"急跌 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
         elif diff >= STOCK_JUMP_RED:
             alerts.append(
-                f"🟢 <font color=\"info\">{fund_name}持仓{stock_name}({stock_code})"
+                f"🟢 <font color=\"info\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"急涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
 
@@ -265,12 +266,12 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
         accum = chg - first_chg
         if accum <= STOCK_ACCUM_DROP_RED:
             alerts.append(
-                f"🔴 <font color=\"warning\">{fund_name}持仓{stock_name}({stock_code})"
+                f"🔴 <font color=\"warning\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"当日累计急跌 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
             )
         elif accum >= STOCK_ACCUM_JUMP_RED:
             alerts.append(
-                f"🟢 <font color=\"info\">{fund_name}持仓{stock_name}({stock_code})"
+                f"🟢 <font color=\"info\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"当日累计急涨 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
             )
 
@@ -292,6 +293,7 @@ def check_intraday(code: str, state: dict) -> list[str]:
     盘中检查一只基金，返回警报列表
     state: 当日状态（内存中维护）
     """
+    now = datetime.datetime.now().strftime("%H:%M")
     alerts: list[str] = []
 
 
@@ -316,12 +318,12 @@ def check_intraday(code: str, state: dict) -> list[str]:
         diff_once = gszzl - prev  # 与上次检查的差值
         if diff_once <= ALERT_DROP_ONCE:
             alerts.append(
-                f"🔴 <font color=\"warning\">{name}({code}) 急跌 {diff_once:+.1f}%"
+                f"🔴 <font color=\"warning\">[{now}] {name}({code}) 急跌 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
             )
         elif diff_once >= ALERT_JUMP_ONCE:
             alerts.append(
-                f"🟢 <font color=\"info\">{name}({code}) 急涨 {diff_once:+.1f}%"
+                f"🟢 <font color=\"info\">[{now}] {name}({code}) 急涨 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
             )
 
@@ -329,12 +331,12 @@ def check_intraday(code: str, state: dict) -> list[str]:
         accum = gszzl - state["first_td"]  # 从当天第一次检查到现在的总变动
         if accum <= ALERT_ACCUM_DROP:
             alerts.append(
-                f"🔴 <font color=\"warning\">{name}({code}) 当日累计跌 {accum:.1f}%"
+                f"🔴 <font color=\"warning\">[{now}] {name}({code}) 当日累计跌 {accum:.1f}%"
                 f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）</font>"
             )
         elif accum >= ALERT_ACCUM_JUMP:
             alerts.append(
-                f"🟢 <font color=\"info\">{name}({code}) 当日累计涨 {accum:.1f}%"
+                f"🟢 <font color=\"info\">[{now}] {name}({code}) 当日累计涨 {accum:.1f}%"
                 f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）</font>"
             )
 
