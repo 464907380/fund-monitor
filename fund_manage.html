@@ -612,7 +612,7 @@ async function addFunds() {
     if (d.invalid.length) parts.push('⚠️ 格式错误 ' + d.invalid.join(', '));
     showMsg(parts.join('；') + `（当前 ${d.total} 只）`, 'ok');
     await loadList();
-    await loadSavedTables();
+    loadSavedTables();
   } else {
     showMsg('❌ ' + (d.error || '添加失败'), 'err');
   }
@@ -643,7 +643,7 @@ async function confirmRemove() {
   if (d.ok) {
     showMsg('已移除 ' + code + '（当前 ' + d.total + ' 只）', 'ok');
     await loadList();
-    await loadSavedTables();
+    loadSavedTables();
   } else {
     showMsg('❌ ' + (d.error || '移除失败'), 'err');
   }
