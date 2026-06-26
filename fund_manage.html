@@ -372,14 +372,14 @@ input, select, button { font-family: inherit; outline: none; }
     <div id="briefContent" style="padding:0;font-size:12px;color:#ccc;"></div>
   </div>
 
-  <div class="card" id="fundFullTableCard" style="display:none;">
+  <div class="card" id="fundFullTableCard">
     <div class="divider"></div>
-    <div id="fundFullTable" style="padding:0;font-size:12px;color:#ccc;"></div>
+    <div id="fundFullTable" style="padding:0;font-size:12px;color:#666;"><p style="padding:12px 4px;">⏳ 加载中…</p></div>
   </div>
 
-  <div class="card" id="recommendFullTableCard" style="display:none;">
+  <div class="card" id="recommendFullTableCard">
     <div class="divider"></div>
-    <div id="recommendFullTable" style="padding:0;font-size:12px;color:#ccc;"></div>
+    <div id="recommendFullTable" style="padding:0;font-size:12px;color:#666;"><p style="padding:12px 4px;">⏳ 加载中…</p></div>
   </div>
 
   <div class="card">
@@ -612,6 +612,7 @@ async function addFunds() {
     if (d.invalid.length) parts.push('⚠️ 格式错误 ' + d.invalid.join(', '));
     showMsg(parts.join('；') + `（当前 ${d.total} 只）`, 'ok');
     await loadList();
+    await loadSavedTables();
   } else {
     showMsg('❌ ' + (d.error || '添加失败'), 'err');
   }
@@ -642,6 +643,7 @@ async function confirmRemove() {
   if (d.ok) {
     showMsg('已移除 ' + code + '（当前 ' + d.total + ' 只）', 'ok');
     await loadList();
+    await loadSavedTables();
   } else {
     showMsg('❌ ' + (d.error || '移除失败'), 'err');
   }
