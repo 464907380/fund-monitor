@@ -55,11 +55,6 @@ def api_url(name: str, **kwargs) -> str:
     return url
 
 
-def api_timeout(name: str, default: int = 10) -> int:
-    """获取 API 超时配置，单位秒"""
-    return CFG.get("network", {}).get("timeout", {}).get(name, default)
-
-
 def _warn_missing_secrets() -> None:
     """启动时检查密钥配置，缺失时输出警告"""
     missing = []

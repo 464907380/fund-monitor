@@ -30,11 +30,6 @@ def _get_email_auth() -> str | None:
     """惰性读取 QQ 邮箱授权码"""
     return _get_secret("QQ_MAIL_AUTH")
 
-ALERT_DROP_1M = CFG.get("fund_watch", {}).get("alert_drop_1m", -10)
-ALERT_DROP_1M_RED = CFG.get("fund_watch", {}).get("alert_drop_1m_red", -15)
-ALERT_SCALE_2X = CFG.get("fund_watch", {}).get("alert_scale_2x", 2.0)
-ALERT_SCALE_1_5X = CFG.get("fund_watch", {}).get("alert_scale_1_5x", 1.5)
-
 _show_top = CFG.get("recommend", {}).get("show_top", 20)
 
 

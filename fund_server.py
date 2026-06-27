@@ -247,7 +247,6 @@ def _json_response(data, status=200):
 
 def _check_task_status(taskname: str) -> dict:
     """查询计划任务/定时器状态（支持 Windows schtasks 和 Linux systemd）"""
-    import subprocess
     # 先尝试 Windows schtasks
     try:
         r = subprocess.run(

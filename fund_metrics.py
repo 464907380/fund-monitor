@@ -2,9 +2,6 @@
 基金净值指标计算模块
 """
 import math
-from typing import Callable
-
-
 def _calc_nav_metrics(full_nav: list[dict]) -> dict:
     """
     从完整净值列表计算风险指标（单趟扫描优化版）。

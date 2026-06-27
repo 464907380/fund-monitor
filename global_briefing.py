@@ -52,19 +52,6 @@ A_INDICES = [
     ("sz399300", "沪深300"),
 ]
 
-GLOBAL_INDICES = [
-    ("gb_$dji",   "道琼斯"),
-    ("gb_$ixic",  "纳斯达克"),
-    ("gb_$inx",   "标普500"),
-    ("gb_$hsi",   "恒生指数"),
-    ("gb_$n225",  "日经225"),
-    ("gb_$ks11",  "韩国KOSPI"),
-    ("gb_$ftse",  "英国富时100"),
-    ("gb_$gdaxi", "德国DAX"),
-    ("gb_$fchi",  "法国CAC40"),
-    ("gb_$ssmi",  "瑞士SMI"),
-]
-
 _GLOBAL_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".global_cache.json")
 
 
@@ -409,11 +396,6 @@ def build_briefing_text(a_shares: list[dict] | None = None,
     lines.append("⏰ 美股/欧股为上一交易日收盘")
 
     return "\n".join(lines)
-
-
-def build_briefing() -> str:
-    """兼容旧接口：返回 Markdown（企业微信推送用）"""
-    return build_briefing_md()
 
 
 def _fetch_sentiment() -> dict | None:
