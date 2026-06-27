@@ -563,7 +563,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             try:
                 from fund_render import _web_rich_fund_table
-                from fund_watch import get
+                from fund_watch import get_scoring_data, _parse_real_time
                 from fund_scoring import calc_score_detail
                 # 直接从文件读取基金列表（不使用缓存，因为页面可能刚增删过）
                 fl_path = os.path.join(_SCRIPT_DIR, "fund_list.json")
@@ -577,9 +577,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 def _process_one(code: str) -> dict | None:
                     """拉取一只基金数据并计算评分"""
                     try:
-                        d = get(code)
+                        d = get_scoring_data(code)
                         if not d.get("n"):
                             return None
+                        _td = _parse_real_time(code)
+                        d["td"] = _td
                         navs = d.get("nav", [])
                         td = d.get("td")
                         day_s = f"{td:+.2f}%" if td is not None else ""
