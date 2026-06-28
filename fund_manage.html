@@ -788,7 +788,6 @@ async function stopTask(taskId) {
 }
 
 
-var lastBriefingMtime = 0;
 function updateHeartbeat() {
   fetch(API + '/api/heartbeat').then(r => r.json()).then(d => {
     if (!d.ok) return;
@@ -804,11 +803,6 @@ function updateHeartbeat() {
         el.style.display = 'none';
       }
     });
-    
-    if (lastBriefingMtime > 0 && d.briefing_mtime && d.briefing_mtime !== lastBriefingMtime) {
-      loadBriefing();
-    }
-    if (d.briefing_mtime) { lastBriefingMtime = d.briefing_mtime; }
   });
 }
 
@@ -816,7 +810,7 @@ loadFeatures();
 updateHeartbeat();
 // 页面加载时尝试恢复已保存的推荐/基金表格
 loadSavedTables();
-setInterval(updateHeartbeat, 10000);
+setInterval(updateHeartbeat, 30000);
 
 /** 页面加载时恢复已保存的推荐/自选基金表格 */
 async function loadSavedTables() {
