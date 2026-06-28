@@ -803,6 +803,13 @@ function updateHeartbeat() {
         el.style.display = 'none';
       }
     });
+    // 简报文件有更新时自动刷新（30秒轮询足够及时）
+    if (d.briefing_mtime && window._briefingMtime && d.briefing_mtime !== window._briefingMtime) {
+      window._briefingMtime = d.briefing_mtime;
+      loadBriefing();
+    } else if (d.briefing_mtime && !window._briefingMtime) {
+      window._briefingMtime = d.briefing_mtime; // 首次初始化，不触发刷新
+    }
   });
 }
 
