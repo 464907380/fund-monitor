@@ -308,40 +308,6 @@ def _validate_fund_code(code: str) -> None:
         raise ValueError(f"非法基金代码: {code}")
 
 
-# ── 主检查逻辑 ────────────────────────────────
-
-
-# ── 推荐排行 ────────────────────────────────────
-        "day": day_s,
-        "f5": f5,
-        "m1": f"{_v:+.1f}%" if (_v := d.get("m1")) is not None else "",
-        "m3": f"{_v:+.1f}%" if (_v := d.get("m3")) is not None else "",
-        "y1": f"{_v:+.1f}%" if (_v := d.get("y1")) is not None else "",
-        "mgr": d.get("mgr", "")[:6],
-        "holds": d.get("holds", []),
-        "_y1_raw": d.get("y1"),
-        "_rank": d.get("rank"),
-        "_rank_total": d.get("rank_total"),
-        "_sharpe": d.get("sharpe"),
-        "_sortino": d.get("sortino"),
-        "_max_dd": d.get("max_dd"),
-        "_win_rate": d.get("win_rate"),
-        "_inst": d.get("inst"),
-        "_sc": d.get("sc"),
-        "_rate": d.get("rate"),
-        "_annual_return": d.get("annual_return"),
-        "_profit_ratio": d.get("profit_ratio"),
-        "_recovery": d.get("recovery"),
-        "_sy3": d.get("sy3"),
-        "_sy2": d.get("sy2"),
-        "_volatility": d.get("volatility"),
-        "_calmar": d.get("calmar"),
-        "_max_loss_days": d.get("max_loss_days"),
-        "_sy6": d.get("sy6"),
-    }
-    return row, alerts
-
-
 # ── 推荐排行 ────────────────────────────────────
 
 def main() -> None:
