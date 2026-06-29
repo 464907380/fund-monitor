@@ -550,22 +550,22 @@ def _fetch_fresh_recommend_data() -> list[dict]:
         codes = [(r.get("code", ""), r.get("name", "")) for r in recs[:_show_top]]
         codes = [(c, n) for c, n in codes if c]
 
-        from fund_watch import get
+        from fund_watch import get_scoring_data, _parse_real_time
         from fund_scoring import calc_score_detail, SCORE_DIMS
 
         fresh = []
         for code, cached_name in codes:
             try:
-                d = get(code)
+                d = get_scoring_data(code)
                 if not d.get("n"):
                     continue
-                # 补充日涨跌/近一周收益（get 不计算这些字段）
-                navs = d.get("nav", [])
-                td = d.get("td")
+                td = _parse_real_time(code)
+                d["td"] = td
                 d["day"] = f"{td:+.2f}%" if td is not None else ""
-                if navs and len(navs) >= 2:
-                    if len(navs) >= 5:
-                        d["f5"] = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"
+                # 补充近一周涨跌幅
+                navs = d.get("nav", [])
+                if navs and len(navs) >= 5:
+                    d["f5"] = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"
                 score_d = {
                     "annual_return": d.get("annual_return"),
                     "sharpe": d.get("sharpe"),

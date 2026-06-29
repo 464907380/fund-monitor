@@ -493,21 +493,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/recommend-table":
-            """返回市场优选全维度表格 HTML（从缓存文件读取）"""
+            """返回市场优选全维度表格 HTML（实时拉取 TOP N 基金数据）"""
             try:
-                from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
-                from fund_watch import _parse_real_time
-                _saved = _load_saved_recommend_data()
+                from fund_render import _web_rich_recommend_table, _fetch_fresh_recommend_data
+                _saved = _fetch_fresh_recommend_data()
                 if _saved:
-                    # 并行补充实时涨跌
-                    def _fill_day(e: dict) -> None:
-                        try:
-                            td = _parse_real_time(e.get("code", ""))
-                            e["day"] = f"{td:+.2f}%" if td is not None else ""
-                        except Exception:
-                            e["day"] = e.get("day", "")
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as _exe:
-                        list(_exe.map(_fill_day, _saved))
                     html = _web_rich_recommend_table(_saved)
                 else:
                     html = ""
