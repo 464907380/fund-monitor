@@ -326,6 +326,14 @@ TASK_DEFS = [
 
 class Handler(http.server.BaseHTTPRequestHandler):
 
+    # 静默常规轮询请求和耗时批量API，减少终端刷屏
+    _quiet_paths = {"/api/heartbeat", "/api/tasks", "/api/fund-table", "/api/recommend-table"}
+
+    def log_request(self, code: int | str = ..., size: int | str = ...) -> None:
+        if hasattr(self, "path") and self.path in self._quiet_paths:
+            return
+        super().log_request(code, size)
+
     def _send(self, status: int, headers: dict, body: bytes):
         self.send_response(status)
         self.send_header("Access-Control-Allow-Origin", "*")
