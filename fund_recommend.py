@@ -106,6 +106,18 @@ def _filter_candidates(rows: list) -> list[dict]:
     return candidates
 
 
+def _config_hash() -> str:
+    """计算当前配置的哈希值，用于检测评分/筛选参数是否变化"""
+    import hashlib
+    from fund_scoring import SCORE_DIMS
+    parts = [
+        str(_TOP), str(_MIN_Y1), str(SHOW_TOP), str(_SKIP_MISSING_PERF),
+    ]
+    for name, fn, weight, desc in SCORE_DIMS:
+        parts.append(f"{name}|{weight}|{desc}")
+    return hashlib.md5("|".join(parts).encode()).hexdigest()
+
+
 def _save_result(results: list[dict]) -> bool:
     """保存评分结果到文件"""
     lock_file = _RESULT_FILE + ".lock"
@@ -126,6 +138,7 @@ def _save_result(results: list[dict]) -> bool:
 
         data = {
             "date": datetime.date.today().isoformat(),
+            "config_hash": _config_hash(),
             "results": results,
         }
         with open(_RESULT_FILE, "w", encoding="utf-8") as f:
@@ -228,6 +241,32 @@ def _score_one(code: str, name: str) -> dict | None:
 
 def main() -> None:
     try:
+        # 检查缓存是否仍有效（配置未变+同一天）
+        cur_hash = _config_hash()
+        cache_valid = False
+        if os.path.exists(_RESULT_FILE):
+            try:
+                with open(_RESULT_FILE, encoding="utf-8") as _f:
+                    old = json.load(_f)
+                if old.get("config_hash") == cur_hash and old.get("date") == datetime.date.today().isoformat():
+                    print("📋 评分配置与筛选条件未变化，使用缓存结果（仅更新涨跌）")
+                    cache_valid = True
+            except Exception:
+                pass
+
+        if cache_valid:
+            # 缓存有效：跳过拉取和评分，用当前曲线重算评分后保存
+            from fund_scoring import _calc_score
+            cached_results = old["results"]
+            for r in cached_results:
+                r["score"] = _calc_score(r)
+            cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            _save_result(cached_results)
+            print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
+            print("=" * 50)
+            _print_results(cached_results)
+            return
+
         print("=" * 60)
         print("🔍 基金优选推荐 — 全市场深度评分")
         print("=" * 60)
