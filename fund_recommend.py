@@ -258,16 +258,21 @@ def main() -> None:
             # 缓存有效：跳过拉取和评分，用当前曲线重算评分后保存
             from fund_scoring import _calc_score
             cached_results = old["results"]
-            for r in cached_results:
+            total = len(cached_results)
+            for i, r in enumerate(cached_results):
                 r["score"] = _calc_score(r)
+                if i % 100 == 0:
+                    update_heartbeat("fund_recommend", progress=i, total=total, status="重算评分")
             cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            update_heartbeat("fund_recommend", progress=total, total=total, status="更新涨跌")
             # 更新前 SHOW_TOP 只基金的实时涨跌
-            for r in cached_results[:SHOW_TOP]:
+            for i, r in enumerate(cached_results[:SHOW_TOP]):
                 try:
                     td = _fetch_fund_estimate(r.get("code", ""))
                     r["day"] = f"{td[1]:+.2f}%" if td is not None else r.get("day", "")
                 except Exception:
                     pass
+                update_heartbeat("fund_recommend", progress=i + 1, total=SHOW_TOP, status="涨跌")
             _save_result(cached_results)
             print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
             print("=" * 50)
