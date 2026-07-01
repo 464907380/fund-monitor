@@ -552,17 +552,16 @@ def _fetch_fresh_recommend_data() -> list[dict]:
 
         from fund_watch import get_scoring_data, _parse_real_time
         from fund_scoring import calc_score_detail, SCORE_DIMS
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        fresh = []
-        for code, cached_name in codes:
+        def _fetch_one(code: str) -> dict | None:
             try:
                 d = get_scoring_data(code)
                 if not d.get("n"):
-                    continue
+                    return None
                 td = _parse_real_time(code)
                 d["td"] = td
                 d["day"] = f"{td:+.2f}%" if td is not None else ""
-                # 补充近一周涨跌幅
                 navs = d.get("nav", [])
                 if navs and len(navs) >= 5:
                     d["f5"] = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"
@@ -592,9 +591,17 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                 d["score"] = score
                 d["score_detail"] = details
                 d["_skipped_weight"] = skipped
-                fresh.append(d)
+                return d
             except Exception:
-                continue
+                return None
+
+        fresh = []
+        with ThreadPoolExecutor(max_workers=20) as ex:
+            futs = {ex.submit(_fetch_one, code): code for code, _ in codes}
+            for fut in as_completed(futs):
+                d = fut.result()
+                if d:
+                    fresh.append(d)
 
         fresh.sort(key=lambda r: r.get("score", 0), reverse=True)
         return fresh
