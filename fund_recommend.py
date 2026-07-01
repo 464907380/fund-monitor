@@ -22,7 +22,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fund_utils import update_heartbeat
+from fund_utils import update_heartbeat, _fetch_fund_estimate
 
 try:
     from fund_watch import log, fetch
@@ -261,6 +261,13 @@ def main() -> None:
             for r in cached_results:
                 r["score"] = _calc_score(r)
             cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            # 更新前 SHOW_TOP 只基金的实时涨跌
+            for r in cached_results[:SHOW_TOP]:
+                try:
+                    td = _fetch_fund_estimate(r.get("code", ""))
+                    r["day"] = f"{td[1]:+.2f}%" if td is not None else r.get("day", "")
+                except Exception:
+                    pass
             _save_result(cached_results)
             print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
             print("=" * 50)
