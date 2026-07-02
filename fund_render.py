@@ -133,7 +133,7 @@ def _build_briefing_html(rows: list[dict], alerts: list[str], today: str,
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("m1"))}">{_m1}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("m3"))}">{_m3}</td>'
             + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-weight:600;font-family:Consolas;font-size:12px;white-space:nowrap;{_color_inline(r.get("y1"))}">{_y1}</td>'
-            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-size:12px;font-weight:600;color:#66bb6a;white-space:nowrap;">{r.get("score","")}</td>'
+            + f'<td style="padding:6px 4px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-size:12px;font-weight:600;color:{_score_color(r.get("score",0))};white-space:nowrap;">{r.get("score","")}</td>'
             + "</tr>"
         )
     html = tpl_html.replace("{{ROWS}}", "\n".join(row_htmls))
@@ -258,7 +258,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
-        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}</td>")
+        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}</td>")
         # 动态维度列
         for dim_name in dim_names:
             val = _get_dim_value(r, dim_name)
@@ -330,7 +330,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         day_raw = r.get("day", "")
         day_color = "#ef5350" if day_raw.startswith("+") else ("#66bb6a" if day_raw.startswith("-") else "#888")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}</td>')
-        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:#66bb6a;cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
+        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
             raw_val = r.get(_dim_value_to_key(dim_name))
@@ -459,6 +459,15 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
     }
     fn = mapping.get(dim_name)
     return fn() if fn else "-"
+
+
+def _score_color(score: float | int | str) -> str:
+    """评分颜色：高分(≥80)绿、中分(40~80)橙、低分(<40)红"""
+    try:
+        s = float(score)
+    except (ValueError, TypeError):
+        return "#bbb"
+    return "#66bb6a" if s >= 80 else "#ffa726" if s >= 40 else "#ef5350"
 
 
 def _curve_color(dim_name: str, raw_val) -> str:
