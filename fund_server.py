@@ -785,25 +785,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return
 
                 # 从推荐结果取维度值用于校准
-                codes = [(r["code"], r.get("name", "")) for r in rec_data]
-                if len(codes) > 1000:
-                    codes = codes[:1000]
-
                 # "越低越好"的维度
                 lower_better = {"波动率", "最大回撤", "最大连跌天数", "费率"}
                 # 需要解析百分号字符串的字段
                 pct_keys = {"f5"}
 
-                # 并行拉取实时数据
-                from fund_watch import get_scoring_data
-                all_data: list[dict] = []
-                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-                    _fut_map = {executor.submit(get_scoring_data, code): code for code, _ in codes}
-                    for _fut in concurrent.futures.as_completed(_fut_map):
-                        _d = _fut.result()
-                        if _d and _d.get("n"):
-                            all_data.append(_d)
-
+                # 直接使用推荐缓存中的维度数据（无需重新拉取）
+                all_data = rec_data
                 for dim in dims:
                     key = dim.get("key", "")
                     name = dim.get("name", "")
