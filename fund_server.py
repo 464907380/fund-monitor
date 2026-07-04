@@ -478,6 +478,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/stock-info":
+            """查询个股实时行情（腾讯财经接口，GBK解码）"""
+            try:
+                q = urllib.parse.parse_qs(parsed.query)
+                code = q.get("code", [""])[0]
+                if not code:
+                    self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
+                    return
+                _req = urllib.request.Request(f"http://qt.gtimg.cn/q={code}",
+                                              headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(_req, timeout=10) as r:
+                    raw = r.read()
+                text = raw.decode("gbk")
+                parts = text.split("~")
+                if len(parts) < 46:
+                    self._send(*_json_response({"ok": False, "error": "未找到股票信息"}, 404))
+                    return
+                def _n(idx):
+                    try:
+                        return float(parts[idx])
+                    except (ValueError, IndexError):
+                        return None
+                def _s(idx):
+                    try:
+                        return parts[idx].strip()
+                    except IndexError:
+                        return ""
+                data = {
+                    "name": _s(1), "code": _s(2),
+                    "price": _n(3), "prev_close": _n(4),
+                    "open": _n(5),
+                    "high": _n(33), "low": _n(34),
+                    "volume": _s(6), "amount": _s(37),
+                    "change_pct": _n(32), "change_amt": _n(31),
+                    "turnover_rate": _n(38), "amplitude": _n(43),
+                    "pe": _n(39),
+                    "market_cap": _s(45), "float_market_cap": _s(44),
+                    "high_52w": _s(47), "low_52w": _s(48),
+                    "chg_60d": _n(52),
+                }
+                self._send(*_json_response({"ok": True, "data": data}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/monitor-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _fmc:
