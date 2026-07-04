@@ -524,6 +524,140 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/stock-profile":
+            """查询个股公司概况+财务指标+股东结构（新浪F10，24h缓存）"""
+            try:
+                q = urllib.parse.parse_qs(parsed.query)
+                code = q.get("code", [""])[0]
+                if not code or not re.fullmatch(r"\d{6}", code):
+                    self._send(*_json_response({"ok": False, "error": "缺少有效code参数(6位数字)"}, 400))
+                    return
+                now = time.time()
+                _profile_cache: dict = globals().setdefault("_profile_cache", {})
+                if code in _profile_cache and now - _profile_cache[code][0] < 86400:
+                    self._send(*_json_response({"ok": True, "data": _profile_cache[code][1]}))
+                    return
+                import urllib.request as _ur
+
+                def _fetch_f10(path: str) -> str:
+                    url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/{path}"
+                    r = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                    return _ur.urlopen(r, timeout=15).read().decode("gbk", errors="ignore")
+
+                result: dict = {}
+
+                # 1. 公司概况
+                html = _fetch_f10(f"vCI_CorpInfo/stockid/{code}.phtml")
+                for pat, key in [
+                    (r'公司名称[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "company_name"),
+                    (r'主营业务[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "main_business"),
+                    (r'上市日期[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "listing_date"),
+                    (r'成立日期[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "establish_date"),
+                    (r'发行价格[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "issue_price"),
+                    (r'注册资本[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "registered_capital"),
+                    (r'组织形式[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "organization_form"),
+                    (r'公司网址[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "website"),
+                    (r'上市市场[：:]\s*</td>\s*<td[^>]*>(.*?)</td>', "listing_market"),
+                ]:
+                    m = re.search(pat, html)
+                    if m:
+                        val = re.sub(r'<[^>]+>', '', m.group(1)).strip()
+                        if val:
+                            result[key] = val
+
+                # 2. 财务指标（最新一期）
+                html = _fetch_f10(f"vFD_FinancialGuideLine/stockid/{code}/displaytype/4.phtml")
+                fin_rows = re.findall(
+                    r'<tr[^>]*>'
+                    r'<td[^>]*>(.*?)</td>'  # 指标名（含可能的<a>标签）
+                    r'\s*<td[^>]*>([^<]*)</td>'  # 最新一期值
+                    r'\s*<td[^>]*>([^<]*)</td>',  # 上一期值
+                    html, re.DOTALL
+                )
+                fin_map_exact = {
+                    "摊薄每股收益(元)": "eps",
+                    "每股净资产_调整前(元)": "bps",
+                    "净资产收益率(%)": "roe",
+                    "主营业务利润率(%)": "profit_margin",
+                    "销售净利率(%)": "net_margin",
+                    "净利润增长率(%)": "net_profit_growth",
+                    "主营业务收入增长率(%)": "revenue_growth",
+                    "资产负债率(%)": "debt_ratio",
+                    "流动比率": "current_ratio",
+                    "速动比率": "quick_ratio",
+                }
+                finances = {}
+                for name_cn_raw, val_latest, _ in fin_rows:
+                    name_clean = re.sub(r'<[^>]+>', '', name_cn_raw).strip()
+                    key = fin_map_exact.get(name_clean)
+                    if not key:
+                        # 模糊匹配
+                        if "摊薄" in name_clean and "每股收益" in name_clean:
+                            key = "eps"
+                        elif "每股净资产" in name_clean:
+                            key = "bps"
+                        elif "净资产收益率" in name_clean and "扣除非" not in name_clean:
+                            key = "roe"
+                        elif "主营业务收入增长率" in name_clean:
+                            key = "revenue_growth"
+                        elif "主营业务利润率" in name_clean:
+                            key = "profit_margin"
+                        elif "净利润增长率" in name_clean:
+                            key = "net_profit_growth"
+                        elif "资产负债率" in name_clean:
+                            key = "debt_ratio"
+                        elif "流动比率" in name_clean and "速动" not in name_clean:
+                            key = "current_ratio"
+                        elif "速动比率" in name_clean:
+                            key = "quick_ratio"
+                    if key and key not in finances:
+                        try:
+                            finances[key] = round(float(val_latest.strip()), 2)
+                        except (ValueError, TypeError):
+                            pass
+                if finances:
+                    result["finances"] = finances
+
+                # 3. 前5大股东
+                html = _fetch_f10(f"vCI_StockHolder/stockid/{code}/displaytype/4.phtml")
+                holder_rows = re.findall(
+                    r'<td[^>]*>\s*<div[^>]*>\s*(\d+)\s*</div>\s*</td>'
+                    r'\s*<td[^>]*>\s*<div[^>]*>(.*?)</div>\s*</td>'
+                    r'\s*<td[^>]*>\s*<div[^>]*>(.*?)</div>\s*</td>'
+                    r'\s*<td[^>]*>\s*<div[^>]*>(.*?)</div>\s*</td>',
+                    html, re.DOTALL
+                )
+                if not holder_rows:
+                    # 降级：尝试无<div>结构
+                    holder_rows = re.findall(
+                        r'<td[^>]*>(\d+)</td>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>',
+                        html, re.DOTALL
+                    )
+                shareholders = []
+                for num, name_raw, shares_raw, pct_raw in holder_rows[:5]:
+                    name_clean = re.sub(r'<[^>]+>', '', name_raw).strip()
+                    shares_clean = re.sub(r'<[^>]+>|&nbsp;', '', shares_raw).strip()
+                    pct_str = re.sub(r'<[^>]+>|&nbsp;|[↑↓\s]', '', pct_raw).strip()
+                    try:
+                        pct_val = round(float(pct_str), 2)
+                    except (ValueError, TypeError):
+                        pct_val = 0
+                    shareholders.append({"name": name_clean, "shares": shares_clean, "pct": pct_val})
+                if shareholders:
+                    result["shareholders"] = shareholders
+
+                # 4. 基金持股数
+                html = _fetch_f10(f"vCI_FundStockHolder/stockid/{code}.phtml")
+                fund_count = len(set(re.findall(r'<td[^>]*>([\u4e00-\u9fff]{2,30}?基金)</td>', html)))
+                if fund_count:
+                    result["fund_count"] = fund_count
+
+                _profile_cache[code] = (now, result)
+                self._send(*_json_response({"ok": True, "data": result}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/monitor-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _fmc:

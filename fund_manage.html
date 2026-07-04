@@ -1910,73 +1910,131 @@ function showStockInfo(name, fullCode) {
     + '<div id="stockInfoContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
     + '<div style="margin-top:10px;font-size:11px;color:#444;text-align:center;">点击外部关闭</div>'
     + '</div>';
-  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:90%;max-width:400px;";
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:90%;max-width:420px;";
   el.onclick = function(){ el.style.display = 'none'; };
 
-  fetch(API + '/api/stock-info?code=' + encodeURIComponent(fullCode))
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      var content = document.getElementById('stockInfoContent');
-      if (!d.ok || !d.data) {
-        content.innerHTML = '<span style="color:#666;">暂无数据</span>';
-        return;
-      }
-      var s = d.data;
-      function _fmt(v, unit, dec) {
-        if (v === null || v === undefined || v === '') return '-';
-        if (dec !== undefined && typeof v === 'number') return v.toFixed(dec) + (unit||'');
-        return v + (unit||'');
-      }
-      function _chgClass(v) { return v > 0 ? '#ef5350' : v < 0 ? '#66bb6a' : '#bbb'; }
-      var chgColor = _chgClass(s.change_pct);
-      var html = ''
-        // ── 价格区 ──
-        + '<div style="text-align:center;padding:8px 0 10px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:6px;">'
-        + '<span style="font-size:28px;font-weight:700;color:#e0e0e0;">' + _fmt(s.price, '', 2) + '</span>'
-        + ' <span style="font-size:16px;color:' + chgColor + ';font-weight:600;">' + (s.change_pct > 0 ? '+' : '') + _fmt(s.change_pct, '%', 2) + '</span>'
-        + ' <span style="font-size:13px;color:' + chgColor + ';">' + (s.change_amt > 0 ? '+' : '') + _fmt(s.change_amt, '', 2) + '</span>'
-        + '</div>'
-        // ── 今日行情 ──
-        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📊 今日行情</div>'
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
-        + '<div style="color:#888;font-size:12px;">最高</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.high, '', 2) + '</div>'
-        + '<div style="color:#888;font-size:12px;">最低</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.low, '', 2) + '</div>'
-        + '<div style="color:#888;font-size:12px;">今开</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.open, '', 2) + '</div>'
-        + '<div style="color:#888;font-size:12px;">昨收</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.prev_close, '', 2) + '</div>'
-        + '<div style="color:#888;font-size:12px;">振幅</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.amplitude, '%', 2) + '</div>'
-        + '</div>'
-        // ── 成交量 ──
-        + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
-        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📈 成交量</div>'
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
-        + '<div style="color:#888;font-size:12px;">成交量</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.volume, '手') + '</div>'
-        + '<div style="color:#888;font-size:12px;">成交额</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.amount, '万') + '</div>'
-        + '<div style="color:#888;font-size:12px;">外盘</div><div style="text-align:right;font-family:Consolas;color:#66bb6a;font-size:12px;">' + _fmt(s.buy_volume, '手') + '</div>'
-        + '<div style="color:#888;font-size:12px;">内盘</div><div style="text-align:right;font-family:Consolas;color:#ef5350;font-size:12px;">' + _fmt(s.sell_volume, '手') + '</div>'
-        + '<div style="color:#888;font-size:12px;">换手率</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.turnover_rate, '%', 2) + '</div>'
-        + '</div>'
-        // ── 估值与市值 ──
-        + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
-        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">💰 估值与市值</div>'
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
-        + '<div style="color:#888;font-size:12px;">市盈率(PE)</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.pe, '', 2) + '</div>'
-        + '<div style="color:#888;font-size:12px;">总市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.market_cap, '亿') + '</div>'
-        + '<div style="color:#888;font-size:12px;">流通市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.float_market_cap, '亿') + '</div>'
-        + '</div>'
-        // ── 区间表现 ──
-        + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
-        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📅 区间表现</div>'
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
-        + '<div style="color:#888;font-size:12px;">52周最高</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.high_52w, '', 2) + '</div>'
-        + '<div style="color:#888;font-size:12px;">52周最低</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.low_52w, '', 2) + '</div>'
-        + '<div style="color:#888;font-size:12px;">60日涨跌</div><div style="text-align:right;font-family:Consolas;color:' + _chgClass(s.chg_60d) + ';font-size:12px;">' + (s.chg_60d > 0 ? '+' : '') + _fmt(s.chg_60d, '%', 2) + '</div>'
+  // 并行获取行情和公司资料
+  var codeNum = fullCode.replace(/[a-z]/g, '');
+  var marketPro = Promise.all([
+    fetch(API + '/api/stock-info?code=' + encodeURIComponent(fullCode)).then(function(r){ return r.json(); }),
+    fetch(API + '/api/stock-profile?code=' + codeNum).then(function(r){ return r.json(); }).catch(function(){ return {ok:false}; }),
+  ]);
+
+  marketPro.then(function(results){
+    var content = document.getElementById('stockInfoContent');
+    var d = results[0], pd = results[1];
+    if (!d.ok || !d.data) {
+      content.innerHTML = '<span style="color:#666;">暂无数据</span>';
+      return;
+    }
+    var s = d.data, p = pd.ok && pd.data ? pd.data : null;
+
+    function _fmt(v, unit, dec) {
+      if (v === null || v === undefined || v === '') return '-';
+      if (dec !== undefined && typeof v === 'number') return v.toFixed(dec) + (unit||'');
+      return v + (unit||'');
+    }
+    function _chgClass(v) { return v > 0 ? '#ef5350' : v < 0 ? '#66bb6a' : '#bbb'; }
+    var chgColor = _chgClass(s.change_pct);
+    var html = '';
+
+    // ── 公司概况（如有） ──
+    if (p && p.main_business) {
+      html += '<div style="font-size:11px;color:#666;padding:2px 0 4px;">🏢 公司概况</div>'
+        + '<div style="padding:0 0 6px;font-size:12px;color:#ccc;">' + htmlEscape(p.main_business) + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;">'
+        + '<div style="color:#888;">上市</div><div style="text-align:right;font-family:Consolas;color:#ccc;">' + _fmt(p.listing_date) + '</div>'
+        + '<div style="color:#888;">成立</div><div style="text-align:right;font-family:Consolas;color:#ccc;">' + _fmt(p.establish_date) + '</div>'
+        + '<div style="color:#888;">发行价</div><div style="text-align:right;font-family:Consolas;color:#ccc;">' + _fmt(p.issue_price) + '</div>'
+        + '<div style="color:#888;">注册资本</div><div style="text-align:right;font-family:Consolas;color:#ccc;">' + _fmt(p.registered_capital || '').replace(/万元/g,'亿').replace(/(\d+)亿元?/g,function(m,n){ return (parseInt(n)/10000).toFixed(1)+'亿'; }) + '</div>'
+        + '<div style="color:#888;">组织</div><div style="text-align:right;font-family:Consolas;color:#ccc;">' + _fmt(p.organization_form) + '</div>'
+        + '<div style="color:#888;">市场</div><div style="text-align:right;font-family:Consolas;color:#ccc;">' + _fmt(p.listing_market) + '</div>'
         + '</div>';
-      content.innerHTML = html;
-    })
-    .catch(function(){
-      var content = document.getElementById('stockInfoContent');
-      if (content) content.innerHTML = '<span style="color:#ef5350;">加载失败</span>';
-    });
+      if (p.website) {
+        var site = p.website.replace(/https?:\/\//,'').replace(/\/$/,'');
+        html += '<div style="font-size:11px;padding:2px 0 0;"><span style="color:#888;">网址 </span><span style="font-family:Consolas;color:#42a5f5;">' + htmlEscape(site) + '</span></div>';
+      }
+    }
+
+    // ── 财务指标（如有） ──
+    if (p && p.finances) {
+      var f = p.finances;
+      html += '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📋 财务指标</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:11px;">'
+        + '<div style="color:#888;">每股收益</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(f.eps, '', 2) + '</div>'
+        + '<div style="color:#888;">每股净资产</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(f.bps, '', 2) + '</div>'
+        + '<div style="color:#888;">ROE</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(f.roe, '%', 2) + '</div>'
+        + '<div style="color:#888;">主营利润率</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(f.profit_margin, '%', 2) + '</div>'
+        + '<div style="color:#888;">净利增长</div><div style="text-align:right;font-family:Consolas;color:' + _chgClass(f.net_profit_growth||0) + ';">' + _fmt(f.net_profit_growth, '%', 2) + '</div>'
+        + '<div style="color:#888;">营收增长</div><div style="text-align:right;font-family:Consolas;color:' + _chgClass(f.revenue_growth||0) + ';">' + _fmt(f.revenue_growth, '%', 2) + '</div>'
+        + '<div style="color:#888;">资产负债率</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(f.debt_ratio, '%', 2) + '</div>'
+        + '<div style="color:#888;">流动/速动</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(f.current_ratio, '', 2) + ' / ' + _fmt(f.quick_ratio, '', 2) + '</div>'
+        + '</div>';
+    }
+
+    // ── 前五大股东（如有） ──
+    if (p && p.shareholders && p.shareholders.length) {
+      html += '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">👥 前十大股东' + (p.fund_count ? ' · ' + p.fund_count + '家基金持有' : '') + '</div>';
+      p.shareholders.forEach(function(sh, i){
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:1px 0;font-size:11px;">'
+          + '<span style="color:#888;width:18px;">' + (i+1) + '</span>'
+          + '<span style="flex:1;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + htmlEscape(sh.name) + '</span>'
+          + '<span style="font-family:Consolas;color:#e0e0e0;min-width:50px;text-align:right;">' + _fmt(sh.pct, '%') + '</span>'
+          + '</div>';
+      });
+    }
+
+    // ── 价格区 ──
+    html += '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+      + '<div style="text-align:center;padding:8px 0 6px;">'
+      + '<span style="font-size:28px;font-weight:700;color:#e0e0e0;">' + _fmt(s.price, '', 2) + '</span>'
+      + ' <span style="font-size:16px;color:' + chgColor + ';font-weight:600;">' + (s.change_pct > 0 ? '+' : '') + _fmt(s.change_pct, '%', 2) + '</span>'
+      + ' <span style="font-size:13px;color:' + chgColor + ';">' + (s.change_amt > 0 ? '+' : '') + _fmt(s.change_amt, '', 2) + '</span>'
+      + '</div>';
+
+    // ── 今日行情 ──
+    html += '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📊 今日行情</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+      + '<div style="color:#888;font-size:12px;">最高</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.high, '', 2) + '</div>'
+      + '<div style="color:#888;font-size:12px;">最低</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.low, '', 2) + '</div>'
+      + '<div style="color:#888;font-size:12px;">今开</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.open, '', 2) + '</div>'
+      + '<div style="color:#888;font-size:12px;">昨收</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.prev_close, '', 2) + '</div>'
+      + '<div style="color:#888;font-size:12px;">振幅</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.amplitude, '%', 2) + '</div>'
+      + '</div>'
+      // ── 成交量 ──
+      + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+      + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📈 成交量</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+      + '<div style="color:#888;font-size:12px;">成交量</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.volume, '手') + '</div>'
+      + '<div style="color:#888;font-size:12px;">成交额</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.amount, '万') + '</div>'
+      + '<div style="color:#888;font-size:12px;">外盘</div><div style="text-align:right;font-family:Consolas;color:#66bb6a;font-size:12px;">' + _fmt(s.buy_volume, '手') + '</div>'
+      + '<div style="color:#888;font-size:12px;">内盘</div><div style="text-align:right;font-family:Consolas;color:#ef5350;font-size:12px;">' + _fmt(s.sell_volume, '手') + '</div>'
+      + '<div style="color:#888;font-size:12px;">换手率</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.turnover_rate, '%', 2) + '</div>'
+      + '</div>'
+      // ── 估值与市值 ──
+      + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+      + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">💰 估值与市值</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+      + '<div style="color:#888;font-size:12px;">市盈率(PE)</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.pe, '', 2) + '</div>'
+      + '<div style="color:#888;font-size:12px;">总市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.market_cap, '亿') + '</div>'
+      + '<div style="color:#888;font-size:12px;">流通市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.float_market_cap, '亿') + '</div>'
+      + '</div>'
+      // ── 区间表现 ──
+      + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+      + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📅 区间表现</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+      + '<div style="color:#888;font-size:12px;">52周最高</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.high_52w, '', 2) + '</div>'
+      + '<div style="color:#888;font-size:12px;">52周最低</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.low_52w, '', 2) + '</div>'
+      + '<div style="color:#888;font-size:12px;">60日涨跌</div><div style="text-align:right;font-family:Consolas;color:' + _chgClass(s.chg_60d) + ';font-size:12px;">' + (s.chg_60d > 0 ? '+' : '') + _fmt(s.chg_60d, '%', 2) + '</div>'
+      + '</div>';
+
+    content.innerHTML = html;
+  }).catch(function(){
+    var content = document.getElementById('stockInfoContent');
+    if (content) content.innerHTML = '<span style="color:#ef5350;">加载失败</span>';
+  });
 }
 
 </script>
