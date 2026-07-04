@@ -38,6 +38,7 @@ _TOP = CFG.get("recommend", {}).get("top_n", 200)
 SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
 _SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
+_SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
@@ -111,7 +112,7 @@ def _config_hash() -> str:
     import hashlib
     from fund_scoring import SCORE_DIMS
     parts = [
-        str(_TOP), str(_MIN_Y1), str(SHOW_TOP), str(_SKIP_MISSING_PERF),
+        str(_TOP), str(_MIN_Y1), str(SHOW_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED),
     ]
     for name, fn, weight, desc in SCORE_DIMS:
         parts.append(f"{name}|{weight}|{desc}")
@@ -218,9 +219,18 @@ def _score_one(code: str, name: str) -> dict | None:
             if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in perf_keys):
                 log.debug("跳过 %s(%s): 缺失收益维度", name, code)
                 return None
+        # 筛掉单日限购≤2万的基金
+        limit_amount: float | None = None
+        if _SKIP_LIMITED:
+            from fund_watch import _parse_purchase_limit
+            limit_amount = _parse_purchase_limit(code)
+            if limit_amount is not None and limit_amount <= 2:
+                log.debug("跳过 %s(%s): 限购%.2f万", name, code, limit_amount)
+                return None
         score = _calc_score(d)
         return {
             "code": code, "name": name, "score": score,
+            "limit_amount": limit_amount,
             "annual_return": d.get("annual_return"),
             "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
             "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),

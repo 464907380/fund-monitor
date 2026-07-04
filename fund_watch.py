@@ -5,6 +5,7 @@ import json
 import os
 import re
 import datetime
+import time
 from config import CFG, api_url
 from config import get_secret as _get_secret
 from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, update_heartbeat, clear_heartbeat, _fetch_fund_estimate
@@ -298,6 +299,40 @@ def get_scoring_data(code: str) -> dict:
         d["rate"] = rate
     d["sy6"] = _parse_syl_6y(data)
     return d
+
+
+# ── 限购信息缓存 ──────────────────────────────
+_limit_cache: dict[str, tuple[float, float | None]] = {}  # code -> (timestamp, amount_in_wan)
+_LIMIT_CACHE_TTL = 3600  # 秒（1小时）
+
+
+def _parse_purchase_limit(code: str) -> float | None:
+    """获取基金单日限购金额（万元），None=无限购/获取失败"""
+    import urllib.request
+    now = time.time()
+    if code in _limit_cache and now - _limit_cache[code][0] < _LIMIT_CACHE_TTL:
+        return _limit_cache[code][1]
+
+    result: float | None = None
+    try:
+        url = f"https://fund.eastmoney.com/{code}.html"
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://fund.eastmoney.com/",
+        })
+        with urllib.request.urlopen(req, timeout=10) as r:
+            html = r.read().decode("utf-8", errors="ignore")
+        # 提取限购金额 "单日累计购买上限XX.XX万元"
+        m = re.search(r"单日累计购买上限\s*([\d.]+)\s*万元", html)
+        if m:
+            result = float(m.group(1))
+        # 查找 fundBuyStatus="0" = 暂停申购
+        if re.search(r'fundBuyStatus\s*=\s*"0"', html):
+            result = 0.0  # 暂停申购
+    except Exception:
+        pass
+    _limit_cache[code] = (now, result)
+    return result
 
 
 # ── 历史快照 ──────────────────────────────────

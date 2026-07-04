@@ -433,6 +433,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "min_y1_return": rc.get("min_y1_return", 20),
                         "show_top": rc.get("show_top", 20),
                         "skip_missing_perf": rc.get("skip_missing_perf", False),
+                        "skip_limited": rc.get("skip_limited", False),
                     }
                 }))
             except Exception as e:
@@ -872,6 +873,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "min_y1_return": int(body.get("min_y1_return", 20)),
                     "show_top": int(body.get("show_top", 20)),
                     "skip_missing_perf": bool(body.get("skip_missing_perf", False)),
+                    "skip_limited": bool(body.get("skip_limited", False)),
                 }
                 with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwcfg:
                     json.dump(cfg, _fwcfg, indent=2, ensure_ascii=False)

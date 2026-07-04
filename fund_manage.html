@@ -429,6 +429,9 @@ input, select, button { font-family: inherit; outline: none; }
         <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
           <input type="checkbox" id="recSkipMissingPerf" checked style="accent-color:#42a5f5;"> 筛掉缺失收益数据
         </label>
+        <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="recSkipLimited" style="accent-color:#42a5f5;"> 筛掉单日限购≤2万
+        </label>
       </div>
       <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <button onclick="runRecommendFromFilter()" id="recFilterBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">▶ 运行推荐</button>
@@ -1592,6 +1595,8 @@ async function loadRecommendConfig() {
       if (el4) el4.value = d.config.show_top || 20;
       var el5 = document.getElementById('recSkipMissingPerf');
       if (el5) el5.checked = d.config.skip_missing_perf !== false;
+      var el6 = document.getElementById('recSkipLimited');
+      if (el6) el6.checked = d.config.skip_limited === true;
     }
   } catch(e) {}
 }
@@ -1658,10 +1663,11 @@ async function runRecommendFromFilter() {
     var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
     var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
     var skipMissing = document.getElementById('recSkipMissingPerf') ? document.getElementById('recSkipMissingPerf').checked : true;
+    var skipLimited = document.getElementById('recSkipLimited') ? document.getElementById('recSkipLimited').checked : false;
     var cfgResp = await fetch(API + '/api/recommend-config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop, skip_missing_perf: skipMissing}),
+      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop, skip_missing_perf: skipMissing, skip_limited: skipLimited}),
     });
     var cfgData = await cfgResp.json();
     if (!cfgData.ok) {
