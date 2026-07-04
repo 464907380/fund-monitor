@@ -331,10 +331,17 @@ def _parse_purchase_limit(code: str) -> float | None:
         })
         with urllib.request.urlopen(req, timeout=10) as r:
             html = r.read().decode("utf-8", errors="ignore")
-        # 提取限购金额 "单日累计购买上限XX.XX万元"
+        # 提取限购金额，支持"万元"和"元"两种单位
         m = re.search(r"单日累计购买上限\s*([\d.]+)\s*万元", html)
         if m:
-            result = float(m.group(1))
+            result = float(m.group(1))  # 已经是万元
+        else:
+            m = re.search(r"单日累计购买上限\s*([\d.]+)\s*元", html)
+            if m:
+                result = float(m.group(1)) / 10000  # 元→万元
+            # 检测"限大额"标记（有上限但未显示具体金额，视为<=2万）
+            elif re.search(r"限大额", html):
+                result = 2.0
         # 查找 fundBuyStatus="0" = 暂停申购
         if re.search(r'fundBuyStatus\s*=\s*"0"', html):
             result = 0.0  # 暂停申购
