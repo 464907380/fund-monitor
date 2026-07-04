@@ -517,6 +517,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "market_cap": _s(45), "float_market_cap": _s(44),
                     "high_52w": _s(47), "low_52w": _s(48),
                     "chg_60d": _n(52),
+                    "buy_volume": _s(8), "sell_volume": _s(7),
                 }
                 self._send(*_json_response({"ok": True, "data": data}))
             except Exception as e:

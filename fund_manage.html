@@ -1902,7 +1902,7 @@ function showStockInfo(name, fullCode) {
     el.id = "stockInfoModal";
     document.body.appendChild(el);
   }
-  el.innerHTML = '<div style="background:#1a1a2e;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;font-size:13px;color:#ccc;max-width:400px;box-shadow:0 12px 48px rgba(0,0,0,0.6);">'
+  el.innerHTML = '<div style="background:#1a1a2e;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;font-size:13px;color:#ccc;max-width:420px;box-shadow:0 12px 48px rgba(0,0,0,0.6);">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
     + '<div><span style="font-size:16px;font-weight:700;color:#e0e0e0;">' + htmlEscape(name) + '</span>'
     + ' <span style="font-family:Consolas;font-size:12px;color:#666;">' + fullCode + '</span></div>'
@@ -1922,29 +1922,54 @@ function showStockInfo(name, fullCode) {
         return;
       }
       var s = d.data;
-      function _fmt(v, unit) { return v !== null && v !== undefined && v !== '' ? v + (unit||'') : '-'; }
+      function _fmt(v, unit, dec) {
+        if (v === null || v === undefined || v === '') return '-';
+        if (dec !== undefined && typeof v === 'number') return v.toFixed(dec) + (unit||'');
+        return v + (unit||'');
+      }
       function _chgClass(v) { return v > 0 ? '#ef5350' : v < 0 ? '#66bb6a' : '#bbb'; }
       var chgColor = _chgClass(s.change_pct);
-      var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;">'
-        + '<div style="grid-column:1/-1;text-align:center;padding:10px 0 12px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:6px;">'
-        + '<span style="font-size:28px;font-weight:700;color:#e0e0e0;">' + _fmt(s.price) + '</span>'
-        + ' <span style="font-size:15px;color:' + chgColor + ';font-weight:600;">' + (s.change_pct > 0 ? '+' : '') + _fmt(s.change_pct, '%') + '</span>'
-        + ' <span style="font-size:13px;color:' + chgColor + ';">' + (s.change_amt > 0 ? '+' : '') + _fmt(s.change_amt) + '</span>'
+      var html = ''
+        // ── 价格区 ──
+        + '<div style="text-align:center;padding:8px 0 10px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:6px;">'
+        + '<span style="font-size:28px;font-weight:700;color:#e0e0e0;">' + _fmt(s.price, '', 2) + '</span>'
+        + ' <span style="font-size:16px;color:' + chgColor + ';font-weight:600;">' + (s.change_pct > 0 ? '+' : '') + _fmt(s.change_pct, '%', 2) + '</span>'
+        + ' <span style="font-size:13px;color:' + chgColor + ';">' + (s.change_amt > 0 ? '+' : '') + _fmt(s.change_amt, '', 2) + '</span>'
         + '</div>'
-        + '<div style="color:#888;">最高</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.high) + '</div>'
-        + '<div style="color:#888;">最低</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.low) + '</div>'
-        + '<div style="color:#888;">今开</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.open) + '</div>'
-        + '<div style="color:#888;">昨收</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.prev_close) + '</div>'
-        + '<div style="border-top:1px solid rgba(255,255,255,0.04);grid-column:1/-1;margin:4px 0;"></div>'
-        + '<div style="color:#888;">成交量</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.volume, '手') + '</div>'
-        + '<div style="color:#888;">成交额</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.amount, '万') + '</div>'
-        + '<div style="color:#888;">换手率</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.turnover_rate, '%') + '</div>'
-        + '<div style="color:#888;">振幅</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.amplitude, '%') + '</div>'
-        + '<div style="border-top:1px solid rgba(255,255,255,0.04);grid-column:1/-1;margin:4px 0;"></div>'
-        + '<div style="color:#888;">市盈率</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.pe) + '</div>'
-        + '<div style="color:#888;">总市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.market_cap) + '</div>'
-        + '<div style="color:#888;">流通市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;">' + _fmt(s.float_market_cap) + '</div>'
-        + '<div style="color:#888;">60日涨跌</div><div style="text-align:right;font-family:Consolas;color:' + _chgClass(s.chg_60d) + ';">' + (s.chg_60d > 0 ? '+' : '') + _fmt(s.chg_60d, '%') + '</div>'
+        // ── 今日行情 ──
+        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📊 今日行情</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+        + '<div style="color:#888;font-size:12px;">最高</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.high, '', 2) + '</div>'
+        + '<div style="color:#888;font-size:12px;">最低</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.low, '', 2) + '</div>'
+        + '<div style="color:#888;font-size:12px;">今开</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.open, '', 2) + '</div>'
+        + '<div style="color:#888;font-size:12px;">昨收</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.prev_close, '', 2) + '</div>'
+        + '<div style="color:#888;font-size:12px;">振幅</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.amplitude, '%', 2) + '</div>'
+        + '</div>'
+        // ── 成交量 ──
+        + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📈 成交量</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+        + '<div style="color:#888;font-size:12px;">成交量</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.volume, '手') + '</div>'
+        + '<div style="color:#888;font-size:12px;">成交额</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.amount, '万') + '</div>'
+        + '<div style="color:#888;font-size:12px;">外盘</div><div style="text-align:right;font-family:Consolas;color:#66bb6a;font-size:12px;">' + _fmt(s.buy_volume, '手') + '</div>'
+        + '<div style="color:#888;font-size:12px;">内盘</div><div style="text-align:right;font-family:Consolas;color:#ef5350;font-size:12px;">' + _fmt(s.sell_volume, '手') + '</div>'
+        + '<div style="color:#888;font-size:12px;">换手率</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.turnover_rate, '%', 2) + '</div>'
+        + '</div>'
+        // ── 估值与市值 ──
+        + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">💰 估值与市值</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+        + '<div style="color:#888;font-size:12px;">市盈率(PE)</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.pe, '', 2) + '</div>'
+        + '<div style="color:#888;font-size:12px;">总市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.market_cap, '亿') + '</div>'
+        + '<div style="color:#888;font-size:12px;">流通市值</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.float_market_cap, '亿') + '</div>'
+        + '</div>'
+        // ── 区间表现 ──
+        + '<div style="border-top:1px solid rgba(255,255,255,0.04);margin:6px 0 4px;"></div>'
+        + '<div style="font-size:11px;color:#666;padding:2px 0 4px;">📅 区间表现</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;">'
+        + '<div style="color:#888;font-size:12px;">52周最高</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.high_52w, '', 2) + '</div>'
+        + '<div style="color:#888;font-size:12px;">52周最低</div><div style="text-align:right;font-family:Consolas;color:#e0e0e0;font-size:12px;">' + _fmt(s.low_52w, '', 2) + '</div>'
+        + '<div style="color:#888;font-size:12px;">60日涨跌</div><div style="text-align:right;font-family:Consolas;color:' + _chgClass(s.chg_60d) + ';font-size:12px;">' + (s.chg_60d > 0 ? '+' : '') + _fmt(s.chg_60d, '%', 2) + '</div>'
         + '</div>';
       content.innerHTML = html;
     })
