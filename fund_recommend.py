@@ -107,11 +107,16 @@ def _filter_candidates(rows: list) -> list[dict]:
     return candidates
 
 
+_CONFIG_VERSION = "2"
+"""配置版本号，修改解析逻辑或配置结构时递增，使旧缓存失效"""
+
+
 def _config_hash() -> str:
     """计算当前配置的哈希值，用于检测评分/筛选参数是否变化"""
     import hashlib
     from fund_scoring import SCORE_DIMS
     parts = [
+        _CONFIG_VERSION,
         str(_TOP), str(_MIN_Y1), str(SHOW_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED),
     ]
     for name, fn, weight, desc in SCORE_DIMS:
