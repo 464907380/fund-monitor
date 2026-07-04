@@ -157,7 +157,7 @@ def _spawn_briefing() -> bool:
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── fund-table 缓存 ──
 _fund_table_cache: tuple[float, str] | None = None
-_FUND_TABLE_CACHE_TTL = 30  # 秒
+_FUND_TABLE_CACHE_TTL = 120  # 秒（评分数据盘中不变，2分钟内不重复渲染）
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
 _CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
 _PORT = 8080

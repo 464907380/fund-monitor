@@ -549,70 +549,47 @@ def _load_saved_recommend_data() -> list[dict]:
 
 
 def _fetch_fresh_recommend_data() -> list[dict]:
-    """从推荐结果取 TOP 10 基金代码，实时拉取数据并重新评分"""
+    """从缓存推荐数据刷新实时涨跌，返回最新 TOP 表格数据
+    
+    推荐结果文件中已保存所有评分维度数据，无需重复拉取 pingzhongdata。
+    只需并行获取各基金的实时涨跌即可。
+    """
     try:
-        from fund_recommend import _load_result
-        recs = _load_result()
-        if not recs:
-            return []
-        # 取推荐结果前10的代码
-        codes = [(r.get("code", ""), r.get("name", "")) for r in recs[:_show_top]]
-        codes = [(c, n) for c, n in codes if c]
-
-        from fund_watch import get_scoring_data, _parse_real_time
-        from fund_scoring import calc_score_detail, SCORE_DIMS
+        from fund_watch import _parse_real_time
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        def _fetch_one(code: str) -> dict | None:
+        fresh = _load_saved_recommend_data()
+        if not fresh:
+            return []
+
+        codes = [r.get("code", "") for r in fresh if r.get("code")]
+        if not codes:
+            return fresh
+
+        # 只刷新实时涨跌（评分数据已由 _load_saved_recommend_data 从缓存加载）
+        day_map: dict[str, str] = {}
+
+        def _fetch_one(code: str) -> tuple[str, str] | None:
             try:
-                d = get_scoring_data(code)
-                if not d.get("n"):
-                    return None
                 td = _parse_real_time(code)
-                d["td"] = td
-                d["day"] = f"{td:+.2f}%" if td is not None else ""
-                navs = d.get("nav", [])
-                if navs and len(navs) >= 5:
-                    d["f5"] = f"{(navs[-1]['v'] - navs[-5]['v']) / navs[-5]['v'] * 100:+.1f}%"
-                score_d = {
-                    "annual_return": d.get("annual_return"),
-                    "sharpe": d.get("sharpe"),
-                    "sortino": d.get("sortino"),
-                    "max_dd": d.get("max_dd"),
-                    "win_rate": d.get("win_rate"),
-                    "inst": d.get("inst"),
-                    "sc": d.get("sc"),
-                    "rate": d.get("rate"),
-                    "profit_ratio": d.get("profit_ratio"),
-                    "recovery": d.get("recovery"),
-                    "y1": d.get("y1"),
-                    "sy3": d.get("sy3"),
-                    "m1": d.get("m1"),
-                    "m3": d.get("m3"),
-                    "sy6": d.get("sy6"),
-                    "f5": d.get("f5"),
-                    "sy2": d.get("sy2"),
-                    "volatility": d.get("volatility"),
-                    "calmar": d.get("calmar"),
-                    "max_loss_days": d.get("max_loss_days"),
-                }
-                score, details, skipped = calc_score_detail(score_d)
-                d["score"] = score
-                d["score_detail"] = details
-                d["_skipped_weight"] = skipped
-                return d
+                if td is not None:
+                    return (code, f"{td:+.2f}%")
+                return None
             except Exception:
                 return None
 
-        fresh = []
         with ThreadPoolExecutor(max_workers=20) as ex:
-            futs = {ex.submit(_fetch_one, code): code for code, _ in codes}
+            futs = {ex.submit(_fetch_one, code): code for code in codes}
             for fut in as_completed(futs):
-                d = fut.result()
-                if d:
-                    fresh.append(d)
+                result = fut.result()
+                if result:
+                    day_map[result[0]] = result[1]
 
-        fresh.sort(key=lambda r: r.get("score", 0), reverse=True)
+        for r in fresh:
+            code = r.get("code", "")
+            if code in day_map:
+                r["day"] = day_map[code]
+
         return fresh
     except Exception:
         return []

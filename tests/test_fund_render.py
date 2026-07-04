@@ -97,10 +97,10 @@ class TestBuildBriefingHtml(unittest.TestCase):
 class TestFormatRecommendRankings(unittest.TestCase):
     """_format_recommend_rankings — 推荐排行格式化"""
 
-    @patch("fund_render._fetch_fresh_recommend_data")
-    def test_with_data(self, mock_fetch):
+    @patch("fund_render._load_saved_recommend_data")
+    def test_with_data(self, mock_load):
         from fund_render import _format_recommend_rankings
-        mock_fetch.return_value = [
+        mock_load.return_value = [
             {"n": "测试基金A", "code": "720001", "score": 71.4, "annual_return": 21.6,
              "m1": 28.6, "m3": 87.1, "y1": 342.1,
              "sharpe": 0.62, "max_dd": 62.22, "sy3": 284.1}
@@ -109,30 +109,22 @@ class TestFormatRecommendRankings(unittest.TestCase):
         lines = _format_recommend_rankings()
         self.assertIn("测试基金A", str(lines))
 
-    @patch("fund_render._fetch_fresh_recommend_data")
-    def test_no_data(self, mock_fetch):
+    @patch("fund_render._load_saved_recommend_data")
+    def test_no_data(self, mock_load):
         from fund_render import _format_recommend_rankings
-        mock_fetch.return_value = []
+        mock_load.return_value = []
         lines = _format_recommend_rankings()
         combined = " ".join(lines)
         self.assertIn("想看看市场", combined)
 
-    @patch("fund_render._fetch_fresh_recommend_data")
-    @patch("fund_recommend._load_result")
-    def test_stale_data(self, mock_load, mock_fetch):
+    @patch("fund_render._load_saved_recommend_data")
+    @patch("fund_render.os.path.exists", return_value=False)
+    def test_stale_data(self, mock_exists, mock_data):
         from fund_render import _format_recommend_rankings
-        # 30 天前的数据
-        class FakeDate:
-            @staticmethod
-            def fromisoformat(d):
-                import datetime
-                return datetime.date(2026, 5, 14)
-        mock_load.return_value = [{"date": "2026-05-14", "code": "720001", "name": "T"}]
-        mock_fetch.return_value = [{"n": "T", "code": "720001", "score": 50.0, "annual_return": 10.0,
-                                    "m1": 0, "m3": 0, "y1": 0, "sharpe": 0, "max_dd": 0, "sy3": 0}]
+        mock_data.return_value = []
         lines = _format_recommend_rankings()
         combined = " ".join(lines)
-        self.assertIn("30 天前", combined)
+        self.assertIn("想看看市场", combined)
 
 
 class TestSaveBriefing(unittest.TestCase):

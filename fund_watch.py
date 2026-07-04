@@ -270,7 +270,13 @@ def get(code: str) -> dict:
 
 
 def get_scoring_data(code: str) -> dict:
-    """拉取评分所需的最小数据集（跳过实时估值和持仓，减少网络请求）"""
+    """拉取评分所需的最小数据集（跳过实时估值和持仓，减少网络请求）
+    
+    盘中评分数据不会变化，使用每日缓存避免重复拉取 pingzhongdata 大 JS。
+    """
+    today = datetime.date.today().isoformat()
+    if code in _scoring_cache and _scoring_cache[code][0] == today:
+        return _scoring_cache[code][1]
     d: dict = {"code": code}
     data = fetch(api_url("fund_pingzhongdata", code=code))
 
@@ -298,8 +304,12 @@ def get_scoring_data(code: str) -> dict:
     if rate := _parse_fund_rate(data):
         d["rate"] = rate
     d["sy6"] = _parse_syl_6y(data)
+    _scoring_cache[code] = (today, d)
     return d
 
+
+# ── 评分数据每日缓存（盘中不变，避免重复拉取 pingzhongdata）──
+_scoring_cache: dict[str, tuple[str, dict]] = {}  # code -> (today_date, data)
 
 # ── 限购信息缓存（复用网络缓存TTL）────────────────
 _limit_cache: dict[str, tuple[float, float | None]] = {}  # code -> (timestamp, amount_in_wan)
