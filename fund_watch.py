@@ -8,7 +8,7 @@ import datetime
 import time
 from config import CFG, api_url
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, update_heartbeat, clear_heartbeat, _fetch_fund_estimate, _CACHE_TTL
+from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, update_heartbeat, clear_heartbeat, _fetch_fund_estimate
 from fund_scoring import SCORE_DIMS, calc_score_detail
 from fund_metrics import _calc_nav_metrics
 from fund_alerts import check_stagnation, check_consecutive_drop, check_dividend
@@ -309,7 +309,7 @@ def _parse_purchase_limit(code: str) -> float | None:
     """获取基金单日限购金额（万元），None=无限购/获取失败"""
     import urllib.request
     now = time.time()
-    if code in _limit_cache and now - _limit_cache[code][0] < _CACHE_TTL:
+    if code in _limit_cache and now - _limit_cache[code][0] < 86400:
         return _limit_cache[code][1]
 
     result: float | None = None
