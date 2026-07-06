@@ -452,12 +452,12 @@ def main() -> None:
                     print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {ar_str:<8} {result['score']:<6.1f}")
                 else:
                     print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'跳过':<8}")
-                update_heartbeat("fund_recommend", progress=i, total=total + 1,
+                update_heartbeat("fund_recommend", progress=i, total=total,
                                  status=f"评分 {c['name'][:18]}({c['code']})")
 
         # ── 排序保存 ──
         scored.sort(key=lambda x: x.get("score", 0), reverse=True)
-        update_heartbeat("fund_recommend", progress=total + 1, total=total + 1, status="保存结果")
+        update_heartbeat("fund_recommend", progress=total, total=total, status="保存结果")
         _save_result(scored)
 
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
