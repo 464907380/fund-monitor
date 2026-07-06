@@ -270,24 +270,36 @@ def main() -> None:
                 pass
 
         if cache_valid:
-            # 缓存有效：跳过拉取和评分，用当前曲线重算评分后保存
-            from fund_scoring import _calc_score
+            # 缓存有效：评分结果不变（配置hash相同），只刷新前SHOW_TOP只的实时涨跌
+            from concurrent.futures import ThreadPoolExecutor, as_completed
             cached_results = old["results"]
             total = len(cached_results)
-            for i, r in enumerate(cached_results):
-                r["score"] = _calc_score(r)
-                if i % 100 == 0:
-                    update_heartbeat("fund_recommend", progress=i, total=total, status="重算评分")
-            cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-            update_heartbeat("fund_recommend", progress=total, total=total, status="更新涨跌")
-            # 更新前 SHOW_TOP 只基金的实时涨跌
-            for i, r in enumerate(cached_results[:SHOW_TOP]):
+            update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP, status="更新涨跌")
+
+            def _update_day(code: str) -> tuple[str, str]:
                 try:
-                    td = _fetch_fund_estimate(r.get("code", ""))
-                    r["day"] = f"{td[1]:+.2f}%" if td is not None else r.get("day", "")
+                    td = _fetch_fund_estimate(code)
+                    if td is not None:
+                        return (code, f"{td[1]:+.2f}%")
                 except Exception:
                     pass
-                update_heartbeat("fund_recommend", progress=i + 1, total=SHOW_TOP, status="涨跌")
+                return (code, "")
+
+            day_map: dict[str, str] = {}
+            with ThreadPoolExecutor(max_workers=20) as ex:
+                futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
+                for i, fut in enumerate(as_completed(futs), 1):
+                    code, day = fut.result()
+                    day_map[code] = day
+                    update_heartbeat("fund_recommend", progress=i, total=SHOW_TOP, status="涨跌")
+
+            for r in cached_results:
+                code = r.get("code", "")
+                if code in day_map:
+                    r["day"] = day_map[code]
+
+            cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            update_heartbeat("fund_recommend", progress=SHOW_TOP, total=SHOW_TOP, status="保存")
             _save_result(cached_results)
             print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
             print("=" * 50)
