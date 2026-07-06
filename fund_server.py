@@ -972,6 +972,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 从推荐结果取维度值用于校准
                 # "越低越好"的维度
                 lower_better = {"波动率", "最大回撤", "最大连跌天数", "费率"}
+                # 跳过不适合用百分位校准的维度（单日快照、理论有界等）
+                skip_calibrate_keys = {"td"}
                 # 需要解析百分号字符串的字段
                 pct_keys = {"f5"}
 
@@ -980,6 +982,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 for dim in dims:
                     key = dim.get("key", "")
                     name = dim.get("name", "")
+                    if key in skip_calibrate_keys:
+                        continue
                     vals = []
                     for d in all_data:
                         v = d.get(key)
