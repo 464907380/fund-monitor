@@ -569,29 +569,46 @@ def _fetch_fresh_recommend_data() -> list[dict]:
         if not codes:
             return fresh
 
-        # 只刷新实时涨跌（评分数据已由 _load_saved_recommend_data 从缓存加载）
+        # 刷新实时涨跌，同时更新td值和评分
+        from fund_scoring import calc_score_detail
         day_map: dict[str, str] = {}
+        td_map: dict[str, float] = {}
 
-        def _fetch_one(code: str) -> tuple[str, str] | None:
+        def _fetch_one(code: str) -> tuple[str, float | None]:
             try:
                 td = _parse_real_time(code)
                 if td is not None:
-                    return (code, f"{td:+.2f}%")
-                return None
+                    return (code, td)
+                return (code, None)
             except Exception:
-                return None
+                return (code, None)
 
         with ThreadPoolExecutor(max_workers=20) as ex:
             futs = {ex.submit(_fetch_one, code): code for code in codes}
             for fut in as_completed(futs):
-                result = fut.result()
-                if result:
-                    day_map[result[0]] = result[1]
+                code, td_val = fut.result()
+                if td_val is not None:
+                    day_map[code] = f"{td_val:+.2f}%"
+                    td_map[code] = td_val
 
         for r in fresh:
             code = r.get("code", "")
             if code in day_map:
                 r["day"] = day_map[code]
+            if code in td_map:
+                r["td"] = td_map[code]
+                # 用新td值重算评分
+                score_d = {k: r.get(k) for k in (
+                    "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
+                    "annual_return", "sharpe", "sortino",
+                    "profit_ratio", "win_rate", "recovery", "calmar",
+                    "max_dd", "volatility", "max_loss_days",
+                    "sc", "rate", "inst", "td",
+                )}
+                score, details, skipped = calc_score_detail(score_d)
+                r["score"] = score
+                r["score_detail"] = details
+                r["_skipped_weight"] = skipped
 
         return fresh
     except Exception:
