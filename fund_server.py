@@ -95,12 +95,19 @@ def _spawn_recommend() -> bool:
             [sys.executable, script],
             cwd=_SCRIPT_DIR,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         # 确认进程已成功启动且仍在运行，再写心跳
         try:
-            proc.wait(timeout=3)
-            return False  # 进程在3秒内退出=启动失败
+            exit_code = proc.wait(timeout=3)
+            # 进程在3秒内退出，可能是缓存命中快速完成（正常），也可能是启动失败
+            err_out = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+            if exit_code != 0:
+                if err_out:
+                    print(f"[ERROR] 推荐任务失败(stderr): {err_out[:1000]}", flush=True)
+                return False
+            # exit_code == 0: 正常完成（缓存命中快速返回），不需要心跳
+            return True
         except subprocess.TimeoutExpired:
             pass  # 进程还在运行，正常
         write_heartbeat("fund_recommend")
@@ -117,7 +124,8 @@ def _spawn_recommend() -> bool:
 
         threading.Thread(target=_wait_and_cleanup, daemon=True).start()
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[ERROR] 推荐启动异常: {e}", flush=True)
         clear_heartbeat("fund_recommend")
         return False
 
