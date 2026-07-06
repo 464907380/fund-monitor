@@ -17,7 +17,7 @@ import urllib.request
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
-from config import CFG, get_timeout, get_config, api_url
+from config import CFG, api_url, get_timeout, get_config
 
 # ── 后台任务管理 ──
 _recommend_proc: subprocess.Popen | None = None
@@ -762,9 +762,68 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     fund_list = []
                 rows: list[dict] = []
 
-                def _process_one(code: str) -> dict | None:
-                    """拉取一只基金数据并计算评分"""
+                # ── 加载推荐缓存（避免每个基金重复拉取 ~200KB pingzhongdata）──
+                _rec_cache_path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
+                _rec_cache: dict[str, dict] = {}
+                if os.path.exists(_rec_cache_path):
                     try:
+                        with open(_rec_cache_path, encoding="utf-8") as _f:
+                            _rec_data = json.load(_f)
+                        for _r in _rec_data.get("results", []):
+                            _code = _r.get("code", "")
+                            if _code:
+                                _rec_cache[_code] = _r
+                    except Exception:
+                        pass
+
+                def _process_one(code: str) -> dict | None:
+                    """拉取一只基金数据并计算评分（优先从推荐缓存复用）"""
+                    try:
+                        cached = _rec_cache.get(code)
+                        if cached:
+                            # ── 推荐缓存命中：只刷新实时涨跌，评分数据复用 ──
+                            _td = _parse_real_time(code)
+                            day_s = f"{_td:+.2f}%" if _td is not None else ""
+                            name = cached.get("name", "")
+                            row = {
+                                "code": code, "name": name,
+                                "name_short": name[:12],
+                                "day": day_s, "f5": cached.get("f5", ""),
+                                "m1": cached.get("m1"), "m3": cached.get("m3"), "y1": cached.get("y1"),
+                                "_day": day_s, "_f5": cached.get("f5", ""),
+                                "_m1": f"{cached['m1']:+.1f}%" if cached.get("m1") is not None else "",
+                                "_m3": f"{cached['m3']:+.1f}%" if cached.get("m3") is not None else "",
+                                "_y1": f"{cached['y1']:+.1f}%" if cached.get("y1") is not None else "",
+                                "mgr": (cached.get("mgr", "") or "")[:6],
+                                "annual_return": cached.get("annual_return"),
+                                "sharpe": cached.get("sharpe"), "sortino": cached.get("sortino"),
+                                "max_dd": cached.get("max_dd"), "win_rate": cached.get("win_rate"),
+                                "profit_ratio": cached.get("profit_ratio"),
+                                "recovery": cached.get("recovery"),
+                                "sy3": cached.get("sy3"), "sy6": cached.get("sy6"),
+                                "sy2": cached.get("sy2"),
+                                "volatility": cached.get("volatility"),
+                                "calmar": cached.get("calmar"),
+                                "max_loss_days": cached.get("max_loss_days"),
+                                "sc": cached.get("sc"), "rate": cached.get("rate"),
+                                "inst": cached.get("inst"),
+                                "td": _td,
+                            }
+                            score_d = {k: cached.get(k) for k in (
+                                "y1","m3","m1","f5","sy6","sy2","sy3",
+                                "annual_return","sharpe","sortino",
+                                "profit_ratio","win_rate","recovery","calmar",
+                                "max_dd","volatility","max_loss_days",
+                                "sc","rate","inst",
+                            )}
+                            score_d["td"] = _td  # 用最新实时涨跌幅
+                            score, details, skipped = calc_score_detail(score_d)
+                            row["score"] = score
+                            row["_score_detail"] = details
+                            row["_skipped_weight"] = skipped
+                            return row
+
+                        # ── 推荐缓存未命中：全量拉取 pingzhongdata ──
                         d = get_scoring_data(code)
                         if not d.get("n"):
                             return None
@@ -815,9 +874,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     except Exception:
                         return None
 
-                # 并行拉取所有基金数据（网络IO密集，20线程足够）
-                _mw = get_config("network", "max_workers", "server_fund_table", default=20)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=_mw) as executor:
+                # 并行拉取所有基金数据
+                with concurrent.futures.ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "server_fund_table", default=20)) as executor:
                     fut_map = {executor.submit(_process_one, f["code"]): f["code"] for f in fund_list}
                     for fut in concurrent.futures.as_completed(fut_map):
                         result = fut.result()

@@ -137,11 +137,25 @@ _DEFAULTS = {
             "fetch_rank": 15,
             "request_with_retry": 15,
             "backup_api": 10,
+            "sina_quote": 15,
+            "schtasks": 10,
+        },
+        "max_workers": {
+            "recommend_net_value": 50,
+            "recommend_update_day": 50,
+            "recommend_limit_check": 50,
+            "recommend_scoring": 50,
+            "server_fund_table": 20,
         },
         "retry_max": 3,
         "retry_backoff_seconds": [1, 3, 8],
         "cache_ttl_seconds": 300,
         "cache_max_entries": 100,
+    },
+    "recommend": {
+        "lock_retry_count": 30,
+        "lock_retry_interval": 1.0,
+        "net_value_timeout": 10,
     },
 }
 

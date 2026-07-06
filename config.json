@@ -516,8 +516,6 @@
     "min_y1_return": 100,
     "show_top": 50,
     "skip_missing_perf": true,
-    "skip_limited": true,
-    "lock_retry_count": 30,
-    "lock_retry_interval": 1.0
+    "skip_limited": true
   }
 }
