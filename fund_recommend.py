@@ -274,6 +274,7 @@ def _score_one(code: str, name: str) -> dict | None:
 
 def main() -> None:
     try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         # 检查缓存是否仍有效（配置未变+同一天）
         cur_hash = _config_hash()
         cache_valid = False
@@ -288,7 +289,6 @@ def main() -> None:
                 pass
 
         if cache_valid:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
             cached_results = old["results"]
             total_candidates = len(cached_results)
 
