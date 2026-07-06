@@ -1789,6 +1789,8 @@ async function runRecommendFromFilter() {
 }
 
 function showScoreDetail(items) {
+  // 按权重降序排列
+  items = items.slice().sort(function(a,b){ return b[2] - a[2]; });
   var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;max-height:80vh;overflow-y:auto;">'
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">\u7ef4\u5ea6\u8bc4\u5206\u660e\u7ec6</div>'
     + '<div style="margin-bottom:10px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;">';
