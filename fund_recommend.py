@@ -39,6 +39,8 @@ SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
 _SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
+_HAS_TD = any("td" in dim_info for dim_info in SCORE_DIMS)
+"""当日涨跌维度是否开启：开启时缓存命中后仍需刷新td值重新评分"""
 _RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
@@ -233,6 +235,21 @@ def _score_one(code: str, name: str) -> dict | None:
                 log.debug("跳过 %s(%s): 限购%.2f万", name, code, limit_amount)
                 return None
         score = _calc_score(d)
+        # 获取当日涨跌（供td维度评分）
+        td = _fetch_fund_estimate(code)
+        if td is not None:
+            d["td"] = td[1]
+            day_str = f"{td[1]:+.2f}%"
+        else:
+            # 无实时数据时从净值算最近交易日涨跌
+            navs_local = d.get("nav", [])
+            if navs_local and len(navs_local) >= 2:
+                td_val = (navs_local[-1]["v"] - navs_local[-2]["v"]) / navs_local[-2]["v"] * 100
+                d["td"] = td_val
+                day_str = f"{td_val:+.2f}%"
+            else:
+                day_str = ""
+        score = _calc_score(d)  # 带td值重新评分
         return {
             "code": code, "name": name, "score": score,
             "limit_amount": limit_amount,
@@ -246,8 +263,9 @@ def _score_one(code: str, name: str) -> dict | None:
             "f5": f5_val, "sy2": d.get("sy2"),
             "volatility": d.get("volatility"), "calmar": d.get("calmar"),
             "max_loss_days": d.get("max_loss_days"), "sy6": d.get("sy6"),
+            "td": d.get("td"),
             "mgr": (d.get("mgr") or "")[:6],
-            "day": f"{d.get('td'):+.2f}%" if d.get("td") is not None else "",
+            "day": day_str,
         }
     except Exception as e:
         log.debug("跳过 %s: %s", code, e)
@@ -270,36 +288,71 @@ def main() -> None:
                 pass
 
         if cache_valid:
-            # 缓存有效：评分结果不变（配置hash相同），只刷新前SHOW_TOP只的实时涨跌
             from concurrent.futures import ThreadPoolExecutor, as_completed
             cached_results = old["results"]
-            total = len(cached_results)
-            update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP, status="更新涨跌")
+            total_candidates = len(cached_results)
 
-            def _update_day(code: str) -> tuple[str, str]:
-                try:
-                    td = _fetch_fund_estimate(code)
-                    if td is not None:
-                        return (code, f"{td[1]:+.2f}%")
-                except Exception:
-                    pass
-                return (code, "")
+            if _HAS_TD:
+                # 当日涨跌维度开启：缓存中td已过期，需刷新全部候选基金的td并重算评分
+                from fund_scoring import _calc_score as _calc_score2
+                print(f"📋 当日涨跌维度开启，刷新 {total_candidates} 只基金td值...")
+                update_heartbeat("fund_recommend", progress=0, total=total_candidates, status="刷新td")
 
-            day_map: dict[str, str] = {}
-            with ThreadPoolExecutor(max_workers=20) as ex:
-                futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
-                for i, fut in enumerate(as_completed(futs), 1):
-                    code, day = fut.result()
-                    day_map[code] = day
-                    update_heartbeat("fund_recommend", progress=i, total=SHOW_TOP, status="涨跌")
+                def _fetch_td(code: str) -> tuple[str, float | None]:
+                    try:
+                        td = _fetch_fund_estimate(code)
+                        return (code, td[1] if td else None)
+                    except Exception:
+                        return (code, None)
 
-            for r in cached_results:
-                code = r.get("code", "")
-                if code in day_map:
-                    r["day"] = day_map[code]
+                td_map: dict[str, float | None] = {}
+                with ThreadPoolExecutor(max_workers=30) as ex:
+                    futs = {ex.submit(_fetch_td, r.get("code", "")): r for r in cached_results}
+                    for i, fut in enumerate(as_completed(futs), 1):
+                        code, td_val = fut.result()
+                        td_map[code] = td_val
+                        if i % 50 == 0:
+                            update_heartbeat("fund_recommend", progress=i, total=total_candidates, status="td")
 
-            cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-            update_heartbeat("fund_recommend", progress=SHOW_TOP, total=SHOW_TOP, status="保存")
+                for r in cached_results:
+                    code = r.get("code", "")
+                    td_val = td_map.get(code)
+                    r["td"] = td_val
+                    r["day"] = f"{td_val:+.2f}%" if td_val is not None else ""
+                    if td_val is not None:
+                        r["score"] = _calc_score2(r)
+                    update_heartbeat("fund_recommend", progress=i, total=total_candidates, status="评分")
+
+                cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            else:
+                # TD关闭：只刷新前SHOW_TOP只的显示涨跌
+                update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP, status="更新涨跌")
+
+                def _update_day(code: str) -> tuple[str, str]:
+                    try:
+                        td = _fetch_fund_estimate(code)
+                        if td is not None:
+                            return (code, f"{td[1]:+.2f}%")
+                    except Exception:
+                        pass
+                    return (code, "")
+
+                day_map: dict[str, str] = {}
+                with ThreadPoolExecutor(max_workers=20) as ex:
+                    futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
+                    for i, fut in enumerate(as_completed(futs), 1):
+                        code, day = fut.result()
+                        day_map[code] = day
+                        update_heartbeat("fund_recommend", progress=i, total=SHOW_TOP, status="涨跌")
+
+                for r in cached_results:
+                    code = r.get("code", "")
+                    if code in day_map:
+                        r["day"] = day_map[code]
+
+                cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+            update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates, status="保存")
             _save_result(cached_results)
             print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
             print("=" * 50)

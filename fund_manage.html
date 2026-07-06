@@ -950,7 +950,7 @@ checkBriefRunning();
 loadBriefing();
 
 
-var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days'];
+var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days','td'];
 var DIM_INFO = {
   'y1': {name:'近1年收益',desc:'最近一年的表现',cat:'perf'},
   'm3': {name:'近3月收益',desc:'近三个月涨跌幅',cat:'perf'},
@@ -972,6 +972,7 @@ var DIM_INFO = {
   'rate': {name:'费率',desc:'申购费',cat:'other'},
   'scale': {name:'基金规模',desc:'1~50亿最理想',cat:'other'},
   'institutional': {name:'机构持有比例',desc:'专业机构认可度',cat:'other'},
+  'td': {name:'当日涨跌',desc:'当日实时涨跌幅',cat:'perf'},
 };
 _CAT_NAMES = {perf:'📈 收益表现', risk:'🛡️ 风险指标', quality:'⭐ 收益性价比', other:'📋 基金特征'};
 _CAT_ORDER = ['perf','risk','quality','other'];
@@ -1000,6 +1001,7 @@ _DEFAULT_CURVES = {
   rate:            [[0,100], [0.15,80], [0.5,40], [1.5,0]],
   scale:           [[0,0], [1,70], [20,100], [50,70], [100,30]],
   institutional:   [[5,10], [30,50], [60,90]],
+  td:              [[-5,0], [-2,40], [0,60], [2,80], [5,100]],
 };
 
 // 把后端返回的 curve 转成 JS 断点数组，没有则用默认
@@ -1433,6 +1435,7 @@ async function resetDims() {
     {name:'费率',key:'rate',weight:0.03,enabled:true,desc:'申购费越低越好',curve:_defCurve('rate'),category:'other'},
     {name:'基金规模',key:'scale',weight:0.02,enabled:true,desc:'1~50亿最理想，太小不灵活、太大难操作',curve:_defCurve('scale'),category:'other'},
     {name:'机构持有比例',key:'institutional',weight:0.02,enabled:true,desc:'专业机构认可度，小幅参考',curve:_defCurve('institutional'),category:'other'},
+    {name:'当日涨跌',key:'td',weight:0.03,enabled:true,desc:'当日实时涨跌幅，捕捉盘中动量',curve:_defCurve('td'),category:'perf'},
   ];
   const r = await fetch(API + '/api/dims', {
     method: 'POST',

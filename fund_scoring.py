@@ -61,6 +61,7 @@ _DEFAULT_CURVES: dict = {
     "rate": {"points": [[0,100], [0.15,80], [0.5,40], [1.5,0]], "desc": "费率%（越低越好）"},
     "scale": {"points": [[0,0], [1,70], [20,100], [50,70], [100,30]], "desc": "基金规模（亿）"},
     "institutional": {"points": [[5,10], [30,50], [60,90]], "desc": "机构持有比例%"},
+    "td": {"points": [[-5,0], [-2,40], [0,60], [2,80], [5,100]], "desc": "当日涨跌幅%"},
 }
 
 # 运行时曲线配置（由 _load_dim_curves 填充，可从 config.json 覆盖）
@@ -144,6 +145,7 @@ _SCORE_DEFS: dict[str, tuple[str, bool]] = {
     "rate": ("rate", False),
     "scale": ("sc", False),
     "institutional": ("inst", False),
+    "td": ("td", False),
 }
 
 _SCORE_FUNCS: dict[str, Callable] = {
@@ -173,6 +175,7 @@ _DIM_VALUE_KEYS: dict[str, str] = {
     "基金规模": "sc",
     "年化收益率": "annual_return",
     "机构持有比例": "inst",
+    "当日涨跌": "td",
 }
 
 _DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
@@ -191,6 +194,7 @@ _DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
     ("基金规模",     _SCORE_FUNCS["scale"],          0.02, "1~50亿最理想，太小不灵活、太大难操作"),
     ("年化收益率",    _SCORE_FUNCS["annual_return"],  0.04, "基金成立以来年化回报"),
     ("机构持有比例", _SCORE_FUNCS["institutional"],  0.02, "专业机构认可度，小幅参考"),
+    ("当日涨跌",    _SCORE_FUNCS["td"],              0.03, "当日实时涨跌幅，捕捉盘中动量"),
 ]
 
 

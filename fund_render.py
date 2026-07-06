@@ -422,6 +422,7 @@ def _dim_value_to_key(dim_name: str) -> str | None:
         "\u6700\u5927\u8fde\u8dcc\u5929\u6570": "max_loss_days",
         "\u8d39\u7387": "rate", "\u57fa\u91d1\u89c4\u6a21": "sc",
         "\u673a\u6784\u6301\u6709\u6bd4\u4f8b": "inst",
+        "\u5f53\u65e5\u6da8\u8dcc": "td",
     }
     return m.get(dim_name)
 
@@ -456,6 +457,7 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
         "基金规模": lambda: _v("sc", 2),
         "年化收益率": lambda: _v("annual_return"),
         "机构持有比例": lambda: _v("inst", 2),
+        "当日涨跌": lambda: _v("td"),
     }
     fn = mapping.get(dim_name)
     return fn() if fn else "-"
@@ -529,13 +531,14 @@ def _load_saved_recommend_data() -> list[dict]:
                 "volatility": r.get("volatility"), "calmar": r.get("calmar"),
                 "max_loss_days": r.get("max_loss_days"),
                 "mgr": r.get("mgr", ""), "day": r.get("day", ""),
+                "td": r.get("td"),
             }
             score_d = {k: entry.get(k) for k in (
                 "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
                 "annual_return", "sharpe", "sortino",
                 "profit_ratio", "win_rate", "recovery", "calmar",
                 "max_dd", "volatility", "max_loss_days",
-                "sc", "rate", "inst",
+                "sc", "rate", "inst", "td",
             )}
             score, details, skipped = calc_score_detail(score_d)
             entry["score"] = score
