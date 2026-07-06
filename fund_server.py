@@ -90,6 +90,8 @@ def _spawn_recommend() -> bool:
     """启动推荐任务，返回是否成功"""
     global _recommend_proc
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
+    # 清理旧心跳，避免前端读到残留的100%进度
+    clear_heartbeat("fund_recommend")
     try:
         proc = subprocess.Popen(
             [sys.executable, script],
