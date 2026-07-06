@@ -33,15 +33,61 @@ except ImportError:
     sys.exit(1)
     sys.exit(1)
 
-# ── 配置 ──────────────────────────────────────
-_TOP = CFG.get("recommend", {}).get("top_n", 200)
-SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
-_MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
-_SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
-_SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
-_HAS_TD = any(dim_name == "\u5f53\u65e5\u6da8\u8dcc" for dim_name, _, _, _ in SCORE_DIMS)
-"""当日涨跌维度是否开启：开启时缓存命中后仍需刷新td值重新评分"""
-_RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
+
+# ── 批量实时估值（新浪行情接口，支持多只基金一次查询）───────
+
+def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
+    """批量获取基金实时涨跌幅，返回 {code: 涨跌幅%, ...}
+    
+    使用新浪财经批量行情接口，每批最多200只基金。
+    调用方应保证 codes 非空。
+    """
+    result: dict[str, float] = {}
+    if not codes:
+        return result
+    batch_size = 200
+    batches = [codes[i:i + batch_size] for i in range(0, len(codes), batch_size)]
+
+    def _fetch_one(batch: list[str]) -> dict[str, float]:
+        batch_result: dict[str, float] = {}
+        try:
+            codes_str = ",".join("of" + c for c in batch)
+            url = "http://hq.sinajs.cn/list=" + codes_str
+            _req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://finance.sina.com.cn/",
+            })
+            with urllib.request.urlopen(_req, timeout=15) as _resp:
+                raw = _resp.read()
+            text = raw.decode("gbk", errors="ignore")
+            # 解析每行: var hq_str_of000001="name,?,?,pct,date,...";
+            for line in text.strip().split("\n"):
+                line = line.strip()
+                if "hq_str_of" not in line:
+                    continue
+                parts = line.split('"')
+                if len(parts) < 2:
+                    continue
+                fields = parts[1].split(",")
+                if len(fields) < 5:
+                    continue
+                m = re.search(r'of(\d{6})', line[:30])
+                code = m.group(1) if m else ""
+                if code and fields[3]:
+                    try:
+                        pct = float(fields[3])
+                        batch_result[code] = pct
+                    except ValueError:
+                        pass
+        except Exception:
+            pass
+        return batch_result
+
+    with ThreadPoolExecutor(max_workers=min(5, len(batches))) as _ex:
+        _futs = {_ex.submit(_fetch_one, b): b for b in batches}
+        for _f in as_completed(_futs):
+            result.update(_f.result())
+    return result
 _FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
 
 
@@ -206,7 +252,7 @@ def _print_results(results: list[dict]) -> None:
     print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
 
 
-def _score_one(code: str, name: str) -> dict | None:
+def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict | None:
     """单只基金评分"""
     try:
         from fund_watch import get_scoring_data as _get
@@ -225,14 +271,6 @@ def _score_one(code: str, name: str) -> dict | None:
             perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
             if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in perf_keys):
                 log.debug("跳过 %s(%s): 缺失收益维度", name, code)
-                return None
-        # 筛掉单日限购≤2万的基金
-        limit_amount: float | None = None
-        if _SKIP_LIMITED:
-            from fund_watch import _parse_purchase_limit
-            limit_amount = _parse_purchase_limit(code)
-            if limit_amount is not None and limit_amount <= 2:
-                log.debug("跳过 %s(%s): 限购%.2f万", name, code, limit_amount)
                 return None
         score = _calc_score(d)
         # 获取当日涨跌（供td维度评分）
@@ -293,26 +331,13 @@ def main() -> None:
             total_candidates = len(cached_results)
 
             if _HAS_TD:
-                # 当日涨跌维度开启：缓存中td已过期，需刷新全部候选基金的td并重算评分
+                # 当日涨跌维度开启：批量刷新全部候选基金的td并重算评分
                 from fund_scoring import _calc_score as _calc_score2
                 print(f"📋 当日涨跌维度开启，刷新 {total_candidates} 只基金td值...")
                 update_heartbeat("fund_recommend", progress=0, total=total_candidates, status="刷新td")
 
-                def _fetch_td(code: str) -> tuple[str, float | None]:
-                    try:
-                        td = _fetch_fund_estimate(code)
-                        return (code, td[1] if td else None)
-                    except Exception:
-                        return (code, None)
-
-                td_map: dict[str, float | None] = {}
-                with ThreadPoolExecutor(max_workers=30) as ex:
-                    futs = {ex.submit(_fetch_td, r.get("code", "")): r for r in cached_results}
-                    for i, fut in enumerate(as_completed(futs), 1):
-                        code, td_val = fut.result()
-                        td_map[code] = td_val
-                        if i % 50 == 0:
-                            update_heartbeat("fund_recommend", progress=i, total=total_candidates, status="td")
+                all_codes = [r.get("code", "") for r in cached_results]
+                td_map = _batch_fetch_estimates([c for c in all_codes if c])
 
                 for r in cached_results:
                     code = r.get("code", "")
@@ -337,7 +362,7 @@ def main() -> None:
                     return (code, "")
 
                 day_map: dict[str, str] = {}
-                with ThreadPoolExecutor(max_workers=20) as ex:
+                with ThreadPoolExecutor(max_workers=50) as ex:
                     futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
                     for i, fut in enumerate(as_completed(futs), 1):
                         code, day = fut.result()
@@ -372,14 +397,41 @@ def main() -> None:
         est_min = len(candidates) * 2 // 60
         print(f"   ⏱ 预计评分耗时约 {est_min} 分钟")
 
+        # ── 限购检查（前置到评分前，批量并行）──
+        if _SKIP_LIMITED and candidates:
+            from fund_watch import _parse_purchase_limit
+            print("   🔒 检查限购...")
+            update_heartbeat("fund_recommend", progress=0, total=len(candidates), status="限购")
+            limit_checked: list[dict] = []
+
+            def _check_limit(c: dict) -> dict | None:
+                amount = _parse_purchase_limit(c["code"])
+                if amount is not None and amount <= 2:
+                    log.debug("跳过 %s(%s): 限购%.2f万", c["name"], c["code"], amount)
+                    return None
+                c["_limit_amount"] = amount
+                return c
+
+            with ThreadPoolExecutor(max_workers=50) as _le:
+                _lfuts = {_le.submit(_check_limit, c): c for c in candidates}
+                for _j, _lf in enumerate(as_completed(_lfuts), 1):
+                    _r = _lf.result()
+                    if _r:
+                        limit_checked.append(_r)
+                    if _j % 100 == 0:
+                        update_heartbeat("fund_recommend", progress=_j, total=len(candidates), status="限购")
+
+            candidates = limit_checked
+            print(f"   限购筛选后: {len(candidates)} 只")
+
         # ── 并行评分 ──
         scored: list[dict] = []
         total = len(candidates)
         print(f"\n{'进度':<8} {'代码':<7} {'基金名':<20} {'年化':<8} {'评分':<6}")
         print("-" * 55)
 
-        with ThreadPoolExecutor(max_workers=30) as executor:
-            futs = {executor.submit(_score_one, c["code"], c["name"]): c for c in candidates}
+        with ThreadPoolExecutor(max_workers=50) as executor:
+            futs = {executor.submit(_score_one, c["code"], c["name"], c.get("_limit_amount")): c for c in candidates}
             for i, fut in enumerate(as_completed(futs), 1):
                 c = futs[fut]
                 result = fut.result()
