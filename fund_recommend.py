@@ -113,15 +113,20 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
 
         codes_list = list(result.keys())
         replaced = 0
-        with ThreadPoolExecutor(max_workers=30) as _ae:
+        # 限制实际净值替换总时间不超过10秒，超时后保留剩余基金的新浪估算值
+        _start = time.time()
+        _max_dur = 10
+        with ThreadPoolExecutor(max_workers=50) as _ae:
             _afuts = {_ae.submit(_fetch_actual, c): c for c in codes_list}
             for _af in as_completed(_afuts):
                 code, actual_val = _af.result()
                 if actual_val is not None:
                     result[code] = actual_val
                     replaced += 1
+                if time.time() - _start > _max_dur:
+                    break
         if replaced:
-            log.info("收盘后实际净值替换: %d/%d 只基金", replaced, len(codes_list))
+            log.info("收盘后实际净值替换: %d/%d 只基金(%.1fs)", replaced, len(codes_list), time.time()-_start)
 
     return result
 
