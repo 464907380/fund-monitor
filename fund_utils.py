@@ -16,7 +16,7 @@ from email.header import Header
 from email.mime.text import MIMEText
 import smtplib
 from logging.handlers import RotatingFileHandler
-from config import CFG, get_secret, api_url
+from config import CFG, get_secret, get_timeout, api_url
 
 # ── 交易日检测 ──────────────────────────────────
 FIXED_HOLIDAYS = {
@@ -128,7 +128,7 @@ def _request_with_retry(req: urllib.request.Request, decode: bool = True) -> str
     last_err = None
     for attempt in range(1, _RETRY_MAX + 1):
         try:
-            resp = urllib.request.urlopen(req, timeout=15).read()
+            resp = urllib.request.urlopen(req, timeout=get_timeout("request_with_retry", 15)).read()
             if decode:
                 return resp.decode("utf-8", errors="ignore")  # type: ignore[no-any-return]
             return resp  # type: ignore[no-any-return]
@@ -239,7 +239,7 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
     try:
         url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
         req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
             gz_data = r.read().decode("utf-8")
         m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
         m_val = re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
@@ -270,7 +270,7 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
     try:
         url = f"http://hq.sinajs.cn/list=of{code}"
         req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
             raw = r.read()
         gz = raw.decode("gbk")
         m = re.search(r'"([^,]*),([-\d.]+),[-\d.]+,([-\d.]+),([-\d.]+),(\d{4}-\d{2}-\d{2})"', gz)
@@ -290,7 +290,7 @@ def _send_smtp(msg: MIMEText) -> None:
     qq_auth = get_secret("QQ_MAIL_AUTH")
     s = None
     try:
-        s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
+        s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=get_timeout("smtp", 10))
         s.login(qq_email, qq_auth)
         s.sendmail(qq_email, [qq_email], msg.as_string())
         log.info("邮件发送成功")
@@ -316,7 +316,7 @@ def send_wechat(content: str, markdown: bool = True) -> bool:
         headers={"Content-Type": "application/json"},
     )
     try:
-        urllib.request.urlopen(req, timeout=10).read()
+        urllib.request.urlopen(req, timeout=get_timeout("wechat_push", 10)).read()
         log.info("企业微信推送成功")
         return True
     except Exception as e:

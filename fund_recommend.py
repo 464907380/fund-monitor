@@ -27,7 +27,7 @@ from fund_utils import update_heartbeat, _fetch_fund_estimate
 try:
     from fund_watch import log, fetch
     from fund_scoring import _calc_score, SCORE_DIMS
-    from config import api_url, CFG
+    from config import api_url, CFG, get_timeout, get_config
 except ImportError:
     print("请先在 fund_watch.py 同一目录运行")
     sys.exit(1)
@@ -38,9 +38,9 @@ except ImportError:
 
 def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     """批量获取基金当日涨跌幅，返回 {code: 涨跌幅%, ...}
-    
+
     先使用新浪财经批量行情接口快速获取估算值（每批最多200只）。
-    收盘后（≥15:00）尝试用天天基金实际净值替换估算值，保证数据准确。
+    收盘后（≥15:00）用天天基金实际净值替换估算值，保证数据准确。
     """
     result: dict[str, float] = {}
     if not codes:
@@ -57,7 +57,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                 "User-Agent": "Mozilla/5.0",
                 "Referer": "https://finance.sina.com.cn/",
             })
-            with urllib.request.urlopen(_req, timeout=15) as _resp:
+            with urllib.request.urlopen(_req, timeout=get_timeout("sina_quote", 15)) as _resp:
                 raw = _resp.read()
             text = raw.decode("gbk", errors="ignore")
             # 解析每行: var hq_str_of000001="name,?,?,pct,date,...";
@@ -101,7 +101,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                     "Referer": "https://fund.eastmoney.com/",
                     "User-Agent": "Mozilla/5.0",
                 })
-                with urllib.request.urlopen(_req2, timeout=10) as _r2:
+                with urllib.request.urlopen(_req2, timeout=get_timeout("default", 10)) as _r2:
                     raw2 = _r2.read().decode("utf-8")
                 m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', raw2)
                 m_val = re.search(r'"JZZZL":"([-+\d.]+)"', raw2)
@@ -113,20 +113,16 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
 
         codes_list = list(result.keys())
         replaced = 0
-        # 限制实际净值替换总时间不超过10秒，超时后保留剩余基金的新浪估算值
         _start = time.time()
-        _max_dur = 10
-        with ThreadPoolExecutor(max_workers=50) as _ae:
+        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ae:
             _afuts = {_ae.submit(_fetch_actual, c): c for c in codes_list}
             for _af in as_completed(_afuts):
                 code, actual_val = _af.result()
                 if actual_val is not None:
                     result[code] = actual_val
                     replaced += 1
-                if time.time() - _start > _max_dur:
-                    break
         if replaced:
-            log.info("收盘后实际净值替换: %d/%d 只基金(%.1fs)", replaced, len(codes_list), time.time()-_start)
+            log.info("收盘后实际净值替换: %d/%d 只基金(%.1fs)", replaced, len(codes_list), time.time() - _start)
 
     return result
 
@@ -236,13 +232,15 @@ def _config_hash() -> str:
 def _save_result(results: list[dict]) -> bool:
     """保存评分结果到文件"""
     lock_file = _RESULT_FILE + ".lock"
+    _lock_retry = get_config("recommend", "lock_retry_count", default=30)
+    _lock_sleep = get_config("recommend", "lock_retry_interval", default=1.0)
     try:
-        for _ in range(30):
+        for _ in range(_lock_retry):
             try:
                 with open(lock_file, "x") as _:
                     break
             except FileExistsError:
-                time.sleep(1)
+                time.sleep(_lock_sleep)
         else:
             print("⚠️ 无法获取文件锁，跳过保存")
             return False
@@ -413,7 +411,7 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
             return (code, "")
 
         day_map: dict[str, str] = {}
-        with ThreadPoolExecutor(max_workers=50) as ex:
+        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_update_day", default=50)) as ex:
             futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
             for i, fut in enumerate(as_completed(futs), 1):
                 code, day = fut.result()
@@ -493,7 +491,7 @@ def main() -> None:
                         return (code, "")
 
                     day_map: dict[str, str] = {}
-                    with ThreadPoolExecutor(max_workers=50) as ex:
+                    with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_update_day", default=50)) as ex:
                         futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
                         for i, fut in enumerate(as_completed(futs), 1):
                             code, day = fut.result()
@@ -547,7 +545,7 @@ def main() -> None:
                 c["_limit_amount"] = amount
                 return c
 
-            with ThreadPoolExecutor(max_workers=50) as _le:
+            with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_limit_check", default=50)) as _le:
                 _lfuts = {_le.submit(_check_limit, c): c for c in candidates}
                 for _j, _lf in enumerate(as_completed(_lfuts), 1):
                     _r = _lf.result()
@@ -565,7 +563,7 @@ def main() -> None:
         print(f"\n{'进度':<8} {'代码':<7} {'基金名':<20} {'年化':<8} {'评分':<6}")
         print("-" * 55)
 
-        with ThreadPoolExecutor(max_workers=50) as executor:
+        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as executor:
             futs = {executor.submit(_score_one, c["code"], c["name"], c.get("_limit_amount")): c for c in candidates}
             for i, fut in enumerate(as_completed(futs), 1):
                 c = futs[fut]

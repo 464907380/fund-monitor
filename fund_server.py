@@ -17,8 +17,7 @@ import urllib.request
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
-from config import CFG
-from config import api_url
+from config import CFG, get_timeout, get_config, api_url
 
 # ── 后台任务管理 ──
 _recommend_proc: subprocess.Popen | None = None
@@ -168,10 +167,10 @@ def _spawn_briefing() -> bool:
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── fund-table 缓存 ──
 _fund_table_cache: tuple[float, str] | None = None
-_FUND_TABLE_CACHE_TTL = 120  # 秒（评分数据盘中不变，2分钟内不重复渲染）
+_FUND_TABLE_CACHE_TTL = get_config("server", "fund_table_cache_ttl", default=120)  # 秒
 _FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
 _CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
-_PORT = 8080
+_PORT = get_config("server", "port", default=8080)
 
 
 def _fetch_fund_name(code: str) -> str:
@@ -179,7 +178,7 @@ def _fetch_fund_name(code: str) -> str:
     try:
         url = api_url("fund_pingzhongdata", code=code)
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=get_timeout("fetch_fund_name", 10)) as r:
             data = r.read().decode("utf-8")
         m = re.search(r'var fS_name\s*=\s*"([^"]+)"', data)
         return m.group(1) if m else ""
@@ -199,7 +198,7 @@ def _load_fund_index() -> list[dict]:
     try:
         url = api_url("fund_search_index")
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=get_timeout("load_fund_index", 15)) as r:
             data = r.read().decode("utf-8")
         # 格式: var r = [["000001","HXCZHH","华夏成长混合","混合型-灵活","HUAXIACHENGZHANGHUNHE"], ...]
         m = re.search(r"var r\s*=\s*(\[.*?\]);", data, re.DOTALL)
@@ -262,7 +261,7 @@ def _check_task_status(taskname: str) -> dict:
     try:
         r = subprocess.run(
             ["schtasks", "/query", "/tn", taskname, "/fo", "LIST", "/v"],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=get_timeout("schtasks", 10)
         )
         if r.returncode == 0:
             out = r.stdout
@@ -499,7 +498,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return
                 _req = urllib.request.Request(f"http://qt.gtimg.cn/q={code}",
                                               headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(_req, timeout=10) as r:
+                with urllib.request.urlopen(_req, timeout=get_timeout("default", 10)) as r:
                     raw = r.read()
                 text = raw.decode("gbk")
                 parts = text.split("~")
@@ -553,7 +552,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 def _fetch_f10(path: str) -> str:
                     url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/{path}"
                     r = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    return _ur.urlopen(r, timeout=15).read().decode("gbk", errors="ignore")
+                    return _ur.urlopen(r, timeout=get_timeout("default", 10)).read().decode("gbk", errors="ignore")
 
                 result: dict = {}
 
@@ -817,7 +816,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         return None
 
                 # 并行拉取所有基金数据（网络IO密集，20线程足够）
-                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                _mw = get_config("network", "max_workers", "server_fund_table", default=20)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=_mw) as executor:
                     fut_map = {executor.submit(_process_one, f["code"]): f["code"] for f in fund_list}
                     for fut in concurrent.futures.as_completed(fut_map):
                         result = fut.result()

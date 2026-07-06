@@ -329,7 +329,7 @@ def _parse_purchase_limit(code: str) -> float | None:
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://fund.eastmoney.com/",
         })
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=CFG.get("network",{}).get("timeout",{}).get("purchase_limit", 10)) as r:
             html = r.read().decode("utf-8", errors="ignore")
         # 提取限购金额，支持"万元"和"元"两种单位
         m = re.search(r"单日累计购买上限\s*([\d.]+)\s*万元", html)

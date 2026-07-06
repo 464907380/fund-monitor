@@ -173,3 +173,23 @@ def load_config() -> dict:
 
 # 模块级单例
 CFG = load_config()
+
+
+def get_timeout(name: str, default: int = 10) -> int:
+    """读取网络超时配置（秒）"""
+    return CFG.get("network", {}).get("timeout", {}).get(name, default)
+
+
+def get_config(*keys: str, default=None):
+    """安全读取多层嵌套配置，避免大量 CFG.get() 链式调用
+    
+    用法:
+        val = get_config("server", "port", default=8080)
+        val = get_config("recommend", "lock_retry_count", default=30)
+    """
+    val: dict = CFG
+    for k in keys:
+        if not isinstance(val, dict):
+            return default
+        val = val.get(k, {})
+    return val if val != {} else default

@@ -654,7 +654,8 @@ def _fetch_market_breadth() -> dict | None:
         for _pg in range(1, 101):
             url = f"https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page={_pg}&num=100&sort=changePercent&asc=0&node=hs_a"
             req = _ur.Request(url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://finance.sina.com.cn"})
-            resp = _ur.urlopen(req, timeout=10).read().decode("gbk")
+            from config import get_timeout as _get_timeout
+            resp = _ur.urlopen(req, timeout=_get_timeout("default", 10)).read().decode("gbk")
             items = _json.loads(resp)
             if not items:
                 break

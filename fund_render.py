@@ -9,7 +9,7 @@ import html as _html
 from email.header import Header
 from email.mime.text import MIMEText
 
-from config import CFG
+from config import CFG, get_config
 from fund_scoring import SCORE_DIMS, _score_piecewise
 import sys as _sys
 from fund_utils import HISTORY_DIR, log, _color_inline, _strip_html, _send_smtp, send_wechat
@@ -583,7 +583,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
             except Exception:
                 return (code, None)
 
-        with ThreadPoolExecutor(max_workers=20) as ex:
+        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "render_recommend", default=20)) as ex:
             futs = {ex.submit(_fetch_one, code): code for code in codes}
             for fut in as_completed(futs):
                 code, td_val = fut.result()
