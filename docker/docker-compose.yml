@@ -14,11 +14,11 @@ services:
     build: .
     image: fund-monitor
     container_name: fund-monitor
-    command: python /app/fund_monitor.py
+    command: python /app/src/fund_monitor.py
     restart: unless-stopped
     volumes:
-      - ./config.json:/app/config.json:ro
-      - ./fund_list.json:/app/fund_list.json:ro
+      - ./data/config.json:/app/data/config.json:ro
+      - ./data/fund_list.json:/app/data/fund_list.json:ro
       - ./.env:/app/.env:ro
     env_file:
       - .env
@@ -27,11 +27,11 @@ services:
   watch:
     build: .
     image: fund-monitor
-    command: python /app/fund_watch.py
+    command: python /app/src/fund_watch.py
     profiles: ["manual"]
     volumes:
-      - ./config.json:/app/config.json:ro
-      - ./fund_list.json:/app/fund_list.json:ro
+      - ./data/config.json:/app/data/config.json:ro
+      - ./data/fund_list.json:/app/data/fund_list.json:ro
       - ./.env:/app/.env:ro
     env_file:
       - .env
@@ -40,11 +40,11 @@ services:
   briefing:
     build: .
     image: fund-monitor
-    command: python /app/global_briefing.py
+    command: python /app/src/global_briefing.py
     profiles: ["manual"]
     volumes:
-      - ./config.json:/app/config.json:ro
-      - ./fund_list.json:/app/fund_list.json:ro
+      - ./data/config.json:/app/data/config.json:ro
+      - ./data/fund_list.json:/app/data/fund_list.json:ro
       - ./.env:/app/.env:ro
     env_file:
       - .env

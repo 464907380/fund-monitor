@@ -138,8 +138,9 @@ _SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
 _HAS_TD = any(dim_name == "\u5f53\u65e5\u6da8\u8dcc" for dim_name, _, _, _ in SCORE_DIMS)
 """当日涨跌维度是否开启：开启时缓存命中后仍需刷新td值重新评分"""
-_RESULT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
-_FUND_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
+_RECOMMEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
+_FUND_LIST_FILE = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
 
 
 def _parse_rank_response(data: str) -> list[list[str]] | None:

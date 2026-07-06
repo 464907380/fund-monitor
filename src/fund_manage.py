@@ -16,7 +16,7 @@ import os
 import sys
 import re
 
-_FUND_LIST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fund_list.json")
+_FUND_LIST_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "fund_list.json")
 
 
 def _load() -> list[dict]:

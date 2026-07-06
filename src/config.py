@@ -14,8 +14,9 @@ import os
 import re
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
-_ENV_PATH = os.path.join(_SCRIPT_DIR, ".env")
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)  # 项目根目录
+_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "data", "config.json")
+_ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
 
 # 内置默认值（config.json 不存在或字段缺失时使用）
 def _load_env(path: str) -> None:

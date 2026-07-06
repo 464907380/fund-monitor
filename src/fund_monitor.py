@@ -38,7 +38,7 @@ MAX_EMPTY_ROUNDS = CFG.get("fund_monitor", {}).get("max_empty_rounds", 2)
 _holdings_cache: dict[str, list[dict]] = {}
 
 # ── 状态快照文件（进程重启恢复用） ────────────
-_STATE_SNAPSHOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".monitor_state.json")
+_STATE_SNAPSHOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".monitor_state.json")
 
 # ── 辅助函数 ──────────────────────────────────
 

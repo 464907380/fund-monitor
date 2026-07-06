@@ -108,7 +108,7 @@ def _pipe_table_to_html(ranking_lines: list[str]) -> str:
 def _build_briefing_html(rows: list[dict], alerts: list[str], today: str,
                          ranking_lines: list[str] | None = None) -> str | None:
     """构建晚报完整 HTML，返回字符串；模板缺失时返回 None"""
-    tpl_path = os.path.join(HISTORY_DIR, "email_template.html")
+    tpl_path = os.path.join(HISTORY_DIR, "templates", "email_template.html")
     if not os.path.exists(tpl_path):
         return None
     with open(tpl_path, encoding="utf-8") as f:
@@ -642,7 +642,7 @@ def _format_recommend_rankings() -> list[str]:
             try:
                 # 从文件读取日期
                 import json as _json
-                _path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fund_recommend_result.json")
+                _path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".fund_recommend_result.json")
                 if os.path.exists(_path):
                     with open(_path) as _f:
                         _d = _json.load(_f)

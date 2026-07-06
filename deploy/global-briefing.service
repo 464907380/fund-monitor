@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/fund-monitor/global_briefing.py
+ExecStart=/usr/bin/python3 /opt/fund-monitor/src/global_briefing.py
 WorkingDirectory=/opt/fund-monitor
 User=nobody
 Group=nogroup

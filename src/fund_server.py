@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
 from config import CFG, api_url, get_timeout, get_config
 
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # ── 后台任务管理 ──
 _recommend_proc: subprocess.Popen | None = None
 _briefing_proc: subprocess.Popen | None = None
@@ -168,8 +170,8 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── fund-table 缓存 ──
 _fund_table_cache: tuple[float, str] | None = None
 _FUND_TABLE_CACHE_TTL = get_config("server", "fund_table_cache_ttl", default=120)  # 秒
-_FUND_LIST_PATH = os.path.join(_SCRIPT_DIR, "fund_list.json")
-_CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
+_FUND_LIST_PATH = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
+_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "data", "config.json")
 _PORT = get_config("server", "port", default=8080)
 
 
@@ -729,7 +731,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/recommend":
-            path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
+            path = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
             if os.path.exists(path):
                 try:
                     with open(path, encoding="utf-8") as f:
@@ -754,7 +756,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 from fund_watch import get_scoring_data, _parse_real_time
                 from fund_scoring import calc_score_detail
                 # 直接从文件读取基金列表（不使用缓存，因为页面可能刚增删过）
-                fl_path = os.path.join(_SCRIPT_DIR, "fund_list.json")
+                fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
                 if os.path.exists(fl_path):
                     with open(fl_path, encoding="utf-8") as _f:
                         fund_list = json.load(_f)
@@ -763,7 +765,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 rows: list[dict] = []
 
                 # ── 加载推荐缓存（避免每个基金重复拉取 ~200KB pingzhongdata）──
-                _rec_cache_path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
+                _rec_cache_path = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
                 _rec_cache: dict[str, dict] = {}
                 if os.path.exists(_rec_cache_path):
                     try:
@@ -898,13 +900,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_file("fund_manage.html")
             return
 
+        if parsed.path == "/config.json":
+            self._send_file("config.json", is_config=True)
+            return
+
         # 尝试提供静态文件（JS/CSS）
         self._send_file(parsed.path.lstrip("/"))
 
-    def _send_file(self, filename: str):
+    def _send_file(self, filename: str, is_config: bool = False):
         # 路径穿越防护：确保请求的文件在项目目录内
-        path = os.path.normpath(os.path.join(_SCRIPT_DIR, filename))
-        if not path.startswith(os.path.normpath(_SCRIPT_DIR) + os.sep) and path != os.path.normpath(_SCRIPT_DIR):
+        if is_config:
+            # 返回 data/ 下的 config.json（排除法，勿用于前端页面）
+            path = os.path.normpath(os.path.join(_PROJECT_ROOT, "data", filename))
+        else:
+            # 优先在 templates/ 查找，降级到 src/
+            tpl = os.path.normpath(os.path.join(_PROJECT_ROOT, "templates", filename))
+            if os.path.exists(tpl):
+                path = tpl
+            else:
+                path = os.path.normpath(os.path.join(_SCRIPT_DIR, filename))
+        allowed = [
+            os.path.normpath(_SCRIPT_DIR),
+            os.path.normpath(os.path.join(_PROJECT_ROOT, "templates")),
+        ]
+        if not any(path.startswith(d + os.sep) or path == d for d in allowed):
             self._send(403, {"Content-Type": "text/plain"}, b"Forbidden")
             return
         if not os.path.exists(path):
@@ -1022,7 +1041,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path == "/api/dims/calibrate":
             """基于推荐数据的百分位自动校准评分曲线"""
             try:
-                rec_path = os.path.join(_SCRIPT_DIR, ".fund_recommend_result.json")
+                rec_path = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
                 if not os.path.exists(rec_path):
                     self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
                     return

@@ -20,10 +20,13 @@ echo "📦 安装基金监控到 $INSTALL_DIR"
 
 # 1. 复制文件
 sudo mkdir -p "$INSTALL_DIR"
-sudo cp -v *.py *.json *.html *.toml "$INSTALL_DIR/"
+sudo cp -rv src/ "$INSTALL_DIR/src/"
+sudo cp -rv data/ "$INSTALL_DIR/data/"
+sudo cp -rv templates/ "$INSTALL_DIR/templates/"
+sudo cp -v *.toml "$INSTALL_DIR/"
 sudo mkdir -p "$INSTALL_DIR/tests"
 sudo cp -v tests/*.py "$INSTALL_DIR/tests/" 2>/dev/null || true
-sudo cp -v .env.example "$INSTALL_DIR/.env"
+sudo cp -v .env.example "$INSTALL_DIR/.env" 2>/dev/null || true
 
 # 2. 安装 systemd service + timer
 for name in global-briefing fund-watch fund-monitor; do

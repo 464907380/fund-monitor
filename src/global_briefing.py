@@ -14,8 +14,8 @@ from fund_utils import send_wechat, log, fetch_bytes, send_mail_html, parse_sina
 from config import get_secret as _get_secret, api_url
 
 # ── 成交额历史（用于动态百分位阈值） ──────────
-_VOLUME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".volume_history.json")
-_VOLUME_BREADTH_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".breadth_history.json")
+_VOLUME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".volume_history.json")
+_VOLUME_BREADTH_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".breadth_history.json")
 _VOLUME_HISTORY_DAYS = 60  # 取近60个交易日做百分位计算
 
 
@@ -52,7 +52,7 @@ A_INDICES = [
     ("sz399300", "沪深300"),
 ]
 
-_GLOBAL_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".global_cache.json")
+_GLOBAL_CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".global_cache.json")
 
 
 # WECHAT_WEBHOOK 在 main() 中惰性读取，支持环境变量刷新

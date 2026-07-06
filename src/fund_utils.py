@@ -25,7 +25,7 @@ FIXED_HOLIDAYS = {
     (10, 1), (10, 2), (10, 3), (10, 4), (10, 5), (10, 6), (10, 7),  # 国庆
 }
 
-_HOLIDAY_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".holiday_cache.json")
+_HOLIDAY_CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".holiday_cache.json")
 _HOLIDAY_CACHE_TTL = CFG.get("fund_monitor", {}).get("holiday_cache_ttl", 86400)
 
 
@@ -82,7 +82,7 @@ def is_trading_day(d: datetime.date) -> bool:
 
 
 # ── 路径 ──────────────────────────────────────
-HISTORY_DIR = os.path.dirname(os.path.abspath(__file__))
+HISTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── 日志 ──────────────────────────────────────
 _handlers: list[logging.Handler] = [logging.StreamHandler()]

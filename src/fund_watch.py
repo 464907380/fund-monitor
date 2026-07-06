@@ -29,7 +29,7 @@ def _ensure_fund_list_loaded() -> None:
     global _fund_list_loaded
     if _fund_list_loaded:
         return  # 已加载
-    _fund_list_path = os.path.join(HISTORY_DIR, "fund_list.json")
+    _fund_list_path = os.path.join(HISTORY_DIR, "data", "fund_list.json")
     if os.path.exists(_fund_list_path):
         try:
             with open(_fund_list_path, encoding="utf-8") as _f:

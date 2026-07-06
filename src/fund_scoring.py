@@ -74,7 +74,7 @@ def _load_dim_curves():
     import json, os
     curves = {}
     try:
-        cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "config.json")
         with open(cfg_path, encoding="utf-8") as _f:
             cfg = json.load(_f)
         for dim in cfg.get("scoring", {}).get("dims", []):
@@ -203,7 +203,7 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
     _load_dim_curves()
     import json, os
     try:
-        cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "config.json")
         cfg = json.load(open(cfg_path, encoding="utf-8"))
         cfg_dims = cfg.get("scoring", {}).get("dims", [])
     except Exception:
