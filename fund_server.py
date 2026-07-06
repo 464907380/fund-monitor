@@ -108,7 +108,8 @@ def _spawn_recommend() -> bool:
                 if err_out:
                     print(f"[ERROR] 推荐任务失败(stderr): {err_out[:1000]}", flush=True)
                 return False
-            # exit_code == 0: 正常完成（缓存命中快速返回），不需要心跳
+            # exit_code == 0: 快速完成，清除子进程写的最终心跳
+            clear_heartbeat("fund_recommend")
             return True
         except subprocess.TimeoutExpired:
             pass  # 进程还在运行，正常
@@ -1312,6 +1313,9 @@ def _init_builtin_presets(cfg: dict) -> None:
 
 
 def main():
+    # 启动时清理上次残留的心跳，避免前端读到旧进度
+    for _hb_name in ["fund_recommend", "fund_watch", "fund_monitor", "fund_briefing"]:
+        clear_heartbeat(_hb_name)
     host = "127.0.0.1"
     port = int(sys.argv[1]) if len(sys.argv) > 1 else _PORT
     server = http.server.ThreadingHTTPServer((host, port), Handler)
