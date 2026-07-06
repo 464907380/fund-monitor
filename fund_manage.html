@@ -1720,9 +1720,6 @@ async function runRecommendFromFilter() {
           if (statusEl) statusEl.textContent = recData.progress + '/' + displayTotal + ' (' + pct + '%) ' + (recData.status || '');
           if (btn) btn.textContent = '⏳ 推荐中 ' + pct + '%';
         } else if (!recAlive) {
-          noHbCount = (noHbCount || 0) + 1;
-          // 连续2次无心跳才判定完成（排除网络抖动）
-          if (noHbCount < 2) return;
           clearInterval(poll);
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '✔ 推荐完成，刷新表格...';
