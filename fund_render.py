@@ -610,6 +610,8 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                 r["score_detail"] = details
                 r["_skipped_weight"] = skipped
 
+        # 重算评分后排序列会乱，重新排序
+        fresh.sort(key=lambda x: x.get("score", 0), reverse=True)
         return fresh
     except Exception:
         return []
