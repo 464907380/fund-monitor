@@ -29,7 +29,7 @@ sudo cp -v tests/*.py "$INSTALL_DIR/tests/" 2>/dev/null || true
 sudo cp -v .env.example "$INSTALL_DIR/.env" 2>/dev/null || true
 
 # 2. 安装 systemd service + timer
-for name in global-briefing fund-watch fund-monitor; do
+for name in fund-monitor; do
     sudo cp -v "deploy/${name}.service"  "$SERVICE_DIR/"
     sudo cp -v "deploy/${name}.timer"    "$SERVICE_DIR/"
 done
@@ -37,7 +37,7 @@ done
 sudo systemctl daemon-reload
 
 # 3. 启用并启动定时器
-for name in global-briefing fund-watch fund-monitor; do
+for name in fund-monitor; do
     sudo systemctl enable "${name}.timer"
     sudo systemctl start  "${name}.timer"
 done

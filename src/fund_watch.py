@@ -1,18 +1,15 @@
 """
-基金风险监控 v5.2 — 每日晚报 + 企业微信推送
+基金数据获取与评分 — 共享工具模块
 """
 import json
 import os
 import re
 import datetime
-import time
 from config import CFG, api_url
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, write_heartbeat, update_heartbeat, clear_heartbeat, _fetch_fund_estimate
+from fund_utils import fetch, log, HISTORY_DIR, _fetch_fund_estimate
 from fund_scoring import SCORE_DIMS, calc_score_detail
 from fund_metrics import _calc_nav_metrics
-from fund_alerts import check_stagnation, check_consecutive_drop, check_dividend
-from fund_render import push, _load_recommend_data, _format_recommend_rankings
 
 # ── 基金列表 ──────────────────────────────────
 _FUND_LIST_FALLBACK = [
@@ -361,130 +358,4 @@ def _validate_fund_code(code: str) -> None:
 
 # ── 推荐排行 ────────────────────────────────────
 
-def main() -> None:
-    _ensure_fund_list_loaded()
-    today = datetime.date.today()
-    today_str = today.isoformat()
-    log.info("====== 基金晚报 %s 开始 ======", today_str)
-    write_heartbeat("fund_watch")
-    update_heartbeat("fund_briefing", progress=0, total=0, status="加载推荐数据...")
-    try:
-        # 直接从推荐结果文件加载数据，不再单独拉取网络数据
-        rec_data = _load_recommend_data()
-        if not rec_data:
-            log.warning("推荐结果不存在，跳过晚报生成")
-            return
 
-        rec_results = rec_data.get("results", [])
-        total_count = len(rec_results)
-        raw_rows: list[dict] = []
-        all_alerts: list[str] = []
-        total_steps = total_count + 2  # 整理N + 推送
-
-        # 将推荐结果转为晚报行格式
-        for i, item in enumerate(rec_results):
-            name = item.get("name", item.get("code", "?"))
-            code = item.get("code", "")
-            row = {
-                "code": code,
-                "name": name,
-                "name_short": name[:12],
-                "day": item.get("day", "-"),
-                "f5": item.get("f5", ""),
-                "m1": item.get("m1", ""),
-                "m3": item.get("m3", ""),
-                "y1": item.get("y1", ""),
-                "score": item.get("score", 0),
-                "mgr": "-",
-                "annual_return": item.get("annual_return"),
-                "sharpe": item.get("sharpe"),
-                "sortino": item.get("sortino"),
-                "max_dd": item.get("max_dd"),
-                "win_rate": item.get("win_rate"),
-                "inst": item.get("inst"),
-                "sc": item.get("sc"),
-                "rate": item.get("rate"),
-                "profit_ratio": item.get("profit_ratio"),
-                "recovery": item.get("recovery"),
-                "sy3": item.get("sy3"),
-                "sy2": item.get("sy2"),
-                "volatility": item.get("volatility"),
-                "calmar": item.get("calmar"),
-                "max_loss_days": item.get("max_loss_days"),
-                "sy6": item.get("sy6"),
-            }
-            raw_rows.append(row)
-            log.info("  %s(%s) 评分%.1f", name, code, item.get("score", 0))
-            update_heartbeat("fund_briefing", progress=i + 1, total=total_steps,
-                             status=f"整理 {name[:18]}({code})")
-
-        # 推送（两条通道共用推荐排行数据）
-        update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="获取市场优选")
-        ranking_lines = _format_recommend_rankings() if raw_rows else None
-        # 主表只展示自选基金，推荐排行单独生成
-        self_codes = {f["code"] for f in FUND_LIST}
-        self_rows = [r for r in raw_rows if r["code"] in self_codes]
-        # 补充推荐结果中缺失的自选基金（评分过低未入选推荐列表的基金）
-        found_codes = {r["code"] for r in self_rows}
-        missing_codes = self_codes - found_codes
-        if missing_codes:
-            log.info("补充 %d 只自选基金数据（未在推荐结果中）: %s", len(missing_codes), ",".join(sorted(missing_codes)))
-            update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status=f"补充{len(missing_codes)}只自选基金...")
-            for code in sorted(missing_codes):
-                try:
-                    d = get(code)
-                    if not d.get("n"):
-                        log.warning("  跳过 %s：未获取到数据", code)
-                        continue
-                    navs = d.get("nav", [])
-                    td = d.get("td")
-                    day_s = f"{td:+.2f}%" if td is not None else ""
-                    f5_s = ""
-                    if len(navs) >= 5:
-                        pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
-                        f5_s = f"{pct:+.1f}%"
-                    score_d = {k: d.get(k) for k in (
-                        "y1","m3","m1","f5","sy6","sy2","sy3",
-                        "annual_return","sharpe","sortino",
-                        "profit_ratio","win_rate","recovery","calmar",
-                        "max_dd","volatility","max_loss_days",
-                        "sc","rate","inst",
-                    )}
-                    score, details, skipped = calc_score_detail(score_d)
-                    name = d.get("n", code)
-                    row = {
-                        "code": code, "name": name, "name_short": name[:12],
-                        "day": day_s,
-                        "f5": f5_s,
-                        "m1": f"{d['m1']:+.1f}%" if d.get("m1") is not None else "",
-                        "m3": f"{d['m3']:+.1f}%" if d.get("m3") is not None else "",
-                        "y1": f"{d['y1']:+.1f}%" if d.get("y1") is not None else "",
-                        "score": score,
-                        "mgr": (d.get("mgr", "") or "")[:6],
-                        "annual_return": d.get("annual_return"),
-                        "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),
-                        "max_dd": d.get("max_dd"), "win_rate": d.get("win_rate"),
-                        "profit_ratio": d.get("profit_ratio"),
-                        "recovery": d.get("recovery"),
-                        "sy3": d.get("sy3"), "sy2": d.get("sy2"),
-                        "sy6": d.get("sy6"),
-                        "volatility": d.get("volatility"),
-                        "calmar": d.get("calmar"),
-                        "max_loss_days": d.get("max_loss_days"),
-                        "inst": d.get("inst"), "sc": d.get("sc"), "rate": d.get("rate"),
-                    }
-                    self_rows.append(row)
-                    log.info("  ✅ %s(%s) 评分%.1f（补充获取）", name, code, score)
-                except Exception as e:
-                    log.warning("  跳过 %s：获取失败 %s", code, e)
-        update_heartbeat("fund_briefing", progress=total_steps - 1, total=total_steps, status="推送中")
-        push("📊 基金晚报", self_rows, all_alerts, today_str, ranking_lines)
-        update_heartbeat("fund_briefing", progress=total_steps, total=total_steps, status="完成")
-        log.info("====== 基金晚报 %s 完成 ======", today_str)
-    finally:
-        clear_heartbeat("fund_watch")
-        clear_heartbeat("fund_briefing")
-
-
-if __name__ == "__main__":
-    main()

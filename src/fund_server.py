@@ -23,19 +23,14 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── 后台任务管理 ──
 _recommend_proc: subprocess.Popen | None = None
-_briefing_proc: subprocess.Popen | None = None
 _proc_lock = threading.Lock()
 
 # 通用任务进程跟踪（供启停控制使用）
 _task_procs: dict[str, subprocess.Popen] = {}
 _task_scripts = {
-    "global_briefing": "global_briefing.py",
-    "fund_watch": "fund_watch.py",
     "fund_monitor": "fund_monitor.py",
 }
 _task_heartbeats = {
-    "global_briefing": "global_briefing",
-    "fund_watch": "fund_briefing",
     "fund_monitor": "fund_monitor",
 }
 
@@ -134,36 +129,7 @@ def _spawn_recommend() -> bool:
         return False
 
 
-def _spawn_briefing() -> bool:
-    """启动晚报生成，完成后自动清理心跳，返回是否成功"""
-    global _briefing_proc
-    script = os.path.join(_SCRIPT_DIR, "fund_watch.py")
-    try:
-        proc = subprocess.Popen(
-            [sys.executable, script],
-            cwd=_SCRIPT_DIR,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        # 确认进程已成功启动且仍在运行，再写心跳
-        try:
-            proc.wait(timeout=3)
-            return False  # 进程在3秒内退出=启动失败
-        except subprocess.TimeoutExpired:
-            pass  # 进程还在运行，正常
-        write_heartbeat("fund_briefing")
-        with _proc_lock:
-            _briefing_proc = proc
 
-        def _wait_and_cleanup(p=proc) -> None:
-            p.wait()
-            clear_heartbeat("fund_briefing")
-
-        threading.Thread(target=_wait_and_cleanup, daemon=True).start()
-        return True
-    except Exception:
-        clear_heartbeat("fund_briefing")
-        return False
 
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -324,12 +290,6 @@ def _check_task_status(taskname: str) -> dict:
 
 
 TASK_DEFS = [
-    {"id": "global_briefing", "taskname": "全球股市简报", "icon": "🌏", "label": "全球股市简报",
-     "desc": "A 股：上证指数 · 深证成指 · 创业板指 · 沪深300 · 成交额 · 涨跌家数 | 全球：道琼斯 · 纳斯达克 · 标普500 · 恒生指数 · 日经225 · 韩国KOSPI · 英国富时100 · 德国DAX · 法国CAC40 · 瑞士SMI",
-     "time": "交易日 09:30"},
-    {"id": "fund_watch", "taskname": "基金晚报", "icon": "📊", "label": "基金晚报",
-     "desc": "每只监控基金：当日涨跌 · 近5日 · 近1月/3月/1年收益 | 警报：经理变更 · 规模翻倍 · 净值停滞 · 连跌趋势 · 分红除权 | 附：市场优选基金 TOP 10 排行（12 维评分）",
-     "time": "交易日 15:30"},
     {"id": "fund_monitor", "taskname": "基金盘中监控", "icon": "🔔", "label": "盘中监控",
      "desc": "交易日 9:30–15:00 每 10 分钟轮询 | 基金实时估算涨跌幅 · 基金前 5 大重仓个股实时涨跌 | 双重警报：单次急涨急跌 + 当日累计涨跌（红/黄双阈值）| 节假日自动检测 · 进程崩溃恢复",
      "time": "交易日 9:25 启动"},
@@ -709,25 +669,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(500, {"Content-Type": "text/html; charset=utf-8"},
                            f"<p style=\"color:#ef5350;\">获取推荐表格失败: {e}</p>".encode("utf-8"))
-            return
-
-        if parsed.path == "/api/briefing":
-            path = os.path.join(HISTORY_DIR, ".briefing_fund.html")
-            if os.path.exists(path):
-                try:
-                    with open(path, encoding="utf-8") as f:
-                        html = f.read()
-                    mtime = os.path.getmtime(path)
-                    self._send(200, {"Content-Type": "text/html; charset=utf-8", "X-Last-Modified": str(mtime)}, html.encode("utf-8"))
-                except Exception as e:
-                    body = ("<html><body style='background:#1a1a1a;color:#666;padding:40px;text-align:center;font-family:sans-serif;'>"
-                            "<p>读取晚报失败</p></body></html>")
-                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, body.encode("utf-8"))
-            else:
-                body = ("<html><body style='background:#1a1a1a;color:#666;padding:40px;text-align:center;font-family:sans-serif;'>"
-                        "<p>\u2622\ufe0f 晚报尚未生成</p>"
-                        "<p style='font-size:12px;color:#555;'>等待 15:30 定时任务运行</p></body></html>")
-                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, body.encode("utf-8"))
             return
 
         if parsed.path == "/api/recommend":
@@ -1174,21 +1115,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "推荐任务启动失败"}, 500))
             except Exception as e:
                 clear_heartbeat("fund_recommend")
-                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
-            return
-
-        if self.path == "/api/briefing":
-            try:
-                with _proc_lock:
-                    if _briefing_proc and _briefing_proc.poll() is None:
-                        self._send(*_json_response({"ok": False, "error": "晚报生成任务正在运行中"}))
-                        return
-                if _spawn_briefing():
-                    self._send(*_json_response({"ok": True, "message": "晚报生成已启动，约需 2 分钟"}))
-                else:
-                    self._send(*_json_response({"ok": False, "error": "晚报生成启动失败"}, 500))
-            except Exception as e:
-                clear_heartbeat("fund_briefing")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
