@@ -788,13 +788,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             "max_loss_days": d.get("max_loss_days"),
                             "sc": d.get("sc"), "rate": d.get("rate"),
                             "inst": d.get("inst"),
+                            "td": d.get("td"),
                         }
                         score_d = {k: d.get(k) for k in (
                             "y1","m3","m1","f5","sy6","sy2","sy3",
                             "annual_return","sharpe","sortino",
                             "profit_ratio","win_rate","recovery","calmar",
                             "max_dd","volatility","max_loss_days",
-                            "sc","rate","inst",
+                            "sc","rate","inst","td",
                         )}
                         score, details, skipped = calc_score_detail(score_d)
                         row["score"] = score
