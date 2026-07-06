@@ -1,5 +1,5 @@
 """
-基金管理 — 本地 HTTP 服务器
+基金优选 — 本地 HTTP 服务器
 提供交互式网页 + API，用于增删监控基金。
 """
 import json
@@ -1318,7 +1318,7 @@ def main():
     host = "127.0.0.1"
     port = int(sys.argv[1]) if len(sys.argv) > 1 else _PORT
     server = http.server.ThreadingHTTPServer((host, port), Handler)
-    print(f"🌐 基金管理页面：http://{host}:{port}")
+    print(f"🌐 基金优选页面：http://{host}:{port}")
     print("   按 Ctrl+C 停止服务")
     try:
         server.serve_forever()

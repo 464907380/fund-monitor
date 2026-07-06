@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-基金监控管理 — 增减监控基金
+基金优选管理 — 增减监控基金
 
 用法：
     python fund_manage.py list                   # 查看当前监控列表
