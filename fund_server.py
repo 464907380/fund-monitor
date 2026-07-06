@@ -1020,7 +1020,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     json.dump(cfg, _fw, indent=2, ensure_ascii=False)
                 import importlib
                 import fund_scoring
+                import fund_render
                 importlib.reload(fund_scoring)
+                importlib.reload(fund_render)
+                # 清除 fund-table 缓存（_fund_table_cache 已在 do_POST 开头声明为 global）
+                _fund_table_cache = None
                 self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
