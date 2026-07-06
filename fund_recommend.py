@@ -37,10 +37,10 @@ except ImportError:
 # ── 批量实时估值（新浪行情接口，支持多只基金一次查询）───────
 
 def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
-    """批量获取基金实时涨跌幅，返回 {code: 涨跌幅%, ...}
+    """批量获取基金当日涨跌幅，返回 {code: 涨跌幅%, ...}
     
-    使用新浪财经批量行情接口，每批最多200只基金。
-    调用方应保证 codes 非空。
+    先使用新浪财经批量行情接口快速获取估算值（每批最多200只）。
+    收盘后（≥15:00）尝试用天天基金实际净值替换估算值，保证数据准确。
     """
     result: dict[str, float] = {}
     if not codes:
@@ -87,6 +87,42 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
         _futs = {_ex.submit(_fetch_one, b): b for b in batches}
         for _f in as_completed(_futs):
             result.update(_f.result())
+
+    # 收盘后尝试用实际净值替换新浪估算值
+    now = datetime.datetime.now()
+    is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
+    if is_after_market and result:
+        today_str = now.strftime("%Y-%m-%d")
+
+        def _fetch_actual(code: str) -> tuple[str, float | None]:
+            try:
+                url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+                _req2 = urllib.request.Request(url, headers={
+                    "Referer": "https://fund.eastmoney.com/",
+                    "User-Agent": "Mozilla/5.0",
+                })
+                with urllib.request.urlopen(_req2, timeout=10) as _r2:
+                    raw2 = _r2.read().decode("utf-8")
+                m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', raw2)
+                m_val = re.search(r'"JZZZL":"([-+\d.]+)"', raw2)
+                if m_date and m_val and m_date.group(1) == today_str:
+                    return (code, float(m_val.group(1)))
+            except Exception:
+                pass
+            return (code, None)
+
+        codes_list = list(result.keys())
+        replaced = 0
+        with ThreadPoolExecutor(max_workers=30) as _ae:
+            _afuts = {_ae.submit(_fetch_actual, c): c for c in codes_list}
+            for _af in as_completed(_afuts):
+                code, actual_val = _af.result()
+                if actual_val is not None:
+                    result[code] = actual_val
+                    replaced += 1
+        if replaced:
+            log.info("收盘后实际净值替换: %d/%d 只基金", replaced, len(codes_list))
+
     return result
 
 # ── 配置 ──────────────────────────────────────
