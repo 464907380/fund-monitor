@@ -321,7 +321,6 @@ def main() -> None:
                     r["day"] = f"{td_val:+.2f}%" if td_val is not None else ""
                     if td_val is not None:
                         r["score"] = _calc_score2(r)
-                    update_heartbeat("fund_recommend", progress=i, total=total_candidates, status="评分")
 
                 cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
             else:
