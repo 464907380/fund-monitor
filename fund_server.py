@@ -1247,6 +1247,42 @@ _BUILTIN_PRESETS = {
             {"name":"基金规模","key":"scale","weight":0.03,"enabled":True,"desc":"1~50亿最理想，太小不灵活、太大难操作","curve":{"points":[[0,0],[1,70],[20,100],[50,70],[100,30]]},"category":"other"},
         ]
     },
+    "📈 短线进攻 A": {
+        "dims": [
+            {"name":"近一周收益","key":"f5","weight":0.25,"enabled":True,"desc":"近五个交易日涨跌幅，捕捉短期动量","curve":{"points":[[0,0],[5,40],[10,60],[15,80],[20,100]]},"category":"perf"},
+            {"name":"近1月收益","key":"m1","weight":0.20,"enabled":True,"desc":"近一个月涨跌幅，捕捉短期动量","curve":{"points":[[0,0],[15,50],[30,80],[45,100]]},"category":"perf"},
+            {"name":"当日涨跌","key":"td","weight":0.15,"enabled":True,"desc":"当日实时涨跌幅，捕捉盘中动量","curve":{"points":[[-5,0],[-2,40],[0,60],[2,80],[5,100]]},"category":"perf"},
+            {"name":"近3月收益","key":"m3","weight":0.15,"enabled":True,"desc":"近三个月涨跌幅，中期趋势","curve":{"points":[[0,0],[30,50],[60,80],[90,100]]},"category":"perf"},
+            {"name":"上行胜率","key":"win_rate","weight":0.10,"enabled":True,"desc":"赚钱天数占总交易天数的比例","curve":{"points":[[30,10],[50,40],[70,100]]},"category":"quality"},
+            {"name":"盈亏比","key":"profit_ratio","weight":0.10,"enabled":True,"desc":"平均盈利÷平均亏损，>1说明赚比亏多","curve":{"points":[[0,0],[1,20],[2,100]]},"category":"quality"},
+            {"name":"近6月收益","key":"sy6","weight":0.05,"enabled":True,"desc":"近六个月表现，补充中短期维度","curve":{"points":[[0,10],[20,50],[50,75],[100,100]]},"category":"perf"},
+        ]
+    },
+    "🛡️ 短线平衡 B": {
+        "dims": [
+            {"name":"近1月收益","key":"m1","weight":0.20,"enabled":True,"desc":"近一个月涨跌幅，捕捉短期动量","curve":{"points":[[0,0],[15,50],[30,80],[45,100]]},"category":"perf"},
+            {"name":"近一周收益","key":"f5","weight":0.15,"enabled":True,"desc":"近五个交易日涨跌幅，捕捉短期动量","curve":{"points":[[0,0],[5,40],[10,60],[15,80],[20,100]]},"category":"perf"},
+            {"name":"近3月收益","key":"m3","weight":0.15,"enabled":True,"desc":"近三个月涨跌幅，中期趋势","curve":{"points":[[0,0],[30,50],[60,80],[90,100]]},"category":"perf"},
+            {"name":"当日涨跌","key":"td","weight":0.10,"enabled":True,"desc":"当日实时涨跌幅，捕捉盘中动量","curve":{"points":[[-5,0],[-2,40],[0,60],[2,80],[5,100]]},"category":"perf"},
+            {"name":"近6月收益","key":"sy6","weight":0.10,"enabled":True,"desc":"近六个月表现，补充中短期维度","curve":{"points":[[0,10],[20,50],[50,75],[100,100]]},"category":"perf"},
+            {"name":"上行胜率","key":"win_rate","weight":0.10,"enabled":True,"desc":"赚钱天数占总交易天数的比例","curve":{"points":[[30,10],[50,40],[70,100]]},"category":"quality"},
+            {"name":"盈亏比","key":"profit_ratio","weight":0.10,"enabled":True,"desc":"平均盈利÷平均亏损，>1说明赚比亏多","curve":{"points":[[0,0],[1,20],[2,100]]},"category":"quality"},
+            {"name":"最大回撤","key":"max_dd","weight":0.05,"enabled":True,"desc":"历史最大跌幅","curve":{"points":[[0,90],[16.67,90],[20,86],[50,50],[75,20],[91.67,0]]},"category":"risk"},
+            {"name":"基金规模","key":"scale","weight":0.05,"enabled":True,"desc":"1~50亿最理想，太小不灵活、太大难操作","curve":{"points":[[0,0],[1,70],[20,100],[50,70],[100,30]]},"category":"other"},
+        ]
+    },
+    "⚡ 激进理性 C": {
+        "dims": [
+            {"name":"近1月收益","key":"m1","weight":0.20,"enabled":True,"desc":"近一个月涨跌幅，捕捉短期动量","curve":{"points":[[0,0],[15,50],[30,80],[45,100]]},"category":"perf"},
+            {"name":"近一周收益","key":"f5","weight":0.15,"enabled":True,"desc":"近五个交易日涨跌幅，捕捉短期动量","curve":{"points":[[0,0],[5,40],[10,60],[15,80],[20,100]]},"category":"perf"},
+            {"name":"近3月收益","key":"m3","weight":0.15,"enabled":True,"desc":"近三个月涨跌幅，中期趋势","curve":{"points":[[0,0],[30,50],[60,80],[90,100]]},"category":"perf"},
+            {"name":"盈亏比","key":"profit_ratio","weight":0.15,"enabled":True,"desc":"平均盈利÷平均亏损，>1说明赚比亏多","curve":{"points":[[0,0],[1,20],[2,100]]},"category":"quality"},
+            {"name":"当日涨跌","key":"td","weight":0.10,"enabled":True,"desc":"当日实时涨跌幅，捕捉盘中动量","curve":{"points":[[-5,0],[-2,40],[0,60],[2,80],[5,100]]},"category":"perf"},
+            {"name":"最大回撤","key":"max_dd","weight":0.10,"enabled":True,"desc":"历史最大跌幅","curve":{"points":[[0,90],[16.67,90],[20,86],[50,50],[75,20],[91.67,0]]},"category":"risk"},
+            {"name":"上行胜率","key":"win_rate","weight":0.10,"enabled":True,"desc":"赚钱天数占总交易天数的比例","curve":{"points":[[30,10],[50,40],[70,100]]},"category":"quality"},
+            {"name":"近6月收益","key":"sy6","weight":0.05,"enabled":True,"desc":"近六个月表现，补充中短期维度","curve":{"points":[[0,10],[20,50],[50,75],[100,100]]},"category":"perf"},
+        ]
+    },
 }
 
 
