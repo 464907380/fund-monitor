@@ -942,6 +942,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 import fund_render
                 importlib.reload(fund_scoring)
                 importlib.reload(fund_render)
+                # 清除 fund-table 缓存，使新权重立即生效
+                global _fund_table_cache
+                _fund_table_cache = None
                 self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
