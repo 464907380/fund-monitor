@@ -360,24 +360,6 @@ input, select, button { font-family: inherit; outline: none; }
 
   <div id="msg" class="msg"></div>
 
-  <!-- 顶部工具栏 -->
-  <div class="toolbar">
-    <div class="toolbar-btn-wrap">
-      <button onclick="runBriefing()" id="briefBtn" class="toolbar-btn blue">📊 生成晚报</button>
-      <div class="btn-progress" id="briefProgress"></div>
-    </div>
-  </div>
-
-
-  <div class="card">
-    <div class="list-header">
-      <span>📊 基金晚报</span>
-      <span class="count" id="briefDate" style="font-size:12px;">未生成</span>
-    </div>
-    <div class="divider"></div>
-    <div id="briefContent" style="padding:0;font-size:12px;color:#ccc;"></div>
-  </div>
-
   <div class="card" id="fundFullTableCard">
     <div class="divider"></div>
     <div id="fundFullTable" style="padding:0;font-size:12px;color:#666;"><p style="padding:12px 4px;">⏳ 加载中…</p></div>
@@ -812,19 +794,11 @@ function updateHeartbeat() {
         el.style.display = 'none';
       }
     });
-    // 简报文件有更新时自动刷新（30秒轮询足够及时）
-    if (d.briefing_mtime && window._briefingMtime && d.briefing_mtime !== window._briefingMtime) {
-      window._briefingMtime = d.briefing_mtime;
-      loadBriefing();
-    } else if (d.briefing_mtime && !window._briefingMtime) {
-      window._briefingMtime = d.briefing_mtime; // 首次初始化，不触发刷新
-    }
   });
 }
 
 loadFeatures();
 updateHeartbeat();
-// 页面加载时尝试恢复已保存的推荐/基金表格
 loadSavedTables();
 setInterval(updateHeartbeat, 30000);
 
@@ -871,83 +845,7 @@ async function loadHeartbeat() {
 }
 setInterval(loadFeatures, 30000);
 
-async function loadBriefing() {
-  const r = await fetch(API + '/api/briefing', { method: 'GET' });
-  if (!r.ok) return;
-  const html = await r.text();
-  const el = document.getElementById('briefContent');
-  if (el) el.innerHTML = html;
-  // 从内容中提取日期更新右上角
-  const dateMatch = html.match(/(\d{4}-\d{2}-\d{2})/);
-  const dateEl = document.getElementById('briefDate');
-  if (dateEl) dateEl.textContent = dateMatch ? dateMatch[1] : '已生成';
-}
 
-async function runBriefing() {
-  const btn = document.getElementById('briefBtn');
-  const prog = document.getElementById('briefProgress');
-  if (btn) { btn.disabled = true; }
-  const startTime = Date.now();
-  const MAX_WAIT = 600000; // 10min
-  const r = await fetch(API + '/api/briefing', { method: 'POST' });
-  const d = await r.json();
-  if (d.ok) {
-    const poll = setInterval(async () => {
-      try {
-        const hb = await fetch(API + '/api/heartbeat').then(r => r.json());
-        const data = hb.heartbeats?.fund_briefing;
-        const alive = hb.alive?.fund_briefing;
-        if (data?.total > 0) {
-          const pct = Math.round(data.progress / data.total * 100);
-          if (btn) btn.textContent = `⏳ 晚报 ${data.status||''} ${pct}%`;
-          if (prog) prog.style.width = pct + '%';
-        } else if (alive) {
-          if (btn) btn.textContent = `⏳ 晚报 ${data?.status||'启动中'}`;
-          if (prog) prog.style.width = data?.status ? '10%' : '5%';
-        }
-        if (!alive) {
-          clearInterval(poll);
-          loadBriefing();
-          loadFeatures();
-          if (btn) { btn.disabled = false; btn.textContent = '📊 生成晚报'; }
-          if (prog) prog.style.width = '0%';
-        }
-      } catch(e) { /* 网络错误时忽略，下次轮询继续 */ }
-      if (Date.now() - startTime > MAX_WAIT) {
-        clearInterval(poll);
-        if (btn) { btn.disabled = false; btn.textContent = '📊 生成晚报'; }
-        if (prog) prog.style.width = '0%';
-        showMsg('晚报生成超时', 'fail');
-      }
-    }, 3000);
-  } else {
-    if (btn) { btn.disabled = false; btn.textContent = '📊 生成晚报'; }
-    showMsg('✖ ' + (d.error || '发起失败'), 'fail');
-  }
-}
-
-// 页面加载时检查晚报是否正在生成
-async function checkBriefRunning() {
-  const r = await fetch(API + '/api/heartbeat');
-  const d = await r.json();
-  if (!d.ok) return;
-  const btn = document.getElementById('briefBtn');
-  const prog = document.getElementById('briefProgress');
-  const data = d.heartbeats?.fund_briefing;
-  if (d.alive?.fund_briefing && data) {
-    if (btn) { btn.disabled = true; }
-    const pct = data.total > 0 ? Math.round(data.progress / data.total * 100) : 0;
-    if (btn) btn.textContent = `⏳ 晚报 ${data.status||''} ${pct}%`;
-    if (prog) prog.style.width = pct + '%';
-    setTimeout(checkBriefRunning, 10000);
-  } else {
-    if (prog) prog.style.width = '0%';
-  }
-}
-
-checkBriefRunning();
-
-loadBriefing();
 
 
 var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days','td'];
