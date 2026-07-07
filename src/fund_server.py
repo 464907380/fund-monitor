@@ -49,13 +49,7 @@ def _spawn_task(task_id: str) -> bool:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        # 确认进程已成功启动且仍在运行，再写心跳
-        try:
-            proc.wait(timeout=3)
-            # 进程在3秒内退出了（很可能是启动失败）
-            return False
-        except subprocess.TimeoutExpired:
-            pass  # 进程还在运行，正常
+        # 立即写心跳，不等待
         write_heartbeat(hb_name)
         with _proc_lock:
             _task_procs[task_id] = proc
