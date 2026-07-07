@@ -267,11 +267,11 @@ def get(code: str) -> dict:
     return d
 
 
-def _fetch_nav_from_lsjz(code: str, max_pages: int = 15) -> list[dict] | None:
+def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
     """从 LSJZ 历史净值 API 并行获取多页净值数据，兼容旧格式返回。
     
     返回 [{d: YYYY-MM-DD, v: nav_value}, ...] 按日期升序。
-    LSJZ API 每页 20 条，max_pages=15 约 300 条（~15 个月数据）。
+    LSJZ API 每页 20 条，max_pages=38 约 760 条（~3 年数据）。
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import urllib.request, re, json as _json
@@ -338,8 +338,8 @@ def get_scoring_data(code: str) -> dict:
     if name:
         d["n"] = name
 
-    # 2. 获取净值历史（LSJZ API, 并行15页≈300条≈15月数据）
-    full_nav = _fetch_nav_from_lsjz(code, max_pages=15)
+    # 2. 获取净值历史（LSJZ API, 并行38页≈760条≈3年数据）
+    full_nav = _fetch_nav_from_lsjz(code, max_pages=38)
     if full_nav:
         d["full_nav"] = full_nav
         d["nav"] = full_nav[-6:]  # 最近6条（前端展示用）
