@@ -315,7 +315,7 @@ def _load_saved_recommend_data() -> list[dict]:
             entry["_skipped_weight"] = skipped
             out.append(entry)
         out.sort(key=lambda x: x.get("score", 0), reverse=True)
-        return out[:_show_top]
+        return out  # 返回全部，由调用方决定截取数量
     except Exception:
         return []
 
@@ -381,7 +381,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
 
         # 重算评分后排序列会乱，重新排序
         fresh.sort(key=lambda x: x.get("score", 0), reverse=True)
-        return fresh
+        return fresh[:_show_top]
     except Exception:
         return []
 
