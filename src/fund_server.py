@@ -1013,6 +1013,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not rec_data:
                     self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
                     return
+                # 刷新实时涨跌（校准不能用缓存中的旧 td 值）
+                from fund_recommend import _batch_fetch_estimates
+                all_codes = [r.get("code", "") for r in rec_data if r.get("code")]
+                if all_codes:
+                    fresh_td = _batch_fetch_estimates(all_codes)
+                    for r in rec_data:
+                        code = r.get("code", "")
+                        if code in fresh_td:
+                            r["td"] = fresh_td[code]
                 with open(_CONFIG_PATH, encoding="utf-8") as _fc:
                     cfg = json.load(_fc)
                 dims = cfg.get("scoring", {}).get("dims", [])
