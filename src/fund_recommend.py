@@ -694,6 +694,30 @@ def main() -> None:
                          detail=f"保存 {len(scored)} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
         _save_result(scored)
 
+        # ── 补拉自选基金数据 ──
+        try:
+            _fund_list_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "fund_list.json")
+            if os.path.exists(_fund_list_file):
+                with open(_fund_list_file, encoding="utf-8") as _fl:
+                    _fl_data = json.load(_fl)
+                _existing = {r["code"] for r in scored if r.get("code")}
+                _missing = [f for f in _fl_data if f["code"] not in _existing]
+                if _missing:
+                    print(f"\n📋 补拉 {len(_missing)} 只自选基金数据...")
+                    _extra = []
+                    for _f in _missing:
+                        _r = _score_one(_f["code"], _f.get("name", ""))
+                        if _r:
+                            _extra.append(_r)
+                            print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
+                    if _extra:
+                        scored.extend(_extra)
+                        scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+                        _save_result(scored)
+                        print(f"  已补入 {len(_extra)} 只自选基金，重新保存")
+        except Exception as _e:
+            print(f"⚠️ 补拉自选基金数据失败: {_e}")
+
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
         print("=" * 50)
         _print_results(scored)

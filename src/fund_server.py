@@ -794,9 +794,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "annual_return","sharpe","sortino",
                                 "profit_ratio","win_rate","recovery","calmar",
                                 "max_dd","volatility","max_loss_days",
-                                "sc","rate","inst",
+                                "sc","rate","inst","td",
                             )}
-                            score_d["td"] = _td  # 用最新实时涨跌幅
                             score, details, skipped = calc_score_detail(score_d)
                             row["score"] = score
                             row["_score_detail"] = details
