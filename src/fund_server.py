@@ -762,8 +762,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     try:
                         cached = _rec_cache.get(code)
                         if cached:
-                            # ── 推荐缓存命中：只刷新实时涨跌，评分数据复用 ──
-                            _td = _parse_real_time(code)
+                            # ── 推荐缓存命中：直接用缓存数据，不另行拉取 ──
+                            _td = cached.get("td")
                             day_s = f"{_td:+.2f}%" if _td is not None else ""
                             name = cached.get("name", "")
                             row = {
