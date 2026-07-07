@@ -1084,6 +1084,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except Exception as ex:
                     print(f"[dims] 缓存预热失败: {ex}", flush=True)
                     _fund_table_cache = None
+                self._send(*_json_response({"ok": True, "message": "权重已保存"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
