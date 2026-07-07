@@ -121,16 +121,20 @@ _PORT = get_config("server", "port", default=8080)
 
 
 def _fetch_fund_name(code: str) -> str:
-    """从天天基金获取基金名称"""
+    """从 fundgz 实时估值 API 获取基金名称（160B 轻量请求）"""
+    import urllib.request, re, json as _json
     try:
-        url = api_url("fund_pingzhongdata", code=code)
+        url = f"https://fundgz.1234567.com.cn/js/{code}.js"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=get_timeout("fetch_fund_name", 10)) as r:
-            data = r.read().decode("utf-8")
-        m = re.search(r'var fS_name\s*=\s*"([^"]+)"', data)
-        return m.group(1) if m else ""
+            text = r.read().decode("utf-8")
+        m = re.search(r"jsonpgz\((.+)\)", text)
+        if m:
+            data = _json.loads(m.group(1))
+            return data.get("name", "")
     except Exception:
-        return ""
+        pass
+    return ""
 
 
 # 全市场基金代码/名称索引（按需加载）
