@@ -86,8 +86,6 @@ def _spawn_recommend() -> bool:
     """启动推荐任务，返回是否成功"""
     global _recommend_proc
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
-    # 清理旧心跳，避免前端读到残留的100%进度
-    clear_heartbeat("fund_recommend")
     try:
         proc = subprocess.Popen(
             [sys.executable, script],
@@ -95,7 +93,9 @@ def _spawn_recommend() -> bool:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-        # 确认进程已成功启动且仍在运行，再写心跳
+        # 先写心跳（立即让前端知道推荐已启动）
+        write_heartbeat("fund_recommend", progress=0, total=0, status="启动中")
+        # 等待3秒确认进程未立即退出
         try:
             exit_code = proc.wait(timeout=3)
             # 进程在3秒内退出，可能是缓存命中快速完成（正常），也可能是启动失败
@@ -103,13 +103,14 @@ def _spawn_recommend() -> bool:
             if exit_code != 0:
                 if err_out:
                     print(f"[ERROR] 推荐任务失败(stderr): {err_out[:1000]}", flush=True)
+                clear_heartbeat("fund_recommend")
                 return False
-            # exit_code == 0: 快速完成，清除子进程写的最终心跳
+            # exit_code == 0: 快速完成，清除心跳让前端刷新
             clear_heartbeat("fund_recommend")
             return True
         except subprocess.TimeoutExpired:
             pass  # 进程还在运行，正常
-        write_heartbeat("fund_recommend")
+        # 子进程运行后会自动更新心跳，无需手动 write_heartbeat
         with _proc_lock:
             _recommend_proc = proc
 
