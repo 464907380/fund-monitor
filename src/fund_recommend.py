@@ -255,6 +255,12 @@ def _save_result(results: list[dict]) -> bool:
             print("\n⚠️ 未找到匹配基金，保留上次结果")
             return False
 
+        # 清理涨跌数据（每次展示前会重新拉取，没必要缓存）
+        for r in results:
+            r.pop("td", None)
+            r.pop("day", None)
+            r.pop("limit_amount", None)
+
         data = {
             "date": datetime.date.today().isoformat(),
             "config_hash": _config_hash(),
@@ -342,7 +348,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
         # 获取当日涨跌（供td维度评分）
         td = _fetch_fund_estimate(code)
         if td is not None:
-            d["td"] = td[1]
+            d["td"] = round(td[1], 2)
             day_str = f"{td[1]:+.2f}%"
         else:
             # 无实时数据时从净值算最近交易日涨跌
