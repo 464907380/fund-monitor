@@ -275,6 +275,42 @@ TASK_DEFS = [
 ]
 
 
+def _recalc_cached_scores() -> None:
+    """用当前评分权重重新计算缓存结果中的评分，不重新拉取数据。"""
+    rec_path = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
+    if not os.path.exists(rec_path):
+        return
+    try:
+        with open(rec_path, encoding="utf-8") as _f:
+            data = json.load(_f)
+        results = data.get("results", [])
+        if not results:
+            return
+        from fund_scoring import calc_score_detail
+        score_keys = [
+            "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
+            "annual_return", "sharpe", "sortino",
+            "profit_ratio", "win_rate", "recovery", "calmar",
+            "max_dd", "volatility", "max_loss_days",
+            "sc", "rate", "inst", "td",
+        ]
+        for r in results:
+            score_d = {k: r.get(k) for k in score_keys}
+            score, details, skipped = calc_score_detail(score_d)
+            r["score"] = score
+            r["_score_detail"] = details
+            r["_skipped_weight"] = skipped
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        data["results"] = results
+        tmp = rec_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as _f:
+            json.dump(data, _f, indent=2, ensure_ascii=False)
+        os.replace(tmp, rec_path)
+        print(f"[recalc] 已用新权重重新评分 {len(results)} 只基金", flush=True)
+    except Exception as e:
+        print(f"[recalc] 重新评分失败: {e}", flush=True)
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
 
     # 静默常规轮询请求和耗时批量API，减少终端刷屏
@@ -947,10 +983,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 重新加载评分模块使新配置生效
                 import importlib
                 import fund_scoring
-                import fund_render
                 importlib.reload(fund_scoring)
+                # 重新加载 fund_render（其内联 import 会拿到新的 fund_scoring）
+                import fund_render
                 importlib.reload(fund_render)
-                # 清除 fund-table 缓存，使新权重立即生效
+                # 重新计算缓存中的评分（无需重新拉取数据）
+                _recalc_cached_scores()
+                # 清除 fund-table 缓存
                 global _fund_table_cache
                 _fund_table_cache = None
                 self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
@@ -1028,10 +1067,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     json.dump(cfg, _fw, indent=2, ensure_ascii=False)
                 import importlib
                 import fund_scoring
-                import fund_render
                 importlib.reload(fund_scoring)
+                import fund_render
                 importlib.reload(fund_render)
-                # 清除 fund-table 缓存（_fund_table_cache 已在 do_POST 开头声明为 global）
+                # 重新计算缓存中的评分
+                _recalc_cached_scores()
+                # 清除 fund-table 缓存
                 _fund_table_cache = None
                 self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
             except Exception as e:
