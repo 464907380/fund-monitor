@@ -29,7 +29,7 @@
       "fetch_fund_name": 10,
       "load_fund_index": 15,
       "fetch_rank": 15,
-      "request_with_retry": 15,
+      "request_with_retry": 8,
       "backup_api": 10,
       "sina_quote": 15,
       "schtasks": 10,
@@ -37,7 +37,7 @@
       "smtp": 10,
       "purchase_limit": 10
     },
-    "retry_max": 3,
+    "retry_max": 2,
     "retry_backoff_seconds": [
       1,
       3,
