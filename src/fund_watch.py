@@ -306,6 +306,39 @@ def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
     return [{"d": d, "v": all_by_date[d]} for d in sorted(all_by_date.keys())]
 
 
+# 维度 → 所需最少净值天数映射（用于动态决定 LSJZ 拉取量）
+_DIM_LOOKBACK: dict[str, int] = {
+    "近1月收益": 22,
+    "近一周收益": 5,
+    "近3月收益": 66,
+    "近6月收益": 125,
+    "近1年收益": 250,
+    "近2年收益": 500,
+    "近3年收益": 750,
+}
+
+
+def _required_nav_pages() -> int:
+    """根据当前启用的评分维度计算需要拉取的 LSJZ 页数。
+    
+    LSJZ 每页 20 条，额外加 5 页缓冲用于风险指标计算。
+    最少 5 页（100 条），最多 38 页（760 条 ≈ 3 年）。
+    """
+    try:
+        from fund_scoring import SCORE_DIMS
+        max_days = 0
+        for name, _, weight, _ in SCORE_DIMS:
+            if weight > 0:
+                days = _DIM_LOOKBACK.get(name, 0)
+                if days > max_days:
+                    max_days = days
+    except Exception:
+        max_days = 0
+    # 至少有 100 条（5页）保证风险指标有意义
+    pages = max(5, (max_days + 20 - 1) // 20 + 5)  # ceil + 5页缓冲
+    return min(pages, 38)
+
+
 def _fetch_fund_name_light(code: str) -> str:
     """从 fundgz 实时估值 API 获取基金名（160B 请求）"""
     import urllib.request, re, json as _json
@@ -338,8 +371,9 @@ def get_scoring_data(code: str) -> dict:
     if name:
         d["n"] = name
 
-    # 2. 获取净值历史（LSJZ API, 并行38页≈760条≈3年数据）
-    full_nav = _fetch_nav_from_lsjz(code, max_pages=38)
+    # 2. 获取净值历史（LSJZ API, 根据启用维度动态决定页数）
+    max_pages = _required_nav_pages()
+    full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages)
     if full_nav:
         d["full_nav"] = full_nav
         d["nav"] = full_nav[-6:]  # 最近6条（前端展示用）
