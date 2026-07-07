@@ -1023,6 +1023,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 从推荐结果取维度值用于校准
                 # "越低越好"的维度
                 lower_better = {"波动率", "最大回撤", "最大连跌天数", "费率"}
+                # "中性"维度：以 0 为中心，正负对称评分
+                center_zero = {"当日涨跌"}
                 # 需要解析百分号字符串的字段
                 pct_keys = {"f5"}
 
@@ -1056,15 +1058,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     pts = uniq
                     # 重新计算对应的百分位索引
                     is_lower = name in lower_better
+                    is_center = name in center_zero
                     curve = []
-                    n_pts = len(pts)
-                    for i, v in enumerate(pts):
-                        pct_pos = i / (n_pts - 1) if n_pts > 1 else 0.5
-                        if is_lower:
-                            score = round((1 - pct_pos) * 100)
-                        else:
-                            score = round(pct_pos * 100)
-                        curve.append([v, score])
+                    if is_center:
+                        # 中性维度：以 0 为中心对称，负数扣分正数加分
+                        max_abs = max(abs(pts[0]), abs(pts[-1])) if pts else 1
+                        if max_abs < 0.01:
+                            max_abs = 1
+                        step = max_abs / 5
+                        center_pts = [-max_abs + i * step for i in range(6)]
+                        for v in center_pts:
+                            score = round((v / max_abs * 50) + 50)
+                            curve.append([round(v, 2), score])
+                    else:
+                        n_pts = len(pts)
+                        for i, v in enumerate(pts):
+                            pct_pos = i / (n_pts - 1) if n_pts > 1 else 0.5
+                            if is_lower:
+                                score = round((1 - pct_pos) * 100)
+                            else:
+                                score = round(pct_pos * 100)
+                            curve.append([v, score])
                     dim["curve"] = {"points": curve}
 
                 with open(_CONFIG_PATH, "w", encoding="utf-8") as _fw:
