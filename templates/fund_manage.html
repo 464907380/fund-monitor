@@ -1292,6 +1292,8 @@ async function saveDims() {
         if (progPct) progPct.textContent = '0%';
       }, 2000);
       try { loadDims(); } catch(e) {}
+      // 权重变更后刷新评分表格
+      try { loadSavedTables(); } catch(e) {}
     } else {
       if (progFill) progFill.style.width = '0%';
       if (progPct) progPct.textContent = '0%';
@@ -1361,6 +1363,7 @@ async function calibrateCurves() {
     if (d.ok) {
       showMsg('✔ ' + (d.message || '校准完成'), 'ok');
       loadDims();
+      loadSavedTables();
     } else {
       showMsg('✖ ' + (d.error || '校准失败'), 'fail');
     }
