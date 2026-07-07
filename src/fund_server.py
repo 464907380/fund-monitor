@@ -115,8 +115,9 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── fund-table 缓存 ──
 _fund_table_cache: tuple[float, str] | None = None
 _FUND_TABLE_CACHE_TTL = get_config("server", "fund_table_cache_ttl", default=120)  # 秒
-# 市场优选表缓存（与 fund-table 共享 TTL，因为权重变了需要同时刷新）
-_recommend_table_cache: tuple[float, str] | None = None
+# 推荐表缓存（用模块级 dict 避免 global 作用域问题）
+_recommend_table_cache: dict[str, tuple[float, str]] = {"data": None}
+_recommend_cache_ttl = _FUND_TABLE_CACHE_TTL
 _FUND_LIST_PATH = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
 _CONFIG_PATH = os.path.join(_PROJECT_ROOT, "data", "config.json")
 _PORT = get_config("server", "port", default=8080)
@@ -677,10 +678,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/api/recommend-table":
             """返回市场优选全维度表格 HTML（实时拉取 TOP N 基金数据）"""
             # 短缓存：TTL 内不重复拉取
-            global _recommend_table_cache
             _rt_now = time.time()
-            if _recommend_table_cache and _rt_now - _recommend_table_cache[0] < _FUND_TABLE_CACHE_TTL:
-                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _recommend_table_cache[1].encode("utf-8"))
+            if _recommend_table_cache["data"] and _rt_now - _recommend_table_cache["data"][0] < _recommend_cache_ttl:
+                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _recommend_table_cache["data"][1].encode("utf-8"))
                 return
             try:
                 from fund_render import _web_rich_recommend_table, _fetch_fresh_recommend_data
@@ -690,7 +690,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 else:
                     html = ""
                 if html:
-                    _recommend_table_cache = (_rt_now, html)
+                    _recommend_table_cache["data"] = (_rt_now, html)
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
                 else:
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
@@ -1017,11 +1017,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 重新计算缓存中的评分（无需重新拉取数据）
                 _recalc_cached_scores()
                 # 预热两张表缓存（评分已重算，避免前端再拉取 td）
+                global _fund_table_cache
                 try:
                     from fund_render import _web_rich_recommend_table, _web_rich_fund_table, _load_saved_recommend_data
                     _saved = _load_saved_recommend_data()
                     if _saved:
-                        _recommend_table_cache = (time.time(), _web_rich_recommend_table(_saved))
+                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
                     # 自选表也预热：直接用推荐缓存生成（不含实时td，显示上次快照）
                     fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
                     if os.path.exists(fl_path):
@@ -1082,7 +1083,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             _fund_table_cache = (time.time(), _web_rich_fund_table(_ft_rows))
                 except Exception:
                     _fund_table_cache = None
-                    _recommend_table_cache = None
+                    # 推荐表缓存已在上方设置成功，不清除
                 self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1163,12 +1164,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分
                 _recalc_cached_scores()
-                # 预热两张表缓存
+                # 预热两张表缓存（global 已在 do_POST 前面声明）
                 try:
                     from fund_render import _web_rich_recommend_table, _web_rich_fund_table, _load_saved_recommend_data
                     _saved = _load_saved_recommend_data()
                     if _saved:
-                        _recommend_table_cache = (time.time(), _web_rich_recommend_table(_saved))
+                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+                        print(f"[warm] 推荐表缓存已设置，{len(_saved)} 只", flush=True)
+                    else:
+                        print("[warm] _load_saved_recommend_data 返回空", flush=True)
                     fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
                     if os.path.exists(fl_path):
                         with open(fl_path, encoding="utf-8") as _f:
@@ -1228,7 +1232,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             _fund_table_cache = (time.time(), _web_rich_fund_table(_ft_rows))
                 except Exception:
                     _fund_table_cache = None
-                    _recommend_table_cache = None
+                    # 推荐表缓存已在上方设置成功，不清除
                 self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
