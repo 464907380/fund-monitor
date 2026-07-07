@@ -6,7 +6,7 @@ import os
 import re
 import time
 import datetime
-from config import CFG, api_url
+from config import CFG, api_url, get_timeout
 from config import get_secret as _get_secret
 from fund_utils import fetch, log, HISTORY_DIR, _fetch_fund_estimate
 from fund_scoring import SCORE_DIMS, calc_score_detail
@@ -267,41 +267,95 @@ def get(code: str) -> dict:
     return d
 
 
-def get_scoring_data(code: str) -> dict:
-    """拉取评分所需的最小数据集（跳过实时估值和持仓，减少网络请求）
+def _fetch_nav_from_lsjz(code: str, max_pages: int = 15) -> list[dict] | None:
+    """从 LSJZ 历史净值 API 并行获取多页净值数据，兼容旧格式返回。
     
-    盘中评分数据不会变化，使用每日缓存避免重复拉取 pingzhongdata 大 JS。
+    返回 [{d: YYYY-MM-DD, v: nav_value}, ...] 按日期升序。
+    LSJZ API 每页 20 条，max_pages=15 约 300 条（~15 个月数据）。
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import urllib.request, re, json as _json
+
+    def _fetch_page(page: int) -> list[dict]:
+        url = (f"https://api.fund.eastmoney.com/f10/lsjz"
+               f"?callback=j&fundCode={code}&pageIndex={page}&pageSize=20")
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://fund.eastmoney.com/",
+        })
+        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
+            text = r.read().decode("utf-8")
+        m = re.search(r"j\((.+)\)", text)
+        if not m:
+            return []
+        result = _json.loads(m.group(1))
+        items = result.get("Data", {}).get("LSJZList", [])
+        return [{"d": it["FSRQ"], "v": float(it["DWJZ"])} for it in items if it.get("DWJZ")]
+
+    all_by_date: dict[str, float] = {}
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        futs = {ex.submit(_fetch_page, p): p for p in range(1, max_pages + 1)}
+        for fut in as_completed(futs):
+            for entry in fut.result():
+                if entry["d"] not in all_by_date:  # 去重，最新优先
+                    all_by_date[entry["d"]] = entry["v"]
+
+    if not all_by_date:
+        return None
+    # 按日期升序
+    return [{"d": d, "v": all_by_date[d]} for d in sorted(all_by_date.keys())]
+
+
+def _fetch_fund_name_light(code: str) -> str:
+    """从 fundgz 实时估值 API 获取基金名（160B 请求）"""
+    import urllib.request, re, json as _json
+    try:
+        url = f"https://fundgz.1234567.com.cn/js/{code}.js"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
+            text = r.read().decode("utf-8")
+        m = re.search(r"jsonpgz\((.+)\)", text)
+        if m:
+            data = _json.loads(m.group(1))
+            return data.get("name", "")
+    except Exception:
+        pass
+    return ""
+
+
+def get_scoring_data(code: str) -> dict:
+    """拉取评分所需的最小数据集（LSJZ 历史净值替代 pingzhongdata）
+
+    盘中评分数据不会变化，使用每日缓存避免重复拉取。
     """
     today = datetime.date.today().isoformat()
     if code in _scoring_cache and _scoring_cache[code][0] == today:
         return _scoring_cache[code][1]
     d: dict = {"code": code}
-    data = fetch(api_url("fund_pingzhongdata", code=code))
 
-    if name := _parse_name(data):
+    # 1. 获取基金名（fundgz 轻量 API, 160B）
+    name = _fetch_fund_name_light(code)
+    if name:
         d["n"] = name
-    if sc := _parse_scale(data):
-        d["sc"] = sc
-    d.update(_parse_period_returns(data))
-    if mgr := _parse_manager(data):
-        d["mgr"] = mgr
-    if inst := _parse_institutional_ratio(data):
-        d["inst"] = inst
-    if full_nav := _parse_full_nav(data):
+
+    # 2. 获取净值历史（LSJZ API, 并行15页≈300条≈15月数据）
+    full_nav = _fetch_nav_from_lsjz(code, max_pages=15)
+    if full_nav:
         d["full_nav"] = full_nav
-        d["nav"] = _parse_net_trend(data, full_nav)
+        d["nav"] = full_nav[-6:]  # 最近6条（前端展示用）
+        # 计算风险指标
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
-        d["sy3"] = _calc_period_return(full_nav, 750)
-        d["sy2"] = _calc_period_return(full_nav, 500)
+        # 从净值数据计算各阶段收益
+        d["m1"] = _calc_period_return(full_nav, 22)    # ≈1月
+        d["m3"] = _calc_period_return(full_nav, 66)    # ≈3月
+        d["y1"] = _calc_period_return(full_nav, 250)   # ≈1年
+        d["sy6"] = _calc_period_return(full_nav, 125)  # ≈6月
+        d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3年（可能不够数据）
+        d["sy2"] = _calc_period_return(full_nav, 500)  # ≈2年
     else:
-        if nav := _parse_net_trend(data):
-            d["nav"] = nav
-    if rp := _parse_rank_info(data):
-        d["rank"], d["rank_total"] = rp
-    if rate := _parse_fund_rate(data):
-        d["rate"] = rate
-    d["sy6"] = _parse_syl_6y(data)
+        d["nav"] = []
+
     _scoring_cache[code] = (today, d)
     return d
 
