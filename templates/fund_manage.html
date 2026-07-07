@@ -644,26 +644,22 @@ document.getElementById('addInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') addFunds();
 });
 
-// 搜索建议
+// 搜索建议（300ms 防抖，至少输入2个字符）
 let searchTimer = null;
 document.getElementById('addInput').addEventListener('input', e => {
   clearTimeout(searchTimer);
   const q = e.target.value.trim();
   if (!q) { closeSuggestions(); return; }
+  if (q.length < 2) return; // 少于2个字符不搜索
   searchTimer = setTimeout(async () => {
     const r = await fetch(API + '/api/search?q=' + encodeURIComponent(q));
     const d = await r.json();
     showSuggestions(d.results || []);
-  }, 200);
+  }, 300);
 });
 
 document.getElementById('addInput').addEventListener('blur', () => {
   setTimeout(closeSuggestions, 200);
-});
-document.getElementById('addInput').addEventListener('focus', e => {
-  if (e.target.value.trim()) {
-    e.target.dispatchEvent(new Event('input'));
-  }
 });
 
 function showSuggestions(results) {
