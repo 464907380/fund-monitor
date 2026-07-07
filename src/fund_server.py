@@ -687,7 +687,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # 检查文件修改时间，若文件比缓存新则强制重建
             _rec_mtime = os.path.getmtime(_rec_file) if os.path.exists(_rec_file) else 0
             if _recommend_table_cache["data"]:
-                _cache_time, _cache_mtime = _recommend_table_cache["data"][0], _recommend_table_cache["data"].get("mtime", 0)
+                _cache_time = _recommend_table_cache["data"]["time"]
+                _cache_mtime = _recommend_table_cache["data"]["mtime"]
                 if _rt_now - _cache_time < _recommend_cache_ttl and _rec_mtime <= _cache_mtime:
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _recommend_table_cache["data"]["html"].encode("utf-8"))
                     return
