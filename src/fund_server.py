@@ -682,11 +682,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/recommend-table":
             """返回市场优选全维度表格 HTML（实时拉取 TOP N 基金数据）"""
-            # 短缓存：TTL 内不重复拉取
+            _rec_file = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
             _rt_now = time.time()
-            if _recommend_table_cache["data"] and _rt_now - _recommend_table_cache["data"][0] < _recommend_cache_ttl:
-                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _recommend_table_cache["data"][1].encode("utf-8"))
-                return
+            # 检查文件修改时间，若文件比缓存新则强制重建
+            _rec_mtime = os.path.getmtime(_rec_file) if os.path.exists(_rec_file) else 0
+            if _recommend_table_cache["data"]:
+                _cache_time, _cache_mtime = _recommend_table_cache["data"][0], _recommend_table_cache["data"].get("mtime", 0)
+                if _rt_now - _cache_time < _recommend_cache_ttl and _rec_mtime <= _cache_mtime:
+                    self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _recommend_table_cache["data"]["html"].encode("utf-8"))
+                    return
             try:
                 from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
                 _saved = _load_saved_recommend_data()
@@ -695,7 +699,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 else:
                     html = ""
                 if html:
-                    _recommend_table_cache["data"] = (_rt_now, html)
+                    _recommend_table_cache["data"] = {"html": html, "mtime": _rec_mtime, "time": _rt_now}
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
                 else:
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
@@ -1027,7 +1031,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
                     _saved = _load_saved_recommend_data()
                     if _saved:
-                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+                        _rec_mtime = os.path.getmtime(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json"))
+                        _recommend_table_cache["data"] = {"html": _web_rich_recommend_table(_saved), "mtime": _rec_mtime, "time": time.time()}
                         print(f"[dims] 推荐表缓存已预热，{len(_saved)} 只", flush=True)
                     else:
                         _recommend_table_cache["data"] = None
@@ -1120,7 +1125,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
                     _saved = _load_saved_recommend_data()
                     if _saved:
-                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+                        _rec_mtime = os.path.getmtime(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json"))
+                        _recommend_table_cache["data"] = {"html": _web_rich_recommend_table(_saved), "mtime": _rec_mtime, "time": time.time()}
                         print(f"[dims/calibrate] 推荐表缓存已预热，{len(_saved)} 只", flush=True)
                     else:
                         _recommend_table_cache["data"] = None
@@ -1392,7 +1398,9 @@ def _background_refresh_recommend_cache():
             from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
             _saved = _load_saved_recommend_data()
             if _saved:
-                _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+                _rec_f = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
+                _rec_mtime = os.path.getmtime(_rec_f) if os.path.exists(_rec_f) else 0
+                _recommend_table_cache["data"] = {"html": _web_rich_recommend_table(_saved), "mtime": _rec_mtime, "time": time.time()}
         except Exception:
             pass
 
