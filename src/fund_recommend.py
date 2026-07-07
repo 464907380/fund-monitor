@@ -255,12 +255,6 @@ def _save_result(results: list[dict]) -> bool:
             print("\n⚠️ 未找到匹配基金，保留上次结果")
             return False
 
-        # 清理涨跌数据（每次展示前会重新拉取，没必要缓存）
-        for r in results:
-            r.pop("td", None)
-            r.pop("day", None)
-            r.pop("limit_amount", None)
-
         data = {
             "date": datetime.date.today().isoformat(),
             "config_hash": _config_hash(),
