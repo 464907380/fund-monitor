@@ -60,7 +60,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
             with urllib.request.urlopen(_req, timeout=get_timeout("sina_quote", 15)) as _resp:
                 raw = _resp.read()
             text = raw.decode("gbk", errors="ignore")
-            # 解析每行: var hq_str_of000001="name,?,?,pct,date,...";
+            # 解析每行: var hq_str_of000001="name,?,?,nav_price,pct,date,...";
             for line in text.strip().split("\n"):
                 line = line.strip()
                 if "hq_str_of" not in line:
@@ -73,9 +73,10 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                     continue
                 m = re.search(r'of(\d{6})', line[:30])
                 code = m.group(1) if m else ""
-                if code and fields[3]:
+                # fields[3]=基金净值, fields[4]=涨跌幅百分比
+                if code and fields[4]:
                     try:
-                        pct = float(fields[3])
+                        pct = float(fields[4])
                         batch_result[code] = pct
                     except ValueError:
                         pass
