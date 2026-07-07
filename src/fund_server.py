@@ -1016,75 +1016,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分（无需重新拉取数据）
                 _recalc_cached_scores()
-                # 预热两张表缓存（评分已重算，避免前端再拉取 td）
-                global _fund_table_cache
-                try:
-                    from fund_render import _web_rich_recommend_table, _web_rich_fund_table, _load_saved_recommend_data
-                    _saved = _load_saved_recommend_data()
-                    if _saved:
-                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
-                    # 自选表也预热：直接用推荐缓存生成（不含实时td，显示上次快照）
-                    fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
-                    if os.path.exists(fl_path):
-                        with open(fl_path, encoding="utf-8") as _f:
-                            fund_list = json.load(_f)
-                        _rec_cache_warm: dict[str, dict] = {}
-                        if os.path.exists(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")):
-                            try:
-                                with open(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json"), encoding="utf-8") as _f:
-                                    _rd = json.load(_f)
-                                for _r in _rd.get("results", []):
-                                    if _r.get("code"):
-                                        _rec_cache_warm[_r["code"]] = _r
-                            except Exception:
-                                pass
-                        _ft_rows = []
-                        from fund_scoring import calc_score_detail
-                        for _f in fund_list:
-                            _c = _f.get("code", "")
-                            _cr = _rec_cache_warm.get(_c)
-                            if _cr:
-                                _score_d = {k: _cr.get(k) for k in (
-                                    "y1","m3","m1","f5","sy6","sy2","sy3",
-                                    "annual_return","sharpe","sortino",
-                                    "profit_ratio","win_rate","recovery","calmar",
-                                    "max_dd","volatility","max_loss_days",
-                                    "sc","rate","inst","td",
-                                )}
-                                _s, _det, _sk = calc_score_detail(_score_d)
-                                _ft_rows.append({
-                                    "code": _c, "name": _cr.get("name",""),
-                                    "name_short": (_cr.get("name","") or "")[:12],
-                                    "day": _cr.get("day",""), "f5": _cr.get("f5",""),
-                                    "m1": _cr.get("m1"), "m3": _cr.get("m3"), "y1": _cr.get("y1"),
-                                    "_day": _cr.get("day",""),
-                                    "_f5": f"{_cr['f5']:+.1f}%" if _cr.get("f5") is not None else "",
-                                    "_m1": f"{_cr['m1']:+.1f}%" if _cr.get("m1") is not None else "",
-                                    "_m3": f"{_cr['m3']:+.1f}%" if _cr.get("m3") is not None else "",
-                                    "_y1": f"{_cr['y1']:+.1f}%" if _cr.get("y1") is not None else "",
-                                    "mgr": (_cr.get("mgr","") or "")[:6],
-                                    "annual_return": _cr.get("annual_return"),
-                                    "sharpe": _cr.get("sharpe"), "sortino": _cr.get("sortino"),
-                                    "max_dd": _cr.get("max_dd"), "win_rate": _cr.get("win_rate"),
-                                    "profit_ratio": _cr.get("profit_ratio"),
-                                    "recovery": _cr.get("recovery"),
-                                    "sy3": _cr.get("sy3"), "sy6": _cr.get("sy6"), "sy2": _cr.get("sy2"),
-                                    "volatility": _cr.get("volatility"),
-                                    "calmar": _cr.get("calmar"),
-                                    "max_loss_days": _cr.get("max_loss_days"),
-                                    "sc": _cr.get("sc"), "rate": _cr.get("rate"),
-                                    "inst": _cr.get("inst"),
-                                    "td": _cr.get("td"),
-                                    "score": _s, "_score_detail": _det, "_skipped_weight": _sk,
-                                })
-                        if _ft_rows:
-                            order = {f["code"]: i for i, f in enumerate(fund_list)}
-                            _ft_rows.sort(key=lambda r: order.get(r["code"], 999))
-                            _fund_table_cache = (time.time(), _web_rich_fund_table(_ft_rows))
-                except Exception:
-                    _fund_table_cache = None
-                    # 推荐表缓存已在上方设置成功，不清除
-                self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
+                # 清除缓存，前端 _refreshTablesWithProgress 会拉取含实时涨跌的新数据
+                _recommend_table_cache["data"] = None
+                _fund_table_cache = None
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
@@ -1164,75 +1098,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分
                 _recalc_cached_scores()
-                # 预热两张表缓存（global 已在 do_POST 前面声明）
-                try:
-                    from fund_render import _web_rich_recommend_table, _web_rich_fund_table, _load_saved_recommend_data
-                    _saved = _load_saved_recommend_data()
-                    if _saved:
-                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
-                        print(f"[warm] 推荐表缓存已设置，{len(_saved)} 只", flush=True)
-                    else:
-                        print("[warm] _load_saved_recommend_data 返回空", flush=True)
-                    fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
-                    if os.path.exists(fl_path):
-                        with open(fl_path, encoding="utf-8") as _f:
-                            fund_list = json.load(_f)
-                        _rec_cache_warm: dict[str, dict] = {}
-                        if os.path.exists(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")):
-                            try:
-                                with open(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json"), encoding="utf-8") as _f:
-                                    _rd = json.load(_f)
-                                for _r in _rd.get("results", []):
-                                    if _r.get("code"):
-                                        _rec_cache_warm[_r["code"]] = _r
-                            except Exception:
-                                pass
-                        _ft_rows = []
-                        from fund_scoring import calc_score_detail
-                        for _f in fund_list:
-                            _c = _f.get("code", "")
-                            _cr = _rec_cache_warm.get(_c)
-                            if _cr:
-                                _score_d = {k: _cr.get(k) for k in (
-                                    "y1","m3","m1","f5","sy6","sy2","sy3",
-                                    "annual_return","sharpe","sortino",
-                                    "profit_ratio","win_rate","recovery","calmar",
-                                    "max_dd","volatility","max_loss_days",
-                                    "sc","rate","inst","td",
-                                )}
-                                _s, _det, _sk = calc_score_detail(_score_d)
-                                _ft_rows.append({
-                                    "code": _c, "name": _cr.get("name",""),
-                                    "name_short": (_cr.get("name","") or "")[:12],
-                                    "day": _cr.get("day",""), "f5": _cr.get("f5",""),
-                                    "m1": _cr.get("m1"), "m3": _cr.get("m3"), "y1": _cr.get("y1"),
-                                    "_day": _cr.get("day",""),
-                                    "_f5": f"{_cr['f5']:+.1f}%" if _cr.get("f5") is not None else "",
-                                    "_m1": f"{_cr['m1']:+.1f}%" if _cr.get("m1") is not None else "",
-                                    "_m3": f"{_cr['m3']:+.1f}%" if _cr.get("m3") is not None else "",
-                                    "_y1": f"{_cr['y1']:+.1f}%" if _cr.get("y1") is not None else "",
-                                    "mgr": (_cr.get("mgr","") or "")[:6],
-                                    "annual_return": _cr.get("annual_return"),
-                                    "sharpe": _cr.get("sharpe"), "sortino": _cr.get("sortino"),
-                                    "max_dd": _cr.get("max_dd"), "win_rate": _cr.get("win_rate"),
-                                    "profit_ratio": _cr.get("profit_ratio"),
-                                    "recovery": _cr.get("recovery"),
-                                    "sy3": _cr.get("sy3"), "sy6": _cr.get("sy6"), "sy2": _cr.get("sy2"),
-                                    "volatility": _cr.get("volatility"),
-                                    "calmar": _cr.get("calmar"),
-                                    "max_loss_days": _cr.get("max_loss_days"),
-                                    "sc": _cr.get("sc"), "rate": _cr.get("rate"),
-                                    "inst": _cr.get("inst"),
-                                    "td": _cr.get("td"),
-                                    "score": _s, "_score_detail": _det, "_skipped_weight": _sk,
-                                })
-                        if _ft_rows:
-                            order = {f["code"]: i for i, f in enumerate(fund_list)}
-                            _ft_rows.sort(key=lambda r: order.get(r["code"], 999))
-                            _fund_table_cache = (time.time(), _web_rich_fund_table(_ft_rows))
-                except Exception:
-                    _fund_table_cache = None
-                    # 推荐表缓存已在上方设置成功，不清除
+                # 清除缓存，前端 _refreshTablesWithProgress 会拉取含实时涨跌的新数据
+                _recommend_table_cache["data"] = None
+                _fund_table_cache = None
                 self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
