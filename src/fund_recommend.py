@@ -142,6 +142,9 @@ _RECOMMEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
 
+# 启动时打印配置，方便排查缓存问题
+print(f"[CFG] top_n={_TOP}, min_y1={_MIN_Y1}, show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}", file=sys.stderr)
+
 
 def _parse_rank_response(data: str) -> list[list[str]] | None:
     """解析天天基金排行 API 的 JSONP 响应"""
