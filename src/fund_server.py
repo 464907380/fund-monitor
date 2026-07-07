@@ -1013,11 +1013,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not rec_data:
                     self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
                     return
-                # 刷新实时涨跌（校准不能用缓存中的旧 td 值）
-                from fund_recommend import _batch_fetch_estimates
+                # 刷新实时涨跌（用和前端相同的数据源 fundgz API）
+                from fund_watch import _parse_real_time
+                from concurrent.futures import ThreadPoolExecutor, as_completed
                 all_codes = [r.get("code", "") for r in rec_data if r.get("code")]
                 if all_codes:
-                    fresh_td = _batch_fetch_estimates(all_codes)
+                    fresh_td: dict[str, float] = {}
+                    with ThreadPoolExecutor(max_workers=50) as _td_ex:
+                        _td_futs = {_td_ex.submit(_parse_real_time, c): c for c in all_codes}
+                        for _td_fut in as_completed(_td_futs):
+                            c = _td_futs[_td_fut]
+                            v = _td_fut.result()
+                            if v is not None:
+                                fresh_td[c] = v
                     for r in rec_data:
                         code = r.get("code", "")
                         if code in fresh_td:
