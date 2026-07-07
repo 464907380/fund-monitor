@@ -114,7 +114,7 @@ def _spawn_recommend() -> bool:
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── fund-table 缓存 ──
 _fund_table_cache: tuple[float, str] | None = None
-_FUND_TABLE_CACHE_TTL = get_config("server", "fund_table_cache_ttl", default=120)  # 秒
+_FUND_TABLE_CACHE_TTL = get_config("server", "fund_table_cache_ttl", default=300)  # 秒（5分钟）
 # 推荐表缓存（用模块级 dict 避免 global 作用域问题）
 _recommend_table_cache: dict[str, tuple[float, str]] = {"data": None}
 _recommend_cache_ttl = _FUND_TABLE_CACHE_TTL
@@ -683,8 +683,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _recommend_table_cache["data"][1].encode("utf-8"))
                 return
             try:
-                from fund_render import _web_rich_recommend_table, _fetch_fresh_recommend_data
-                _saved = _fetch_fresh_recommend_data()
+                from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+                _saved = _load_saved_recommend_data()
                 if _saved:
                     html = _web_rich_recommend_table(_saved)
                 else:
@@ -1016,10 +1016,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分（无需重新拉取数据）
                 _recalc_cached_scores()
-                # 不预热缓存（文件中的 td 是旧的），让下次请求用实时数据构建
-                _recommend_table_cache["data"] = None
+                # 预热推荐表缓存（从文件读取，不拉取实时 td，速度快）
                 _fund_table_cache = None
-                print("[dims] 缓存已清除，下次请求将使用实时 td 数据", flush=True)
+                try:
+                    from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+                    _saved = _load_saved_recommend_data()
+                    if _saved:
+                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+                        print(f"[dims] 推荐表缓存已预热，{len(_saved)} 只", flush=True)
+                    else:
+                        _recommend_table_cache["data"] = None
+                except Exception as ex:
+                    print(f"[dims] 推荐表缓存预热失败: {ex}", flush=True)
+                    _recommend_table_cache["data"] = None
                 self._send(*_json_response({"ok": True, "message": "权重已保存"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1100,10 +1109,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分
                 _recalc_cached_scores()
-                # 不预热缓存（文件中的 td 是旧的），让下次请求用实时数据构建
-                _recommend_table_cache["data"] = None
+                # 预热推荐表缓存（从文件读取，不拉取实时 td，速度快）
                 _fund_table_cache = None
-                print("[dims/calibrate] 缓存已清除，下次请求将使用实时 td 数据", flush=True)
+                try:
+                    from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+                    _saved = _load_saved_recommend_data()
+                    if _saved:
+                        _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+                        print(f"[dims/calibrate] 推荐表缓存已预热，{len(_saved)} 只", flush=True)
+                    else:
+                        _recommend_table_cache["data"] = None
+                except Exception as ex:
+                    print(f"[dims/calibrate] 推荐表缓存预热失败: {ex}", flush=True)
+                    _recommend_table_cache["data"] = None
                 self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1361,10 +1379,25 @@ def _init_builtin_presets(cfg: dict) -> None:
         cfg["scoring_presets"][name] = data
 
 
+def _background_refresh_recommend_cache():
+    """后台线程：每 60 秒刷新一次推荐表缓存，确保始终温暖。"""
+    while True:
+        time.sleep(60)
+        try:
+            from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+            _saved = _load_saved_recommend_data()
+            if _saved:
+                _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+        except Exception:
+            pass
+
+
 def main():
     # 启动时清理上次残留的心跳，避免前端读到旧进度
     for _hb_name in ["fund_recommend", "fund_watch", "fund_monitor", "fund_briefing"]:
         clear_heartbeat(_hb_name)
+    # 后台线程刷新推荐表缓存
+    threading.Thread(target=_background_refresh_recommend_cache, daemon=True).start()
     host = "127.0.0.1"
     port = int(sys.argv[1]) if len(sys.argv) > 1 else _PORT
     server = http.server.ThreadingHTTPServer((host, port), Handler)
