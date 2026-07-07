@@ -301,8 +301,13 @@ def _recalc_cached_scores() -> None:
             "max_dd", "volatility", "max_loss_days",
             "sc", "rate", "inst", "td",
         ]
+        def _validate_td(val):
+            if val is None: return None
+            if isinstance(val, (int, float)) and abs(val) > 10: return None
+            return val
+
         for r in results:
-            score_d = {k: r.get(k) for k in score_keys}
+            score_d = {k: _validate_td(r.get(k)) if k == "td" else r.get(k) for k in score_keys}
             score, details, skipped = calc_score_detail(score_d)
             r["score"] = score
             r["_score_detail"] = details
