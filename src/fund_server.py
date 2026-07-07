@@ -1024,6 +1024,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     _saved = _load_saved_recommend_data()
                     if _saved:
                         _recommend_table_cache["data"] = (time.time(), _web_rich_recommend_table(_saved))
+                        print(f"[dims] 推荐表缓存已设置，{len(_saved)} 只", flush=True)
                     # 自选表
                     fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
                     if os.path.exists(fl_path):
@@ -1079,7 +1080,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             order = {f["code"]: i for i, f in enumerate(fund_list)}
                             _ft_rows.sort(key=lambda r: order.get(r["code"], 999))
                             _fund_table_cache = (time.time(), _web_rich_fund_table(_ft_rows))
-                except Exception:
+                            print(f"[dims] 自选表缓存已设置，{len(_ft_rows)} 只", flush=True)
+                except Exception as ex:
+                    print(f"[dims] 缓存预热失败: {ex}", flush=True)
                     _fund_table_cache = None
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
