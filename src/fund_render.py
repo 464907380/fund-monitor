@@ -226,7 +226,7 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
         "基金规模": lambda: _v("sc", 2),
         "年化收益率": lambda: _v("annual_return"),
         "机构持有比例": lambda: _v("inst", 2),
-        "当日涨跌": lambda: _v("td"),
+        "当日涨跌": lambda: _v("td", 2),
     }
     fn = mapping.get(dim_name)
     return fn() if fn else "-"
