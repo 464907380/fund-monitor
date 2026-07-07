@@ -328,6 +328,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
     """
     try:
         from fund_watch import _parse_real_time
+        from fund_utils import write_heartbeat, update_heartbeat, clear_heartbeat
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         fresh = _load_saved_recommend_data()
@@ -338,10 +339,17 @@ def _fetch_fresh_recommend_data() -> list[dict]:
         if not codes:
             return fresh
 
+        total = len(codes)
+        _hb_name = "recommend-td-refresh"
+        write_heartbeat(_hb_name, total=total, progress=0, phase="刷新实时涨跌",
+                        detail=f"0/{total} 只基金")
+        _last_hb_pct = -1
+
         # 刷新实时涨跌，同时更新td值和评分
         from fund_scoring import calc_score_detail
         day_map: dict[str, str] = {}
         td_map: dict[str, float] = {}
+        _done = 0
 
         def _fetch_one(code: str) -> tuple[str, float | None]:
             try:
@@ -356,9 +364,19 @@ def _fetch_fresh_recommend_data() -> list[dict]:
             futs = {ex.submit(_fetch_one, code): code for code in codes}
             for fut in as_completed(futs):
                 code, td_val = fut.result()
+                _done += 1
+                # 每 5% 或最后一条时更新心跳
+                _pct = int(_done / total * 100) if total else 100
+                if _pct != _last_hb_pct or _done == total:
+                    _last_hb_pct = _pct
+                    update_heartbeat(_hb_name, progress=_done, total=total,
+                                     detail=f"{_done}/{total} 只基金")
                 if td_val is not None:
                     day_map[code] = f"{td_val:+.2f}%"
                     td_map[code] = td_val
+
+        # td 刷新完成，清理心跳
+        clear_heartbeat(_hb_name)
 
         for r in fresh:
             code = r.get("code", "")

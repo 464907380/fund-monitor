@@ -22,7 +22,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fund_utils import update_heartbeat, _fetch_fund_estimate
+from fund_utils import update_heartbeat, clear_heartbeat, _fetch_fund_estimate
 
 try:
     from fund_watch import log, fetch
@@ -711,6 +711,7 @@ def main() -> None:
         print(f"   ├─ 评分阶段: {_t5-_t4:.1f}s")
         print(f"   └─ 保存结果: {time.time()-_t5:.1f}s")
     finally:
+        clear_heartbeat("fund_recommend")
         print(f"\n✅ 推荐任务完成 ({_elapsed()}s)")
 
 

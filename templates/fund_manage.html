@@ -1610,7 +1610,9 @@ async function runRecommendFromFilter() {
         var hb = await fetch(API + '/api/heartbeat').then(function(r){ return r.json(); });
         var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
         var recAlive = hb.alive && hb.alive.fund_recommend;
-        if (recAlive && recData) {
+        // 如果心跳显示已完成，即使 alive 也视为结束
+        var recDone = recData && (recData.overall_pct >= 100 || recData.phase === '完成' || recData.phase === '刷新完成');
+        if (recAlive && recData && !recDone) {
           var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
           // 优先使用全局进度 overall_pct，避免阶段切换时进度回退
           var displayPct = recData.overall_pct != null ? Math.round(recData.overall_pct) : pct;
@@ -1625,58 +1627,62 @@ async function runRecommendFromFilter() {
           if (recData.elapsed != null) statusParts.push(Math.round(recData.elapsed) + 's');
           if (statusEl) statusEl.textContent = statusParts.join(' | ');
           if (btn) btn.textContent = '⏳ ' + displayPct + '%';
-        } else if (!recAlive) {
+        } else if (!recAlive || recDone) {
           clearInterval(poll);
+          // 子进程结束，开始刷新实时涨跌（用 fund_recommend 心跳看进度）
           if (prog) prog.style.width = '100%';
-          if (statusEl) statusEl.textContent = '✔ 推荐完成，刷新表格...';
-          if (btn) btn.textContent = '⏳ 刷新表格...';
-          // 等一秒确保结果文件已完全写入磁盘
-          await new Promise(function(r){ setTimeout(r, 1000); });
-          // ---- 并行刷新两张表，按钮保持禁用 ----
-          // 同时发起两个请求，节省等待时间
-          var tableOk = true;
-          var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-          var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-          // 表一（快，约1秒）
-          if (statusEl) statusEl.textContent = '⏳ 刷新表格 (1/2)...';
-          if (btn) btn.textContent = '⏳ 刷新表格 (1/2)';
-          try {
-            var rtHtml = await rtPromise;
-            if (rtHtml && rtHtml.indexOf('<tbody>') > 0) {
-              var rtEl = document.getElementById('recommendFullTable');
-              if (rtEl) {
-                rtEl.innerHTML = rtHtml;
-                document.getElementById('recommendFullTableCard').style.display = '';
+          if (statusEl) statusEl.textContent = '⏳ 刷新实时涨跌...';
+          if (btn) btn.textContent = '⏳ 刷新涨跌';
+          // 继续轮询 td 刷新心跳
+          var _tdStart = Date.now();
+          poll = setInterval(async function() {
+            try {
+              var hb2 = await fetch(API + '/api/heartbeat').then(function(r){ return r.json(); });
+              var rec2 = hb2.heartbeats && hb2.heartbeats['recommend-td-refresh'];
+              var tdAlive = hb2.alive && hb2.alive['recommend-td-refresh'];
+              if (tdAlive && rec2) {
+                var pct = rec2.total > 0 ? Math.round(rec2.progress / rec2.total * 100) : 0;
+                if (prog) prog.style.width = Math.min(pct, 99) + '%';
+                if (statusEl) statusEl.textContent = '📋 刷新td ' + (rec2.detail || '') + ' | ' + pct + '%';
+                if (btn) btn.textContent = '⏳ ' + pct + '%';
+              } else if (!tdAlive) {
+                // td 刷新完成或无心跳，取表格
+                clearInterval(poll);
+                if (prog) prog.style.width = '100%';
+                if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
+                if (btn) btn.textContent = '⏳ 渲染表格';
+                var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+                var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+                var _tableOk = true;
+                try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+                if (statusEl) statusEl.textContent = _tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
+                if (prog) prog.style.width = '0%';
+                setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
+              } else {
+                // 没有 fund_recommend 心跳，可能是 td 刷新已完成且心跳被清除
+                clearInterval(poll);
+                if (prog) prog.style.width = '100%';
+                if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
+                if (btn) btn.textContent = '⏳ 渲染表格';
+                var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+                var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+                var _tableOk = true;
+                try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+                if (statusEl) statusEl.textContent = _tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
+                if (prog) prog.style.width = '0%';
+                setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
               }
-            } else if (rtHtml) {
-              var rtEl = document.getElementById('recommendFullTable');
-              if (rtEl) { rtEl.innerHTML = rtHtml; document.getElementById('recommendFullTableCard').style.display = ''; }
+            } catch(e) {
+              clearInterval(poll);
+              if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+              if (prog) prog.style.width = '0%';
+              if (statusEl) statusEl.textContent = '';
             }
-          } catch(e) { tableOk = false; }
-          // 表二（慢，30秒~3分钟，但请求已提前发起）
-          if (statusEl) statusEl.textContent = '⏳ 刷新表格 (2/2)...';
-          if (btn) btn.textContent = '⏳ 刷新表格 (2/2)';
-          try {
-            var ftHtml = await ftPromise;
-            if (ftHtml && ftHtml.indexOf('<tbody>') > 0) {
-              var ftEl = document.getElementById('fundFullTable');
-              if (ftEl) {
-                ftEl.innerHTML = ftHtml;
-                document.getElementById('fundFullTableCard').style.display = '';
-              }
-            } else if (ftHtml) {
-              var ftEl = document.getElementById('fundFullTable');
-              if (ftEl) { ftEl.innerHTML = ftHtml; document.getElementById('fundFullTableCard').style.display = ''; }
-            }
-          } catch(e) { tableOk = false; }
-          // 两表刷新完毕，恢复按钮
-          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-          if (statusEl) statusEl.textContent = tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
-          if (prog) prog.style.width = '0%';
-          setTimeout(function() {
-            if (prog) prog.style.width = '0%';
-            if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = '';
-          }, 4000);
+          }, 800);
         }
       } catch(e) {}
       if (Date.now() - startTime > MAX_WAIT) {

@@ -16,7 +16,7 @@ import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, clear_heartbeat, HISTORY_DIR
+from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR
 from config import CFG, api_url, get_timeout, get_config
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -115,6 +115,8 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── fund-table 缓存 ──
 _fund_table_cache: tuple[float, str] | None = None
 _FUND_TABLE_CACHE_TTL = get_config("server", "fund_table_cache_ttl", default=120)  # 秒
+# 市场优选表缓存（与 fund-table 共享 TTL，因为权重变了需要同时刷新）
+_recommend_table_cache: tuple[float, str] | None = None
 _FUND_LIST_PATH = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
 _CONFIG_PATH = os.path.join(_PROJECT_ROOT, "data", "config.json")
 _PORT = get_config("server", "port", default=8080)
@@ -674,6 +676,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/recommend-table":
             """返回市场优选全维度表格 HTML（实时拉取 TOP N 基金数据）"""
+            # 短缓存：TTL 内不重复拉取
+            global _recommend_table_cache
+            _rt_now = time.time()
+            if _recommend_table_cache and _rt_now - _recommend_table_cache[0] < _FUND_TABLE_CACHE_TTL:
+                self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _recommend_table_cache[1].encode("utf-8"))
+                return
             try:
                 from fund_render import _web_rich_recommend_table, _fetch_fresh_recommend_data
                 _saved = _fetch_fresh_recommend_data()
@@ -682,6 +690,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 else:
                     html = ""
                 if html:
+                    _recommend_table_cache = (_rt_now, html)
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, html.encode("utf-8"))
                 else:
                     self._send(200, {"Content-Type": "text/html; charset=utf-8"}, "<p style=\"color:#888;\">暂无推荐数据</p>".encode("utf-8"))
@@ -837,12 +846,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         return None
 
                 # 并行拉取所有基金数据
+                _fund_list_for_progress = list(fund_list)
+                write_heartbeat("fund-td-refresh", total=len(_fund_list_for_progress),
+                                progress=0, phase="刷新td",
+                                detail=f"0/{len(_fund_list_for_progress)} 只基金")
+                _last_hb_pct = -1
+                _fund_td_done = 0
                 with concurrent.futures.ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "server_fund_table", default=20)) as executor:
-                    fut_map = {executor.submit(_process_one, f["code"]): f["code"] for f in fund_list}
+                    fut_map = {executor.submit(_process_one, f["code"]): f["code"] for f in _fund_list_for_progress}
                     for fut in concurrent.futures.as_completed(fut_map):
                         result = fut.result()
+                        _fund_td_done += 1
+                        _pct = int(_fund_td_done / len(_fund_list_for_progress) * 100) if _fund_list_for_progress else 100
+                        if _pct != _last_hb_pct or _fund_td_done == len(_fund_list_for_progress):
+                            _last_hb_pct = _pct
+                            update_heartbeat("fund-td-refresh", progress=_fund_td_done,
+                                             total=len(_fund_list_for_progress),
+                                             detail=f"{_fund_td_done}/{len(_fund_list_for_progress)} 只基金")
                         if result is not None:
                             rows.append(result)
+                clear_heartbeat("fund-td-refresh")
 
                 # 按 fund_list 原始顺序排序
                 order = {f["code"]: i for i, f in enumerate(fund_list)}
@@ -994,8 +1017,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 重新计算缓存中的评分（无需重新拉取数据）
                 _recalc_cached_scores()
                 # 清除 fund-table 缓存
-                global _fund_table_cache
+                global _fund_table_cache, _recommend_table_cache
                 _fund_table_cache = None
+                _recommend_table_cache = None
                 self._send(*_json_response({"ok": True, "message": "评分配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1093,8 +1117,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分
                 _recalc_cached_scores()
-                # 清除 fund-table 缓存
+                # 清除 fund-table 和推荐表缓存
                 _fund_table_cache = None
+                _recommend_table_cache = None
                 self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
