@@ -634,17 +634,26 @@ def main() -> None:
                 return c
 
             with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_limit_check", default=50)) as _le:
+                from concurrent.futures import wait as _wait, FIRST_COMPLETED as _FC
                 _lfuts = {_le.submit(_check_limit, c): c for c in candidates}
-                for _j, _lf in enumerate(as_completed(_lfuts), 1):
-                    _r = _lf.result()
-                    if _r:
-                        limit_checked.append(_r)
-                    if _j % 50 == 0 or _j == limit_before:
-                        opct = 3 + _j / limit_before * 12
-                        update_heartbeat("fund_recommend", progress=_j, total=limit_before,
-                                         overall_pct=opct, phase="限购",
-                                         detail=f"限购检查 {_j}/{limit_before}",
-                                         elapsed=_elapsed())
+                _lpending = set(_lfuts.keys())
+                _ldone = 0
+                while _lpending:
+                    _ldone_set, _lpending = _wait(_lpending, timeout=20, return_when=_FC)
+                    if not _ldone_set:
+                        print(f"  ⏰ 限购检查超时: 跳过 {len(_lpending)} 只")
+                        break
+                    for _lf in _ldone_set:
+                        _ldone += 1
+                        _r = _lf.result()
+                        if _r:
+                            limit_checked.append(_r)
+                        if _ldone % 50 == 0 or _ldone == limit_before:
+                            opct = 3 + _ldone / limit_before * 12
+                            update_heartbeat("fund_recommend", progress=_ldone, total=limit_before,
+                                             overall_pct=opct, phase="限购",
+                                             detail=f"限购检查 {_ldone}/{limit_before}",
+                                             elapsed=_elapsed())
 
             candidates = limit_checked
             print(f"   ✅ 限购筛掉 {limit_before - len(candidates)} 只, 剩余 {len(candidates)} 只 ({time.time()-_t3:.1f}s)")
@@ -663,24 +672,42 @@ def main() -> None:
         print(f"\n{'进度':<8} {'代码':<7} {'基金名':<20} {'年化':<8} {'评分':<6} {'耗时':<7}")
         print("-" * 65)
 
+        _score_timeout = 45  # 单只基金评分超时（秒），超时跳过
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as executor:
-            futs = {executor.submit(_score_one, c["code"], c["name"], c.get("_limit_amount")): c for c in candidates}
-            for i, fut in enumerate(as_completed(futs), 1):
-                c = futs[fut]
-                result = fut.result()
-                if result:
-                    scored.append(result)
-                    ar = result.get("annual_return")
-                    ar_str = f"{ar:.1f}%" if isinstance(ar, (int, float)) else "?"
-                    print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {ar_str:<8} {result['score']:<6.1f} {time.time()-_t4:<7.1f}s")
-                else:
-                    print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'跳过':<8} {'':6} {time.time()-_t4:<7.1f}s")
-                pct = i / total * 100
-                opct = 15 + i / total * 82
-                update_heartbeat("fund_recommend", progress=i, total=total,
-                                 overall_pct=opct, phase="评分",
-                                 detail=f"评分 {i}/{total} ({pct:.0f}%) {c['name'][:12]}",
-                                 elapsed=_elapsed())
+            from concurrent.futures import wait, FIRST_COMPLETED
+            fut_map = {executor.submit(_score_one, c["code"], c["name"], c.get("_limit_amount")): c for c in candidates}
+            pending = set(fut_map.keys())
+            done_total = 0
+            while pending:
+                done_set, pending = wait(pending, timeout=_score_timeout, return_when=FIRST_COMPLETED)
+                if not done_set:
+                    # 超时：跳过所有未完成的
+                    n_skip = len(pending)
+                    print(f"  ⏰ 评分超时: 跳过 {n_skip} 只剩余基金")
+                    for f in pending:
+                        c = fut_map[f]
+                        print(f"  --/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'超时跳过':<8}")
+                    break
+                for fut in done_set:
+                    c = fut_map[fut]
+                    done_total += 1
+                    try:
+                        result = fut.result(timeout=1)  # future 已完成，不会真等
+                    except Exception:
+                        result = None
+                    if result:
+                        scored.append(result)
+                        ar = result.get("annual_return")
+                        ar_str = f"{ar:.1f}%" if isinstance(ar, (int, float)) else "?"
+                        print(f"  {done_total}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {ar_str:<8} {result['score']:<6.1f} {time.time()-_t4:<7.1f}s")
+                    else:
+                        print(f"  {done_total}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'失败':<8} {'':6} {time.time()-_t4:<7.1f}s")
+                    pct = done_total / total * 100
+                    opct = 15 + done_total / total * 82
+                    update_heartbeat("fund_recommend", progress=done_total, total=total,
+                                     overall_pct=opct, phase="评分",
+                                     detail=f"评分 {done_total}/{total} ({pct:.0f}%) {c['name'][:12]}",
+                                     elapsed=_elapsed())
 
         print(f"\n   ✅ 评分完成: {len(scored)}/{total} 只成功 ({time.time()-_t4:.1f}s)")
 
