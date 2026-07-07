@@ -1043,39 +1043,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not rec_data:
                     self._send(*_json_response({"ok": False, "error": "暂无推荐数据，请先运行推荐"}, 400))
                     return
-                # 刷新实时涨跌（用和前端相同的数据源 fundgz API）
-                from fund_watch import _parse_real_time
-                from fund_utils import write_heartbeat, update_heartbeat, clear_heartbeat
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-                all_codes = [r.get("code", "") for r in rec_data if r.get("code")]
-                if all_codes:
-                    _td_total = len(all_codes)
-                    _hb_name = "recommend-td-refresh"
-                    write_heartbeat(_hb_name, total=_td_total, progress=0, phase="刷新td",
-                                    detail=f"0/{_td_total} 只基金")
-                    _last_hb_pct = -1
-                    fresh_td: dict[str, float] = {}
-                    _td_done = 0
-                    with ThreadPoolExecutor(max_workers=50) as _td_ex:
-                        _td_futs = {_td_ex.submit(_parse_real_time, c): c for c in all_codes}
-                        for _td_fut in as_completed(_td_futs):
-                            c = _td_futs[_td_fut]
-                            v = _td_fut.result()
-                            _td_done += 1
-                            _pct = int(_td_done / _td_total * 100)
-                            if _pct != _last_hb_pct or _td_done == _td_total:
-                                _last_hb_pct = _pct
-                                update_heartbeat(_hb_name, progress=_td_done, total=_td_total,
-                                                 detail=f"{_td_done}/{_td_total} 只基金")
-                            if v is not None:
-                                fresh_td[c] = v
-                    for r in rec_data:
-                        code = r.get("code", "")
-                        if code in fresh_td:
-                            r["td"] = fresh_td[code]
-                    # td 刷新完成后不清理心跳，留给随后的表格读取复用
-                    update_heartbeat(_hb_name, progress=_td_total, total=_td_total,
-                                     detail=f"{_td_total}/{_td_total} 只基金")
                 with open(_CONFIG_PATH, encoding="utf-8") as _fc:
                     cfg = json.load(_fc)
                 dims = cfg.get("scoring", {}).get("dims", [])
