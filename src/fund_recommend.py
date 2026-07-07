@@ -454,6 +454,9 @@ def main() -> None:
     def _elapsed() -> float:
         return round(time.time() - _t0, 1)
 
+    # 全局进度百分比计算（各阶段权重：排行2% + 初筛1% + 限购12% + 评分82% + 保存3%）
+    _phase_weights = {}  # 用于跟踪各阶段的 scale
+
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         # 三级缓存检查
@@ -501,7 +504,8 @@ def main() -> None:
                 if _HAS_TD:
                     _t1 = time.time()
                     print(f"\n📋 当日涨跌维度开启，刷新 {total_candidates} 只基金td值...")
-                    update_heartbeat("fund_recommend", progress=0, total=total_candidates, phase="刷新td",
+                    update_heartbeat("fund_recommend", progress=0, total=total_candidates,
+                                     overall_pct=0, phase="刷新td",
                                      detail=f"批量获取 {total_candidates} 只实时涨跌", elapsed=_elapsed())
                     from fund_scoring import _calc_score as _calc_score2
 
@@ -517,35 +521,39 @@ def main() -> None:
                         if td_val is not None:
                             r["score"] = _calc_score2(r)
                         if (idx + 1) % 200 == 0:
+                            opct = (idx + 1) / total_candidates * 95
                             update_heartbeat("fund_recommend", progress=idx + 1, total=total_candidates,
-                                             phase="评分", detail=f"重算评分 {idx+1}/{total_candidates}",
+                                             overall_pct=opct, phase="评分",
+                                             detail=f"重算评分 {idx+1}/{total_candidates}",
                                              elapsed=_elapsed())
 
                     cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
                 else:
                     _t1 = time.time()
                     print(f"\n📋 刷新前 {SHOW_TOP} 只显示涨跌 (td维度未开启)...")
-                    update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP, phase="更新涨跌",
+                    update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP,
+                                     overall_pct=0, phase="更新涨跌",
                                      detail=f"并行获取前 {SHOW_TOP} 只实时涨跌", elapsed=_elapsed())
-
-                    def _update_day(code: str) -> tuple[str, str]:
-                        try:
-                            td = _fetch_fund_estimate(code)
-                            if td is not None:
-                                return (code, f"{td[1]:+.2f}%")
-                        except Exception:
-                            pass
-                        return (code, "")
 
                     day_map: dict[str, str] = {}
                     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_update_day", default=50)) as ex:
+                        def _update_day(code: str) -> tuple[str, str]:
+                            try:
+                                td = _fetch_fund_estimate(code)
+                                if td is not None:
+                                    return (code, f"{td[1]:+.2f}%")
+                            except Exception:
+                                pass
+                            return (code, "")
+
                         futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
                         for i, fut in enumerate(as_completed(futs), 1):
                             code, day = fut.result()
                             day_map[code] = day
-                            pct = i / SHOW_TOP * 100
-                            update_heartbeat("fund_recommend", progress=i, total=SHOW_TOP, phase="涨跌",
-                                             detail=f"刷新 {i}/{SHOW_TOP} ({pct:.0f}%)", elapsed=_elapsed())
+                            opct = i / SHOW_TOP * 95
+                            update_heartbeat("fund_recommend", progress=i, total=SHOW_TOP,
+                                             overall_pct=opct, phase="涨跌",
+                                             detail=f"刷新 {i}/{SHOW_TOP}", elapsed=_elapsed())
 
                     print(f"  涨跌刷新完成 ({time.time()-_t1:.1f}s)")
                     for r in cached_results:
@@ -556,9 +564,13 @@ def main() -> None:
                     cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
                 print(f"\n💾 保存缓存结果...")
-                update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates, phase="保存",
+                update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates,
+                                 overall_pct=97, phase="保存",
                                  detail=f"保存 {total_candidates} 只结果", elapsed=_elapsed())
                 _save_result(cached_results)
+                update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates,
+                                 overall_pct=100, phase="完成",
+                                 detail="推荐完成", elapsed=_elapsed())
                 print(f"🏆 基金推荐 TOP {SHOW_TOP}")
                 print("=" * 50)
                 _print_results(cached_results)
@@ -572,27 +584,41 @@ def main() -> None:
         # ── 全量运行 ──
         _t1 = time.time()
         print(f"\n📥 阶段1/5: 获取全市场基金排行 (TOP {_TOP})...")
-        update_heartbeat("fund_recommend", progress=0, total=_TOP, phase="获取排行",
+        update_heartbeat("fund_recommend", progress=0, total=_TOP,
+                         overall_pct=0, phase="获取排行",
                          detail=f"拉取排行 API top {_TOP}", elapsed=_elapsed())
         rows = _fetch_rank_list(_TOP)
-        print(f"   ✅ API 返回 {len(rows)} 只基金 ({time.time()-_t1:.1f}s)")
+        rows_count = len(rows)
+        print(f"   ✅ API 返回 {rows_count} 只基金 ({time.time()-_t1:.1f}s)")
+        update_heartbeat("fund_recommend", progress=_TOP, total=_TOP,
+                         overall_pct=2, phase="获取排行",
+                         detail=f"排行API返回 {rows_count} 只", elapsed=_elapsed())
 
         _t2 = time.time()
         print(f"\n📊 阶段2/5: 初筛 (y1 >= {_MIN_Y1}%)...")
-        update_heartbeat("fund_recommend", progress=0, total=len(rows), phase="初筛",
-                         detail=f"按 y1>={_MIN_Y1}% 筛选 {len(rows)} 只", elapsed=_elapsed())
+        update_heartbeat("fund_recommend", progress=0, total=rows_count,
+                         overall_pct=2, phase="初筛",
+                         detail=f"按 y1>={_MIN_Y1}% 筛选 {rows_count} 只", elapsed=_elapsed())
         candidates = _filter_candidates(rows)
-        print(f"   ✅ y1 >= {_MIN_Y1}% 筛选后: {len(candidates)} 只 ({time.time()-_t2:.1f}s)")
+        candidates_count = len(candidates)
+        print(f"   ✅ y1 >= {_MIN_Y1}% 筛选后: {candidates_count} 只 ({time.time()-_t2:.1f}s)")
         if not candidates:
             print("   ⚠️ 无候选基金，请降低最低年化收益门槛")
+            update_heartbeat("fund_recommend", progress=0, total=0,
+                             overall_pct=100, phase="完成",
+                             detail="无候选基金", elapsed=_elapsed())
             return
+        update_heartbeat("fund_recommend", progress=rows_count, total=rows_count,
+                         overall_pct=3, phase="初筛",
+                         detail=f"初筛通过 {candidates_count} 只", elapsed=_elapsed())
 
         # ── 限购检查 ──
+        limit_before = candidates_count
         if _SKIP_LIMITED and candidates:
             _t3 = time.time()
-            limit_before = len(candidates)
             print(f"\n🔒 阶段3/5: 限购检查 ({limit_before} 只)...")
-            update_heartbeat("fund_recommend", progress=0, total=limit_before, phase="限购",
+            update_heartbeat("fund_recommend", progress=0, total=limit_before,
+                             overall_pct=3, phase="限购",
                              detail=f"检查 {limit_before} 只限购", elapsed=_elapsed())
             from fund_watch import _parse_purchase_limit
             limit_checked: list[dict] = []
@@ -611,9 +637,10 @@ def main() -> None:
                     if _r:
                         limit_checked.append(_r)
                     if _j % 50 == 0 or _j == limit_before:
-                        pct = _j / limit_before * 100
-                        update_heartbeat("fund_recommend", progress=_j, total=limit_before, phase="限购",
-                                         detail=f"限购检查 {_j}/{limit_before} ({pct:.0f}%)",
+                        opct = 3 + _j / limit_before * 12
+                        update_heartbeat("fund_recommend", progress=_j, total=limit_before,
+                                         overall_pct=opct, phase="限购",
+                                         detail=f"限购检查 {_j}/{limit_before}",
                                          elapsed=_elapsed())
 
             candidates = limit_checked
@@ -626,7 +653,8 @@ def main() -> None:
         _t4 = time.time()
         print(f"\n🧮 阶段4/5: 并行评分 ({total} 只基金, 预计 ~{est_min} 分钟)")
         print(f"   数据来源: pingzhongdata (~400KB/只, 50线程)")
-        update_heartbeat("fund_recommend", progress=0, total=total, phase="评分",
+        update_heartbeat("fund_recommend", progress=0, total=total,
+                         overall_pct=15, phase="评分",
                          detail=f"启动评分: {total} 只, {50}线程", elapsed=_elapsed())
 
         print(f"\n{'进度':<8} {'代码':<7} {'基金名':<20} {'年化':<8} {'评分':<6} {'耗时':<7}")
@@ -645,7 +673,9 @@ def main() -> None:
                 else:
                     print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'跳过':<8} {'':6} {time.time()-_t4:<7.1f}s")
                 pct = i / total * 100
-                update_heartbeat("fund_recommend", progress=i, total=total, phase="评分",
+                opct = 15 + i / total * 82
+                update_heartbeat("fund_recommend", progress=i, total=total,
+                                 overall_pct=opct, phase="评分",
                                  detail=f"评分 {i}/{total} ({pct:.0f}%) {c['name'][:12]}",
                                  elapsed=_elapsed())
 
@@ -655,7 +685,8 @@ def main() -> None:
         _t5 = time.time()
         print(f"\n💾 阶段5/5: 排序保存...")
         scored.sort(key=lambda x: x.get("score", 0), reverse=True)
-        update_heartbeat("fund_recommend", progress=total, total=total, phase="保存",
+        update_heartbeat("fund_recommend", progress=total, total=total,
+                         overall_pct=97, phase="保存",
                          detail=f"保存 {len(scored)} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
         _save_result(scored)
 

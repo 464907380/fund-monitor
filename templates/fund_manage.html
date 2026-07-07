@@ -1613,10 +1613,19 @@ async function runRecommendFromFilter() {
         var recAlive = hb.alive && hb.alive.fund_recommend;
         if (recAlive && recData) {
           var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
-          if (prog) prog.style.width = pct + '%';
-          var displayTotal = recData.total || 0;
-          if (statusEl) statusEl.textContent = recData.progress + '/' + displayTotal + ' (' + pct + '%) ' + (recData.status || '');
-          if (btn) btn.textContent = '⏳ 推荐中 ' + pct + '%';
+          // 优先使用全局进度 overall_pct，避免阶段切换时进度回退
+          var displayPct = recData.overall_pct != null ? Math.round(recData.overall_pct) : pct;
+          if (prog) prog.style.width = Math.min(displayPct, 99) + '%';
+          // 构建详细状态字符串
+          var phaseIcon = {'获取排行':'📥','初筛':'📊','限购':'🔒','评分':'🧮','保存':'💾','完成':'✅',
+                           '刷新td':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋'};
+          var icon = phaseIcon[recData.phase] || '⏳';
+          var statusParts = [icon];
+          if (recData.phase) statusParts.push(recData.phase);
+          if (recData.detail) statusParts.push(recData.detail);
+          if (recData.elapsed != null) statusParts.push(Math.round(recData.elapsed) + 's');
+          if (statusEl) statusEl.textContent = statusParts.join(' | ');
+          if (btn) btn.textContent = '⏳ ' + displayPct + '%';
         } else if (!recAlive) {
           clearInterval(poll);
           if (prog) prog.style.width = '100%';
