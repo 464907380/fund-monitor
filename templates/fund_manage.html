@@ -1223,6 +1223,31 @@ function drawCurvePreview(key) {
 }
 
 
+/** 刷新推荐表和自选表，通过 progFill/progPct/progText 显示td刷新进度 */
+async function _refreshTablesWithProgress(progFill, progPct, progText, onDone) {
+  try {
+    var poll = setInterval(function() {
+      fetch(API + '/api/heartbeat').then(function(r){ return r.json(); }).then(function(hb) {
+        if (!hb.ok) return;
+        var recHb = hb.heartbeats && hb.heartbeats['recommend-td-refresh'];
+        if (recHb) {
+          var p = recHb.total > 0 ? Math.round(recHb.progress / recHb.total * 100) : 0;
+          if (progFill) progFill.style.width = Math.min(p, 99) + '%';
+          if (progPct) progPct.textContent = p + '%';
+          if (progText) progText.textContent = '📋 刷新td ' + (recHb.detail || '') + ' | ' + p + '%';
+        }
+      }).catch(function(){});
+    }, 800);
+    var rtR = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
+    if (rtR.ok) { var rtH = await rtR.text(); if (rtH.indexOf('<tbody>') > 0) { var rtE = document.getElementById('recommendFullTable'); if (rtE) { rtE.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (rtH) { var rtE2 = document.getElementById('recommendFullTable'); if (rtE2) { rtE2.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } }
+    var ftR = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
+    if (ftR.ok) { var ftH = await ftR.text(); if (ftH.indexOf('<tbody>') > 0) { var ftE = document.getElementById('fundFullTable'); if (ftE) { ftE.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } else if (ftH) { var ftE2 = document.getElementById('fundFullTable'); if (ftE2) { ftE2.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } }
+    clearInterval(poll);
+  } catch(e) {}
+  if (onDone) onDone();
+}
+
+
 async function saveDims() {
   const btn = document.getElementById('dimsSaveBtn');
   const progArea = document.getElementById('saveProgressArea');
@@ -1283,42 +1308,19 @@ async function saveDims() {
       showMsg('✔ 权重已保存', 'ok');
       if (progText) progText.textContent = '✔ 保存完成，刷新表格...';
       if (btn) { btn.textContent = '⏳ 刷新表格'; }
-      // 权重变更后刷新评分表格（缓存已被服务端清除，需重新获取）
-      try {
-        // 并行取两张表，显示 td 刷新进度
-        var _stopRtPoll = null;
-        var _stopFtPoll = null;
-        var _tdRefreshDone = false;
-        // 启动 td 刷新进度轮询
-        var _pollTd = setInterval(function() {
-          fetch(API + '/api/heartbeat').then(function(r){ return r.json(); }).then(function(hb) {
-            if (!hb.ok) return;
-            var recHb = hb.heartbeats && hb.heartbeats['recommend-td-refresh'];
-            if (recHb) {
-              var p = recHb.total > 0 ? Math.round(recHb.progress / recHb.total * 100) : 0;
-              if (progFill) progFill.style.width = Math.min(p, 99) + '%';
-              if (progPct) progPct.textContent = p + '%';
-              if (progText) progText.textContent = '📋 刷新td ' + (recHb.detail || '') + ' | ' + p + '%';
-            }
-          }).catch(function(){});
-        }, 800);
-        // 取两张表
-        var _rtR = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
-        if (_rtR.ok) { var _rtH = await _rtR.text(); if (_rtH.indexOf('<tbody>') > 0) { var _rtE = document.getElementById('recommendFullTable'); if (_rtE) { _rtE.innerHTML = _rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rtH) { var _rtE2 = document.getElementById('recommendFullTable'); if (_rtE2) { _rtE2.innerHTML = _rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } }
-        var _ftR = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
-        if (_ftR.ok) { var _ftH = await _ftR.text(); if (_ftH.indexOf('<tbody>') > 0) { var _ftE = document.getElementById('fundFullTable'); if (_ftE) { _ftE.innerHTML = _ftH; document.getElementById('fundFullTableCard').style.display = ''; } } else if (_ftH) { var _ftE2 = document.getElementById('fundFullTable'); if (_ftE2) { _ftE2.innerHTML = _ftH; document.getElementById('fundFullTableCard').style.display = ''; } } }
-        clearInterval(_pollTd);
-      } catch(e) {}
-      if (progFill) progFill.style.width = '100%';
-      if (progPct) progPct.textContent = '100%';
-      if (progText) progText.textContent = '✔ 刷新完成';
-      if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
-      try { loadDims(); } catch(e) {}
-      setTimeout(function() {
-        if (progArea) progArea.style.display = 'none';
-        if (progFill) progFill.style.width = '0%';
-        if (progPct) progPct.textContent = '0%';
-      }, 2000);
+      // 权重变更后刷新评分表格（缓存已被服务端清除）
+      _refreshTablesWithProgress(progFill, progPct, progText, function() {
+        if (progFill) progFill.style.width = '100%';
+        if (progPct) progPct.textContent = '100%';
+        if (progText) progText.textContent = '✔ 刷新完成';
+        if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; btn.style.background = 'linear-gradient(135deg,#66bb6a,#43a047)'; }
+        try { loadDims(); } catch(e) {}
+        setTimeout(function() {
+          if (progArea) progArea.style.display = 'none';
+          if (progFill) progFill.style.width = '0%';
+          if (progPct) progPct.textContent = '0%';
+        }, 2000);
+      });
     } else {
       if (progFill) progFill.style.width = '0%';
       if (progPct) progPct.textContent = '0%';
@@ -1379,7 +1381,15 @@ async function resetDims() {
 async function calibrateCurves() {
   if (!confirm('基于当前推荐数据自动校准评分曲线，确定继续？')) return;
   var btn = document.getElementById('calibrateBtn');
+  var progArea = document.getElementById('saveProgressArea');
+  var progFill = document.getElementById('saveProgressFill');
+  var progPct = document.getElementById('saveProgressPct');
+  var progText = document.getElementById('saveProgressText');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 校准中'; }
+  if (progArea) progArea.style.display = '';
+  if (progFill) progFill.style.width = '30%';
+  if (progPct) progPct.textContent = '30%';
+  if (progText) progText.textContent = '正在校准...';
   try {
     const r = await fetch(API + '/api/dims/calibrate', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'
@@ -1387,15 +1397,38 @@ async function calibrateCurves() {
     const d = await r.json();
     if (d.ok) {
       showMsg('✔ ' + (d.message || '校准完成'), 'ok');
-      loadDims();
-      loadSavedTables();
+      if (progFill) progFill.style.width = '100%';
+      if (progPct) progPct.textContent = '100%';
+      if (progText) progText.textContent = '校准完成，刷新表格...';
+      if (btn) btn.textContent = '⏳ 刷新表格';
+      // 刷新评分维度显示
+      try { loadDims(); } catch(e) {}
+      // 刷新表格（缓存已被服务端清除）
+      _refreshTablesWithProgress(progFill, progPct, progText, function() {
+        if (progFill) progFill.style.width = '100%';
+        if (progPct) progPct.textContent = '100%';
+        if (progText) progText.textContent = '✔ 刷新完成';
+        if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
+        setTimeout(function() {
+          if (progArea) progArea.style.display = 'none';
+          if (progFill) progFill.style.width = '0%';
+          if (progPct) progPct.textContent = '0%';
+        }, 2000);
+      });
     } else {
+      if (progFill) progFill.style.width = '0%';
+      if (progPct) progPct.textContent = '0%';
+      if (progText) progText.textContent = '';
+      if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
       showMsg('✖ ' + (d.error || '校准失败'), 'fail');
     }
   } catch(e) {
+    if (progFill) progFill.style.width = '0%';
+    if (progPct) progPct.textContent = '0%';
+    if (progText) progText.textContent = '';
+    if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
     showMsg('✖ 校准失败: ' + (e.message || e), 'fail');
   }
-  if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
 }
 
 loadDims();
