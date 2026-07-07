@@ -154,6 +154,11 @@ _DEFAULTS = {
         "cache_max_entries": 100,
     },
     "recommend": {
+        "top_n": 200,
+        "min_y1_return": 20,
+        "show_top": 20,
+        "skip_missing_perf": False,
+        "skip_limited": False,
         "lock_retry_count": 30,
         "lock_retry_interval": 1.0,
         "net_value_timeout": 10,

@@ -512,9 +512,9 @@
     ]
   },
   "recommend": {
-    "top_n": 20000,
-    "min_y1_return": 100,
-    "show_top": 50,
+    "top_n": 200,
+    "min_y1_return": 20,
+    "show_top": 20,
     "skip_missing_perf": true,
     "skip_limited": true
   }
