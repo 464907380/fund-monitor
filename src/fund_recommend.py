@@ -113,7 +113,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
 
         codes_list = list(result.keys())
         replaced_gz = 0
-        failed_gz = 0
+        _failed_codes: list[str] = []
         _start_gz = time.time()
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
             _gfuts = {_ge.submit(_fetch_fundgz, c): c for c in codes_list}
@@ -123,9 +123,15 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                     result[code] = gz_val
                     replaced_gz += 1
                 else:
-                    failed_gz += 1
-        if replaced_gz or failed_gz:
-            log.info("fundgz实时估值替换: %d成功/%d失败 (%d只, %.1fs)", replaced_gz, failed_gz, len(codes_list), time.time()-_start_gz)
+                    _failed_codes.append(code)
+        if _failed_codes:
+            # 失败的逐个重试（_fetch_fund_estimate 有多层降级）
+            from fund_utils import _fetch_fund_estimate
+            for _code in _failed_codes:
+                _td = _fetch_fund_estimate(_code)
+                if _td and _td[1] is not None:
+                    result[_code] = round(_td[1], 2)
+                    replaced_gz += 1
 
     # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
