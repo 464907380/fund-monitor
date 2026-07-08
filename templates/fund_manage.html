@@ -806,7 +806,7 @@ async function stopTask(taskId) {
 
 
 function updateHeartbeat() {
-  fetch(API + '/api/heartbeat').then(r => r.json()).then(d => {
+  fetch(API + '/api/heartbeat?_t=' + Date.now()).then(r => r.json()).then(d => {
     if (!d.ok) return;
     const hb = d.heartbeats || {};
     document.querySelectorAll('.feature-row').forEach(row => {
@@ -853,7 +853,7 @@ async function loadSavedTables() {
 }
 
 async function loadHeartbeat() {
-  const r = await fetch(API + '/api/heartbeat');
+  const r = await fetch(API + '/api/heartbeat?_t=' + Date.now());
   const d = await r.json();
   if (!d.ok) return;
   const hb = d.heartbeats || {};
@@ -1257,7 +1257,7 @@ function drawCurvePreview(key) {
 async function _refreshTablesWithProgress(progFill, progPct, progText, onDone) {
   try {
     var poll = setInterval(function() {
-      fetch(API + '/api/heartbeat').then(function(r){ return r.json(); }).then(function(hb) {
+      fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(hb) {
         if (!hb.ok) return;
         var recHb = hb.heartbeats && hb.heartbeats['recommend-td-refresh'];
         if (recHb) {
@@ -1745,7 +1745,7 @@ async function runRecommendFromFilter() {
     var MAX_WAIT = 1800000; // 30分钟超时保护
     var poll = setInterval(async function() {
       try {
-        var hb = await fetch(API + '/api/heartbeat').then(function(r){ return r.json(); });
+        var hb = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
         var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
         var recAlive = hb.alive && hb.alive.fund_recommend;
         // 如果心跳显示已完成，即使 alive 也视为结束
@@ -1775,7 +1775,7 @@ async function runRecommendFromFilter() {
           var _tdStart = Date.now();
           poll = setInterval(async function() {
             try {
-              var hb2 = await fetch(API + '/api/heartbeat').then(function(r){ return r.json(); });
+              var hb2 = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
               var rec2 = hb2.heartbeats && hb2.heartbeats['recommend-td-refresh'];
               var tdAlive = hb2.alive && hb2.alive['recommend-td-refresh'];
               if (tdAlive && rec2) {
