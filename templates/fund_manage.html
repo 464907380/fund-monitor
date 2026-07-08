@@ -414,6 +414,14 @@ input, select, button { font-family: inherit; outline: none; }
         <label style="color:#888;">展示条数
           <input type="number" id="recShowTop" value="20" min="5" max="99999" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
         </label>
+        <label style="color:#888;">排序方式
+          <select id="recRankSort" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+            <option value="1n">近1年收益</option>
+            <option value="6n">近6月收益</option>
+            <option value="3y">近3月收益</option>
+            <option value="1y">近1月收益</option>
+          </select>
+        </label>
         <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
           <input type="checkbox" id="recSkipMissingPerf" checked style="accent-color:#42a5f5;"> 筛掉缺失收益数据
         </label>
@@ -1565,6 +1573,8 @@ async function loadRecommendConfig() {
       if (el5) el5.checked = d.config.skip_missing_perf !== false;
       var el6 = document.getElementById('recSkipLimited');
       if (el6) el6.checked = d.config.skip_limited === true;
+      var el7 = document.getElementById('recRankSort');
+      if (el7 && d.config.rank_sort) el7.value = d.config.rank_sort;
     }
   } catch(e) {}
 }
@@ -1632,10 +1642,12 @@ async function runRecommendFromFilter() {
     var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
     var skipMissing = document.getElementById('recSkipMissingPerf') ? document.getElementById('recSkipMissingPerf').checked : true;
     var skipLimited = document.getElementById('recSkipLimited') ? document.getElementById('recSkipLimited').checked : false;
+    var rankSortEl = document.getElementById('recRankSort');
+    var rankSort = rankSortEl ? rankSortEl.value : '1n';
     var cfgResp = await fetch(API + '/api/recommend-config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop, skip_missing_perf: skipMissing, skip_limited: skipLimited}),
+      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop, skip_missing_perf: skipMissing, skip_limited: skipLimited, rank_sort: rankSort}),
     });
     var cfgData = await cfgResp.json();
     if (!cfgData.ok) {

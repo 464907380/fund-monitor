@@ -197,12 +197,14 @@ _SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
 _HAS_TD = any(dim_name == "\u5f53\u65e5\u6da8\u8dcc" for dim_name, _, _, _ in SCORE_DIMS)
 """当日涨跌维度是否开启：开启时缓存命中后仍需刷新td值重新评分"""
+_RANK_SORT = CFG.get("recommend", {}).get("rank_sort", "1n")
+"""排行排序方式：1n=近1年收益, 6n=近6月收益, 3y=近3月收益, 1y=近1月收益"""
 _RECOMMEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
 
 # 启动时打印配置，方便排查缓存问题
-print(f"[CFG] top_n={_TOP}, min_y1={_MIN_Y1}, show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}", file=sys.stderr)
+print(f"[CFG] top_n={_TOP}, min_y1={_MIN_Y1}, show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}, rank_sort={_RANK_SORT}", file=sys.stderr)
 
 
 def _parse_rank_response(data: str) -> list[list[str]] | None:
@@ -219,16 +221,20 @@ def _parse_rank_response(data: str) -> list[list[str]] | None:
 
 def _fetch_rank_list(pn: int) -> list[list[str]]:
     """从天天基金排行 API 获取全市场基金排行（并发多URL，走缓存）"""
-    sd = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
+    # 根据排序方式决定日期范围
+    sort_days = {"1n": 365, "6n": 180, "3y": 90, "1y": 30}
+    days = sort_days.get(_RANK_SORT, 365)
+    sd = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
     ed = datetime.date.today().isoformat()
+    sc = _RANK_SORT
     urls = [
-        api_url("fund_rank") + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
+        api_url("fund_rank") + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc={sc}&st=desc"
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1",
-        api_url("fund_rank") + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
+        api_url("fund_rank") + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc={sc}&st=desc"
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}",
-        "http://fund.eastmoney.com/data/rankhandler.aspx" + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1yz&st=desc"
+        "http://fund.eastmoney.com/data/rankhandler.aspx" + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc={sc}&st=desc"
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}&dx=1",
-        "http://fund.eastmoney.com/data/rankhandler.aspx" + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc=1n&st=desc"
+        "http://fund.eastmoney.com/data/rankhandler.aspx" + f"?op=ph&dt=kf&ft=all&rs=&gs=0&sc={sc}&st=desc"
                               f"&sd={sd}&ed={ed}&pi=1&pn={pn}",
     ]
 
@@ -278,7 +284,7 @@ def _filter_hash() -> str:
     import hashlib
     parts = [
         _CONFIG_VERSION,
-        str(_TOP), str(_MIN_Y1), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED),
+        str(_TOP), str(_MIN_Y1), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), _RANK_SORT,
     ]
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
