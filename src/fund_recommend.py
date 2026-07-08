@@ -102,7 +102,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                     "Referer": "https://fund.eastmoney.com/",
                     "User-Agent": "Mozilla/5.0",
                 })
-                with urllib.request.urlopen(_req_gz, timeout=get_timeout("sina_quote", 8)) as _r_gz:
+                with urllib.request.urlopen(_req_gz, timeout=get_timeout("default", 10)) as _r_gz:
                     raw_gz = _r_gz.read().decode("utf-8")
                 m = re.search(r'"gszzl":"([-+\d.]+)"', raw_gz)
                 if m and m.group(1):
@@ -114,7 +114,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
         codes_list = list(result.keys())
         replaced_gz = 0
         _start_gz = time.time()
-        _max_dur_gz = get_config("recommend", "net_value_timeout", default=15)
+        _max_dur_gz = get_config("recommend", "net_value_timeout", default=120)  # 120秒确保全部更新
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
             _gfuts = {_ge.submit(_fetch_fundgz, c): c for c in codes_list}
             for _gf in as_completed(_gfuts):
