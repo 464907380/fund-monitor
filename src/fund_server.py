@@ -428,10 +428,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({
                     "ok": True,
                     "config": {
+                        "top_n": rc.get("top_n", 200),
                         "filter_conditions": rc.get("filter_conditions", []),
                         "show_top": rc.get("show_top", 20),
                         "skip_missing_perf": rc.get("skip_missing_perf", False),
                         "skip_limited": rc.get("skip_limited", False),
+                        "rank_sort": rc.get("rank_sort", "1n"),
                     }
                 }))
             except Exception as e:
@@ -1169,6 +1171,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "show_top": int(body.get("show_top", 20)),
                     "skip_missing_perf": bool(body.get("skip_missing_perf", False)),
                     "skip_limited": bool(body.get("skip_limited", False)),
+                    "rank_sort": str(body.get("rank_sort", "1n")),
                 }
                 with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwcfg:
                     json.dump(cfg, _fwcfg, indent=2, ensure_ascii=False)

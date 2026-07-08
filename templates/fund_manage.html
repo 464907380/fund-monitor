@@ -403,44 +403,49 @@ input, select, button { font-family: inherit; outline: none; }
 
     <div class="divider" style="margin:12px 0 8px;"></div>
     <div style="padding:0 4px;">
-      <div style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:10px;">🔍 全市场筛选</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;font-size:12px;">
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-            <span style="color:#888;">筛选条件</span>
-            <div id="filterConditions" style="display:inline-flex;flex-direction:column;gap:4px;">
-              <div style="display:flex;gap:4px;align-items:center;">
-                <select class="condField" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
-                  <option value="y1">近1年收益</option>
-                  <option value="sy6">近6月收益</option>
-                  <option value="m3">近3月收益</option>
-                  <option value="m1">近1月收益</option>
-                  <option value="sy2">近2年收益</option>
-                  <option value="sy3">近3年收益</option>
-                </select>
-                <select class="condOp" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
-                  <option value="gte">≥</option>
-                  <option value="lte">≤</option>
-                </select>
-                <input type="number" class="condVal" value="20" min="0" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
-                <span style="color:#888;font-size:12px;">%</span>
-                <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:16px;padding:2px 6px;" title="删除条件">✕</button>
-              </div>
+      <div style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:8px;">🔍 全市场筛选</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;">
+        <label style="color:#888;">拉取数量
+          <input type="number" id="recTopN" value="200" min="50" max="99999" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+        </label>
+        <label style="color:#888;">筛选条件
+          <div id="filterConditions" style="display:inline-flex;flex-direction:column;gap:4px;margin-left:4px;vertical-align:top;">
+            <div style="display:flex;gap:4px;align-items:center;">
+              <select class="condField" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
+                <option value="y1">近1年收益</option>
+                <option value="sy6">近6月收益</option>
+                <option value="m3">近3月收益</option>
+                <option value="m1">近1月收益</option>
+                <option value="sy2">近2年收益</option>
+                <option value="sy3">近3年收益</option>
+              </select>
+              <select class="condOp" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
+                <option value="gte">≥</option>
+                <option value="lte">≤</option>
+              </select>
+              <input type="number" class="condVal" value="20" min="0" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
+              <span style="color:#888;font-size:12px;">%</span>
+              <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:16px;padding:2px 6px;" title="删除条件">✕</button>
             </div>
-            <button onclick="addFilterCondition()" style="background:rgba(255,255,255,0.08);border:1px dashed rgba(255,255,255,0.2);border-radius:4px;color:#999;padding:4px 12px;font-size:12px;cursor:pointer;">+ 添加条件</button>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-            <label style="color:#888;">展示条数
-              <input type="number" id="recShowTop" value="20" min="5" max="99999" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
-            </label>
-            <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
-              <input type="checkbox" id="recSkipMissingPerf" checked style="accent-color:#42a5f5;"> 筛掉缺失收益数据
-            </label>
-            <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
-              <input type="checkbox" id="recSkipLimited" style="accent-color:#42a5f5;"> 筛掉单日限购≤2万
-            </label>
-          </div>
-        </div>
+          <button onclick="addFilterCondition()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#888;padding:2px 10px;font-size:12px;cursor:pointer;margin-left:4px;">+ 添加条件</button>
+        <label style="color:#888;">展示条数
+          <input type="number" id="recShowTop" value="20" min="5" max="99999" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+        </label>
+        <label style="color:#888;">排序方式
+          <select id="recRankSort" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+            <option value="1n">近1年收益</option>
+            <option value="6n">近6月收益</option>
+            <option value="3y">近3月收益</option>
+            <option value="1y">近1月收益</option>
+          </select>
+        </label>
+        <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="recSkipMissingPerf" checked style="accent-color:#42a5f5;"> 筛掉缺失收益数据
+        </label>
+        <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="recSkipLimited" style="accent-color:#42a5f5;"> 筛掉单日限购≤2万
+        </label>
       </div>
       <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <button onclick="runRecommendFromFilter()" id="recFilterBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">▶ 运行推荐</button>
@@ -1576,12 +1581,16 @@ async function loadRecommendConfig() {
     const r = await fetch(API + '/api/recommend-config');
     const d = await r.json();
     if (d.ok && d.config) {
+      var el1 = document.getElementById('recTopN');
+      if (el1) el1.value = d.config.top_n || 200;
       var el4 = document.getElementById('recShowTop');
       if (el4) el4.value = d.config.show_top || 20;
       var el5 = document.getElementById('recSkipMissingPerf');
       if (el5) el5.checked = d.config.skip_missing_perf !== false;
       var el6 = document.getElementById('recSkipLimited');
       if (el6) el6.checked = d.config.skip_limited === true;
+      var el7 = document.getElementById('recRankSort');
+      if (el7 && d.config.rank_sort) el7.value = d.config.rank_sort;
       // 加载筛选条件
       var condDiv = document.getElementById('filterConditions');
       if (condDiv) {
@@ -1679,6 +1688,8 @@ async function runRecommendFromFilter() {
     var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
     var skipMissing = document.getElementById('recSkipMissingPerf') ? document.getElementById('recSkipMissingPerf').checked : true;
     var skipLimited = document.getElementById('recSkipLimited') ? document.getElementById('recSkipLimited').checked : false;
+    var rankSortEl = document.getElementById('recRankSort');
+    var rankSort = rankSortEl ? rankSortEl.value : '1n';
     // 收集筛选条件
     var condDiv = document.getElementById('filterConditions');
     var conditions = [];
@@ -1696,7 +1707,7 @@ async function runRecommendFromFilter() {
     var cfgResp = await fetch(API + '/api/recommend-config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({filter_conditions: conditions, show_top: showTop, skip_missing_perf: skipMissing, skip_limited: skipLimited}),
+      body: JSON.stringify({top_n: topN, filter_conditions: conditions, show_top: showTop, skip_missing_perf: skipMissing, skip_limited: skipLimited, rank_sort: rankSort}),
     });
     var cfgData = await cfgResp.json();
     if (!cfgData.ok) {

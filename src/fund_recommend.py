@@ -190,15 +190,14 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     return result
 
 # ── 配置 ──────────────────────────────────────
-_TOP = 20000
-"""排行拉取数量（固定，不需要配置）"""
+_TOP = CFG.get("recommend", {}).get("top_n", 200)
 SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
 _HAS_TD = any(dim_name == "\u5f53\u65e5\u6da8\u8dcc" for dim_name, _, _, _ in SCORE_DIMS)
 """当日涨跌维度是否开启：开启时缓存命中后仍需刷新td值重新评分"""
-_RANK_SORT = "1n"
-"""排行排序方式（固定为近1年收益，筛选用条件控制）"""
+_RANK_SORT = CFG.get("recommend", {}).get("rank_sort", "1n")
+"""排行排序方式：1n=近1年收益, 6n=近6月收益, 3y=近3月收益, 1y=近1月收益"""
 # 筛选条件（多条件组合）
 _FILTER_CONDITIONS = CFG.get("recommend", {}).get("filter_conditions", [])
 """筛选条件列表：[{field, op, value}, ...]  field: y1/sy6/m3/m1/sy2/sy3"""
@@ -216,7 +215,7 @@ _RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
 
 # 启动时打印配置，方便排查缓存问题
-print(f"[CFG] show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}", file=sys.stderr)
+print(f"[CFG] top_n={_TOP}, show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}, rank_sort={_RANK_SORT}", file=sys.stderr)
 
 
 def _parse_rank_response(data: str) -> list[list[str]] | None:
@@ -315,7 +314,7 @@ def _filter_hash() -> str:
     import hashlib
     parts = [
         _CONFIG_VERSION,
-        str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), json.dumps(_FILTER_CONDITIONS, sort_keys=True),
+        str(_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), _RANK_SORT, json.dumps(_FILTER_CONDITIONS, sort_keys=True),
     ]
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
@@ -326,7 +325,7 @@ def _config_hash() -> str:
     from fund_scoring import SCORE_DIMS
     parts = [
         _CONFIG_VERSION,
-        str(SHOW_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), json.dumps(_FILTER_CONDITIONS, sort_keys=True),
+        str(_TOP), str(SHOW_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), json.dumps(_FILTER_CONDITIONS, sort_keys=True),
     ]
     for name, fn, weight, desc in SCORE_DIMS:
         parts.append(f"{name}|{weight}|{desc}")
