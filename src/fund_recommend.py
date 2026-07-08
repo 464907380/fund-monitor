@@ -855,9 +855,6 @@ def main() -> None:
                          detail=f"保存 {len(scored)} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
         _save_result(scored)
 
-        # ── 补拉自选基金数据 ──
-        _supplement_self_selected()
-
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
         print("=" * 50)
         _print_results(scored)
@@ -870,8 +867,8 @@ def main() -> None:
         print(f"   ├─ 评分阶段: {_t5-_t4:.1f}s")
         print(f"   └─ 保存结果: {time.time()-_t5:.1f}s")
     finally:
-        clear_heartbeat("fund_recommend")
         _supplement_self_selected()
+        clear_heartbeat("fund_recommend")
         print(f"\n✅ 推荐任务完成 ({_elapsed()}s)")
 
 
