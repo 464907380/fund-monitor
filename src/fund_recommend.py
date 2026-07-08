@@ -547,7 +547,7 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
 
 
 def _supplement_self_selected() -> None:
-    """补拉自选基金数据到推荐结果文件"""
+    """补拉/清理自选基金数据到推荐结果文件"""
     try:
         _fund_list_file = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
         if not os.path.exists(_fund_list_file):
@@ -557,7 +557,46 @@ def _supplement_self_selected() -> None:
         if not _fl_data:
             return
         _old = _load_result()
-        _existing = {r["code"] for r in _old} if _old else set()
+        if not _old:
+            return
+        _self_codes = {f["code"] for f in _fl_data}
+        _existing = {r["code"] for r in _old}
+        
+        # 清理不满足筛选条件的自选基金
+        _removed = 0
+        _new_list = []
+        for _r in _old:
+            if _r["code"] in _self_codes and _FILTER_CONDITIONS:
+                _pass = True
+                for _cond in _FILTER_CONDITIONS:
+                    _fld = _cond.get("field", "")
+                    _op = _cond.get("op", "gte")
+                    _val = _cond.get("value")
+                    if _val is None or _fld not in _RANK_FIELD_MAP:
+                        continue
+                    _raw = _r.get(_fld)
+                    if _raw is None:
+                        _pass = False
+                        break
+                    try:
+                        if _op == "gte" and not (float(_raw) >= _val):
+                            _pass = False
+                            break
+                        elif _op == "lte" and not (float(_raw) <= _val):
+                            _pass = False
+                            break
+                    except (ValueError, TypeError):
+                        _pass = False
+                        break
+                if not _pass:
+                    _removed += 1
+                    continue
+            _new_list.append(_r)
+        if _removed:
+            print(f"  已移除 {_removed} 只不满足筛选条件的自选基金")
+        _old = _new_list
+        _existing = {r["code"] for r in _old}
+        
         _missing = [f for f in _fl_data if f["code"] not in _existing]
         if not _missing:
             return
@@ -593,13 +632,14 @@ def _supplement_self_selected() -> None:
                     print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
                 else:
                     print(f"  ⏭️ {_f['code']} {_r.get('name','')} — 不满足筛选条件，跳过")
-        if not _extra:
+        if not _extra and not _removed:
             return
         _old_list = _old or []
         _old_list.extend(_extra)
         _old_list.sort(key=lambda x: x.get("score", 0), reverse=True)
         _save_result(_old_list)
-        print(f"  已补入 {len(_extra)} 只自选基金，重新保存")
+        if _extra:
+            print(f"  已补入 {len(_extra)} 只自选基金，重新保存")
     except Exception as _e:
         print(f"⚠️ 补拉自选基金数据失败: {_e}")
 
