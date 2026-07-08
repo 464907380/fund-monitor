@@ -452,6 +452,39 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
     _print_results(cached_results)
 
 
+def _supplement_self_selected() -> None:
+    """补拉自选基金数据到推荐结果文件"""
+    try:
+        _fund_list_file = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
+        if not os.path.exists(_fund_list_file):
+            return
+        with open(_fund_list_file, encoding="utf-8") as _fl:
+            _fl_data = json.load(_fl)
+        if not _fl_data:
+            return
+        _old = _load_result()
+        _existing = {r["code"] for r in _old} if _old else set()
+        _missing = [f for f in _fl_data if f["code"] not in _existing]
+        if not _missing:
+            return
+        print(f"\n📋 补拉 {len(_missing)} 只自选基金数据...")
+        _extra = []
+        for _f in _missing:
+            _r = _score_one(_f["code"], _f.get("name", ""))
+            if _r:
+                _extra.append(_r)
+                print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
+        if not _extra:
+            return
+        _old_list = _old or []
+        _old_list.extend(_extra)
+        _old_list.sort(key=lambda x: x.get("score", 0), reverse=True)
+        _save_result(_old_list)
+        print(f"  已补入 {len(_extra)} 只自选基金，重新保存")
+    except Exception as _e:
+        print(f"⚠️ 补拉自选基金数据失败: {_e}")
+
+
 def main() -> None:
     _t0 = time.time()  # 全局计时起点
 
@@ -695,28 +728,7 @@ def main() -> None:
         _save_result(scored)
 
         # ── 补拉自选基金数据 ──
-        try:
-            _fund_list_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "fund_list.json")
-            if os.path.exists(_fund_list_file):
-                with open(_fund_list_file, encoding="utf-8") as _fl:
-                    _fl_data = json.load(_fl)
-                _existing = {r["code"] for r in scored if r.get("code")}
-                _missing = [f for f in _fl_data if f["code"] not in _existing]
-                if _missing:
-                    print(f"\n📋 补拉 {len(_missing)} 只自选基金数据...")
-                    _extra = []
-                    for _f in _missing:
-                        _r = _score_one(_f["code"], _f.get("name", ""))
-                        if _r:
-                            _extra.append(_r)
-                            print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
-                    if _extra:
-                        scored.extend(_extra)
-                        scored.sort(key=lambda x: x.get("score", 0), reverse=True)
-                        _save_result(scored)
-                        print(f"  已补入 {len(_extra)} 只自选基金，重新保存")
-        except Exception as _e:
-            print(f"⚠️ 补拉自选基金数据失败: {_e}")
+        _supplement_self_selected()
 
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
         print("=" * 50)
@@ -731,6 +743,7 @@ def main() -> None:
         print(f"   └─ 保存结果: {time.time()-_t5:.1f}s")
     finally:
         clear_heartbeat("fund_recommend")
+        _supplement_self_selected()
         print(f"\n✅ 推荐任务完成 ({_elapsed()}s)")
 
 
