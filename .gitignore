@@ -47,6 +47,10 @@ fund_list.json
 /preview_*.html
 /_*.py
 
+# 旧测试文件（已废弃）
+tests/check_post_calibrate.py
+tests/test_calibrate.py
+
 # 环境配置
 .env
 .env.local
@@ -72,6 +76,7 @@ recommend.log
 
 # AI 辅助工具自动生成的目录
 .deep-copilot/
+.reasonix/
 
 # 评分配置（本地自定义，不提交）
 data/config.json
