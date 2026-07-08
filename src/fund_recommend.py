@@ -192,19 +192,30 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
 # ── 配置 ──────────────────────────────────────
 _TOP = CFG.get("recommend", {}).get("top_n", 200)
 SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
-_MIN_Y1 = CFG.get("recommend", {}).get("min_y1_return", 20)
 _SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
 _HAS_TD = any(dim_name == "\u5f53\u65e5\u6da8\u8dcc" for dim_name, _, _, _ in SCORE_DIMS)
 """当日涨跌维度是否开启：开启时缓存命中后仍需刷新td值重新评分"""
 _RANK_SORT = CFG.get("recommend", {}).get("rank_sort", "1n")
 """排行排序方式：1n=近1年收益, 6n=近6月收益, 3y=近3月收益, 1y=近1月收益"""
+# 筛选条件（多条件组合）
+_FILTER_CONDITIONS = CFG.get("recommend", {}).get("filter_conditions", [])
+"""筛选条件列表：[{field, op, value}, ...]  field: y1/sy6/m3/m1/sy2/sy3"""
+# 排行API字段映射
+_RANK_FIELD_MAP = {
+    "y1":  {"idx": 11, "name": "近1年收益"},
+    "sy6": {"idx": 10, "name": "近6月收益"},
+    "m3":  {"idx": 9,  "name": "近3月收益"},
+    "m1":  {"idx": 8,  "name": "近1月收益"},
+    "sy2": {"idx": 12, "name": "近2年收益"},
+    "sy3": {"idx": 13, "name": "近3年收益"},
+}
 _RECOMMEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
 
 # 启动时打印配置，方便排查缓存问题
-print(f"[CFG] top_n={_TOP}, min_y1={_MIN_Y1}, show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}, rank_sort={_RANK_SORT}", file=sys.stderr)
+print(f"[CFG] top_n={_TOP}, show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}, rank_sort={_RANK_SORT}", file=sys.stderr)
 
 
 def _parse_rank_response(data: str) -> list[list[str]] | None:
@@ -260,14 +271,33 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
 
 
 def _filter_candidates(rows: list) -> list[dict]:
-    """根据配置筛选候选基金，返回 [{code, name, y1}, ...]"""
+    """根据多条件筛选候选基金，返回 [{code, name, y1}, ...]"""
     candidates = []
     for r in rows:
         try:
             code = r[0]
             name = r[1]
             y1 = float(r[11]) if len(r) > 11 and r[11] else 0
-            if y1 < _MIN_Y1:
+            # 多条件组合筛选
+            passed = True
+            for cond in _FILTER_CONDITIONS:
+                field = cond.get("field", "")
+                op = cond.get("op", "gte")
+                val = cond.get("value")
+                if val is None or field not in _RANK_FIELD_MAP:
+                    continue
+                fidx = _RANK_FIELD_MAP[field]["idx"]
+                raw = float(r[fidx]) if len(r) > fidx and r[fidx] else 0
+                if op == "gte" and not (raw >= val):
+                    passed = False
+                    break
+                elif op == "lte" and not (raw <= val):
+                    passed = False
+                    break
+                elif op == "eq" and not (abs(raw - val) < 0.01):
+                    passed = False
+                    break
+            if not passed:
                 continue
             candidates.append({"code": code, "name": name, "y1": y1})
         except (ValueError, IndexError):
@@ -284,7 +314,7 @@ def _filter_hash() -> str:
     import hashlib
     parts = [
         _CONFIG_VERSION,
-        str(_TOP), str(_MIN_Y1), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), _RANK_SORT,
+        str(_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), _RANK_SORT, json.dumps(_FILTER_CONDITIONS, sort_keys=True),
     ]
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
@@ -295,7 +325,7 @@ def _config_hash() -> str:
     from fund_scoring import SCORE_DIMS
     parts = [
         _CONFIG_VERSION,
-        str(_TOP), str(_MIN_Y1), str(SHOW_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED),
+        str(_TOP), str(SHOW_TOP), str(_SKIP_MISSING_PERF), str(_SKIP_LIMITED), json.dumps(_FILTER_CONDITIONS, sort_keys=True),
     ]
     for name, fn, weight, desc in SCORE_DIMS:
         parts.append(f"{name}|{weight}|{desc}")

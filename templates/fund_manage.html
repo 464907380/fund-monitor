@@ -408,9 +408,27 @@ input, select, button { font-family: inherit; outline: none; }
         <label style="color:#888;">拉取数量
           <input type="number" id="recTopN" value="200" min="50" max="99999" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
         </label>
-        <label style="color:#888;">最低近1年收益
-          <input type="number" id="recMinY1" value="20" min="0" max="100" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;"> %
-        </label>
+        <label style="color:#888;">筛选条件
+          <div id="filterConditions" style="display:inline-flex;flex-direction:column;gap:4px;margin-left:4px;vertical-align:top;">
+            <div style="display:flex;gap:4px;align-items:center;">
+              <select class="condField" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
+                <option value="y1">近1年收益</option>
+                <option value="sy6">近6月收益</option>
+                <option value="m3">近3月收益</option>
+                <option value="m1">近1月收益</option>
+                <option value="sy2">近2年收益</option>
+                <option value="sy3">近3年收益</option>
+              </select>
+              <select class="condOp" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
+                <option value="gte">≥</option>
+                <option value="lte">≤</option>
+              </select>
+              <input type="number" class="condVal" value="20" min="0" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">
+              <span style="color:#888;font-size:12px;">%</span>
+              <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:16px;padding:2px 6px;" title="删除条件">✕</button>
+            </div>
+          </div>
+          <button onclick="addFilterCondition()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#888;padding:2px 10px;font-size:12px;cursor:pointer;margin-left:4px;">+ 添加条件</button>
         <label style="color:#888;">展示条数
           <input type="number" id="recShowTop" value="20" min="5" max="99999" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
         </label>
@@ -1564,9 +1582,7 @@ async function loadRecommendConfig() {
     const d = await r.json();
     if (d.ok && d.config) {
       var el1 = document.getElementById('recTopN');
-      var el2 = document.getElementById('recMinY1');
       if (el1) el1.value = d.config.top_n || 200;
-      if (el2) el2.value = d.config.min_y1_return || 20;
       var el4 = document.getElementById('recShowTop');
       if (el4) el4.value = d.config.show_top || 20;
       var el5 = document.getElementById('recSkipMissingPerf');
@@ -1575,6 +1591,16 @@ async function loadRecommendConfig() {
       if (el6) el6.checked = d.config.skip_limited === true;
       var el7 = document.getElementById('recRankSort');
       if (el7 && d.config.rank_sort) el7.value = d.config.rank_sort;
+      // 加载筛选条件
+      var condDiv = document.getElementById('filterConditions');
+      if (condDiv) {
+        condDiv.innerHTML = '';
+        var conditions = d.config.filter_conditions || [];
+        if (conditions.length === 0) {
+          conditions = [{field: 'y1', op: 'gte', value: 20}];
+        }
+        conditions.forEach(function(c) { addFilterCondition(c.field, c.op, c.value); });
+      }
     }
   } catch(e) {}
 }
@@ -1631,6 +1657,27 @@ async function saveMonitorConfig() {
   }
   if (btn) btn.disabled = false;
 }
+function addFilterCondition(field, op, value) {
+  var condDiv = document.getElementById('filterConditions');
+  if (!condDiv) return;
+  var fieldOpts = {y1:'近1年收益',sy6:'近6月收益',m3:'近3月收益',m1:'近1月收益',sy2:'近2年收益',sy3:'近3年收益'};
+  var html = '<div style="display:flex;gap:4px;align-items:center;margin-top:4px;">';
+  html += '<select class="condField" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">';
+  for (var k in fieldOpts) {
+    html += '<option value="' + k + '"' + (k === field ? ' selected' : '') + '>' + fieldOpts[k] + '</option>';
+  }
+  html += '</select>';
+  html += '<select class="condOp" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">';
+  html += '<option value="gte"' + (op === 'gte' ? ' selected' : '') + '>≥</option>';
+  html += '<option value="lte"' + (op === 'lte' ? ' selected' : '') + '>≤</option>';
+  html += '</select>';
+  html += '<input type="number" class="condVal" value="' + (value || 0) + '" min="0" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;font-family:Consolas;">';
+  html += '<span style="color:#888;font-size:12px;">%</span>';
+  html += '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:16px;padding:2px 6px;" title="删除条件">✕</button>';
+  html += '</div>';
+  condDiv.insertAdjacentHTML('beforeend', html);
+}
+
 async function runRecommendFromFilter() {
   var btn = document.getElementById('recFilterBtn');
   var prog = document.getElementById('recFilterProgress');
@@ -1638,16 +1685,29 @@ async function runRecommendFromFilter() {
   if (!btn) return;
   try {
     var topN = parseInt(document.getElementById('recTopN').value) || 200;
-    var minY1 = parseInt(document.getElementById('recMinY1').value) || 20;
     var showTop = parseInt(document.getElementById('recShowTop').value) || 20;
     var skipMissing = document.getElementById('recSkipMissingPerf') ? document.getElementById('recSkipMissingPerf').checked : true;
     var skipLimited = document.getElementById('recSkipLimited') ? document.getElementById('recSkipLimited').checked : false;
     var rankSortEl = document.getElementById('recRankSort');
     var rankSort = rankSortEl ? rankSortEl.value : '1n';
+    // 收集筛选条件
+    var condDiv = document.getElementById('filterConditions');
+    var conditions = [];
+    if (condDiv) {
+      var rows = condDiv.querySelectorAll('div');
+      rows.forEach(function(row) {
+        var fieldEl = row.querySelector('.condField');
+        var opEl = row.querySelector('.condOp');
+        var valEl = row.querySelector('.condVal');
+        if (fieldEl && opEl && valEl) {
+          conditions.push({field: fieldEl.value, op: opEl.value, value: parseFloat(valEl.value) || 0});
+        }
+      });
+    }
     var cfgResp = await fetch(API + '/api/recommend-config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({top_n: topN, min_y1_return: minY1, show_top: showTop, skip_missing_perf: skipMissing, skip_limited: skipLimited, rank_sort: rankSort}),
+      body: JSON.stringify({top_n: topN, filter_conditions: conditions, show_top: showTop, skip_missing_perf: skipMissing, skip_limited: skipLimited, rank_sort: rankSort}),
     });
     var cfgData = await cfgResp.json();
     if (!cfgData.ok) {

@@ -429,7 +429,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "ok": True,
                     "config": {
                         "top_n": rc.get("top_n", 200),
-                        "min_y1_return": rc.get("min_y1_return", 20),
+                        "filter_conditions": rc.get("filter_conditions", []),
                         "show_top": rc.get("show_top", 20),
                         "skip_missing_perf": rc.get("skip_missing_perf", False),
                         "skip_limited": rc.get("skip_limited", False),
@@ -1167,7 +1167,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     cfg = json.load(_fcfg)
                 cfg["recommend"] = {
                     "top_n": int(body.get("top_n", 200)),
-                    "min_y1_return": int(body.get("min_y1_return", 20)),
+                    "filter_conditions": body.get("filter_conditions", []),
                     "show_top": int(body.get("show_top", 20)),
                     "skip_missing_perf": bool(body.get("skip_missing_perf", False)),
                     "skip_limited": bool(body.get("skip_limited", False)),
