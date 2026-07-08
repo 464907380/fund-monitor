@@ -527,8 +527,17 @@ def main() -> None:
                         print(f"🔄 筛选参数已变化 ({_elapsed()}s)")
                         print(f"   全量重新拉取排行和评分")
                 else:
-                    print(f"🔄 缓存日期 ({saved_date}) ≠ 今天 ({datetime.date.today()})")
-                    print(f"   全量重新拉取排行和评分")
+                    if old.get("config_hash") == cur_hash:
+                        print(f"📅 缓存日期 ({saved_date}) 与今天不同，但配置未变化")
+                        print(f"   使用缓存结果（仅更新涨跌）")
+                        cache_mode = "full"
+                    elif old.get("filter_hash") == cur_filter_hash:
+                        print(f"📅 缓存日期 ({saved_date}) 与今天不同，但筛选条件未变化")
+                        print(f"   使用缓存数据重新评分")
+                        cache_mode = "re-score"
+                    else:
+                        print(f"🔄 缓存日期 ({saved_date}) ≠ 今天 ({datetime.date.today()})")
+                        print(f"   筛选参数已变化，全量重新拉取排行和评分")
             except Exception as e:
                 print(f"⚠️ 缓存读取失败: {e}，全量重新运行")
 
