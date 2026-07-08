@@ -406,13 +406,13 @@ input, select, button { font-family: inherit; outline: none; }
       <div style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:8px;">🔍 全市场筛选</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;">
         <label style="color:#888;">拉取数量
-          <input type="number" id="recTopN" value="200" min="50" max="500" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+          <input type="number" id="recTopN" value="200" min="50" max="99999" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
         </label>
         <label style="color:#888;">最低近1年收益
           <input type="number" id="recMinY1" value="20" min="0" max="100" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;"> %
         </label>
         <label style="color:#888;">展示条数
-          <input type="number" id="recShowTop" value="20" min="5" max="50" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
+          <input type="number" id="recShowTop" value="20" min="5" max="99999" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:4px 8px;margin-left:4px;font-family:Consolas;">
         </label>
         <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
           <input type="checkbox" id="recSkipMissingPerf" checked style="accent-color:#42a5f5;"> 筛掉缺失收益数据
