@@ -735,13 +735,13 @@ def main() -> None:
                          detail=f"排行API返回 {rows_count} 只", elapsed=_elapsed())
 
         _t2 = time.time()
-        print(f"\n📊 阶段2/5: 初筛 (y1 >= {_MIN_Y1}%)...")
+        print(f"\n📊 阶段2/5: 初筛 (多条件筛选)...")
         update_heartbeat("fund_recommend", progress=0, total=rows_count,
                          overall_pct=2, phase="初筛",
-                         detail=f"按 y1>={_MIN_Y1}% 筛选 {rows_count} 只", elapsed=_elapsed())
+                         detail=f"按 {len(_FILTER_CONDITIONS)} 个条件筛选 {rows_count} 只", elapsed=_elapsed())
         candidates = _filter_candidates(rows)
         candidates_count = len(candidates)
-        print(f"   ✅ y1 >= {_MIN_Y1}% 筛选后: {candidates_count} 只 ({time.time()-_t2:.1f}s)")
+        print(f"   ✅ 多条件筛选后: {candidates_count} 只 ({time.time()-_t2:.1f}s)")
         if not candidates:
             print("   ⚠️ 无候选基金，请降低最低年化收益门槛")
             update_heartbeat("fund_recommend", progress=0, total=0,
