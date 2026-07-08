@@ -114,7 +114,9 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
         codes_list = list(result.keys())
         replaced_gz = 0
         _failed_codes: list[str] = []
+        _total_gz = len(codes_list)
         _start_gz = time.time()
+        _last_hb_pct = -1
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
             _gfuts = {_ge.submit(_fetch_fundgz, c): c for c in codes_list}
             for _gf in as_completed(_gfuts):
@@ -124,14 +126,28 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                     replaced_gz += 1
                 else:
                     _failed_codes.append(code)
+                _done = replaced_gz + len(_failed_codes)
+                _pct = int(_done / _total_gz * 100) if _total_gz else 0
+                if _pct != _last_hb_pct and _done % 50 == 0 or _done == _total_gz:
+                    _last_hb_pct = _pct
+                    update_heartbeat("fund_recommend", progress=_done, total=_total_gz,
+                                     overall_pct=_pct, phase="刷新td",
+                                     detail=f"拉取实时估值 {_done}/{_total_gz} ({_pct}%)",
+                                     elapsed=round(time.time() - _start_gz, 1))
         if _failed_codes:
             # 失败的逐个重试（_fetch_fund_estimate 有多层降级）
             from fund_utils import _fetch_fund_estimate
-            for _code in _failed_codes:
+            for _i, _code in enumerate(_failed_codes):
                 _td = _fetch_fund_estimate(_code)
                 if _td and _td[1] is not None:
                     result[_code] = round(_td[1], 2)
                     replaced_gz += 1
+                _done2 = replaced_gz + len(_failed_codes)
+                if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
+                    update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
+                                     overall_pct=int(_done2 / _total_gz * 100), phase="刷新td",
+                                     detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
+                                     elapsed=round(time.time() - _start_gz, 1))
 
     # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
