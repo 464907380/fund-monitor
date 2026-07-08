@@ -92,6 +92,42 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     # 收盘后尝试用实际净值替换新浪估算值
     now = datetime.datetime.now()
     is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
+
+    # 用 fundgz 实时估值替换新浪数据（盘中更准确）
+    if result:
+        def _fetch_fundgz(code: str) -> tuple[str, float | None]:
+            try:
+                url = f"https://fundgz.1234567.com.cn/js/{code}.js"
+                _req_gz = urllib.request.Request(url, headers={
+                    "Referer": "https://fund.eastmoney.com/",
+                    "User-Agent": "Mozilla/5.0",
+                })
+                with urllib.request.urlopen(_req_gz, timeout=get_timeout("sina_quote", 8)) as _r_gz:
+                    raw_gz = _r_gz.read().decode("utf-8")
+                m = re.search(r'"gszzl":"([-+\d.]+)"', raw_gz)
+                if m and m.group(1):
+                    return (code, float(m.group(1)))
+            except Exception:
+                pass
+            return (code, None)
+
+        codes_list = list(result.keys())
+        replaced_gz = 0
+        _start_gz = time.time()
+        _max_dur_gz = get_config("recommend", "net_value_timeout", default=15)
+        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
+            _gfuts = {_ge.submit(_fetch_fundgz, c): c for c in codes_list}
+            for _gf in as_completed(_gfuts):
+                code, gz_val = _gf.result()
+                if gz_val is not None:
+                    result[code] = gz_val
+                    replaced_gz += 1
+                if time.time() - _start_gz > _max_dur_gz:
+                    break
+        if replaced_gz:
+            log.info("fundgz实时估值替换: %d/%d 只基金(%.1fs)", replaced_gz, len(codes_list), time.time()-_start_gz)
+
+    # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
         today_str = now.strftime("%Y-%m-%d")
 
