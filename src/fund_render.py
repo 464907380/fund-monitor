@@ -54,7 +54,29 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         _fcode = r.get("code", "")
         _fname_js = str(r.get("name_short", "")).replace("\\", "\\\\").replace("'", "\\'")
         _fname_html = _html.escape(str(r.get("name_short", "")))
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'{_fcode}\',\'{_fname_js}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_fname_html}</span>{_warn}</td>')
+        # 走势图SVG
+        _trend_html = ""
+        _trend_data = r.get("_trend")
+        if _trend_data and len(_trend_data) >= 2:
+            try:
+                _vals = [float(v) for v in _trend_data]
+                _min_v = min(_vals)
+                _max_v = max(_vals)
+                _range = _max_v - _min_v if _max_v != _min_v else 1
+                _svg_w = 60
+                _svg_h = 20
+                _pts = []
+                _n = len(_vals)
+                for _i, _v in enumerate(_vals):
+                    _x = round(_i / (_n - 1) * (_svg_w - 2) + 1, 1)
+                    _y = round((1 - (_v - _min_v) / _range) * (_svg_h - 4) + 2, 1)
+                    _pts.append(f"{_x},{_y}")
+                _line_color = "#4caf50" if _vals[-1] >= _vals[0] else "#ef5350"
+                _poly_pts = " ".join(_pts)
+                _trend_html = f'<svg width="{_svg_w}" height="{_svg_h}" viewBox="0 0 {_svg_w} {_svg_h}" style="vertical-align:middle;margin-right:4px;"><polyline fill="none" stroke="{_line_color}" stroke-width="1.2" points="{_poly_pts}"/><polygon fill="{_line_color}" fill-opacity="0.08" points="{_poly_pts} {_svg_w-1},{_svg_h-2} 1,{_svg_h-2}"/></svg>'
+            except (ValueError, ZeroDivisionError):
+                pass
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'{_fcode}\',\'{_fname_js}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_trend_html}{_fname_html}</span>{_warn}</td>')
         _v = r.get("_day", "")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         # 评分（带明细弹窗）
