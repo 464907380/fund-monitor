@@ -30,6 +30,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
              '<thead><tr style="background:#2a2a2a;">'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">代码</th>'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金名</th>'
+             '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;white-space:nowrap;font-size:11px;">走势</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">涨跌</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">评分</th>']
     # 动态维度列
@@ -57,7 +58,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         # 走势图SVG
         _trend_html = ""
         _trend_data = r.get("_trend")
-        if _trend_data and len(_trend_data) >= 2:
+        if _trend_data and len(_trend_data) >= 10:
             try:
                 _vals = [float(v) for v in _trend_data]
                 _min_v = min(_vals)
@@ -76,7 +77,8 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                 _trend_html = f'<svg width="{_svg_w}" height="{_svg_h}" viewBox="0 0 {_svg_w} {_svg_h}" style="vertical-align:middle;margin-right:4px;"><polyline fill="none" stroke="{_line_color}" stroke-width="1.2" points="{_poly_pts}"/><polygon fill="{_line_color}" fill-opacity="0.08" points="{_poly_pts} {_svg_w-1},{_svg_h-2} 1,{_svg_h-2}"/></svg>'
             except (ValueError, ZeroDivisionError):
                 pass
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'{_fcode}\',\'{_fname_js}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_trend_html}{_fname_html}</span>{_warn}</td>')
+        parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'' + _fcode + '\',\'' + _fname_js + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">' + _fname_html + '</span>' + _warn + '</td>')
+        parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:center;">' + _trend_html + '</td>')
         _v = r.get("_day", "")
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
         # 评分（带明细弹窗）
