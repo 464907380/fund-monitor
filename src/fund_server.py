@@ -799,7 +799,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 try:
                                     _nav_data = _fetch_nav_from_lsjz(code, max_pages=3)
                                     if _nav_data and len(_nav_data) >= 2:
-                                        row["_trend"] = [round(n["v"], 4) for n in _nav_data]
+                                        _base_v = _nav_data[0]["v"]
+                                        row["_trend"] = [[n["d"], round((n["v"] - _base_v) / _base_v * 100, 2)] for n in _nav_data]
                                 except Exception:
                                     pass
                             score_d = {k: cached.get(k) for k in (
@@ -853,7 +854,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         }
                         # 近20日净值走势
                         if len(navs) >= 2:
-                            row["_trend"] = [round(n["v"], 4) for n in navs[-60:]]
+                            _bnv = navs[-60:][0]["v"]
+                            row["_trend"] = [[n["d"], round((n["v"] - _bnv) / _bnv * 100, 2)] for n in navs[-60:]]
                         score_d = {k: d.get(k) for k in (
                             "y1","m3","m1","f5","sy6","sy2","sy3",
                             "annual_return","sharpe","sortino",

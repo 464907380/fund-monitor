@@ -2095,6 +2095,57 @@ function showStockInfo(name, fullCode) {
   });
 }
 
+// 走势图放大弹窗
+function showTrendChart(el) {
+  var raw = el.getAttribute('data-trend');
+  if (!raw) return;
+  var data;
+  try { data = JSON.parse(raw); } catch(e) { return; }
+  var dates = data.d;
+  var vals = data.v;
+  if (!dates || !vals || vals.length < 2) return;
+  var minV = Math.min.apply(null, vals);
+  var maxV = Math.max.apply(null, vals);
+  var range = maxV - minV || 1;
+  var w = 400, h = 200, pad = 30;
+  var cw = w - pad * 2, ch = h - pad * 2;
+  var pts = [];
+  for (var i = 0; i < vals.length; i++) {
+    var x = pad + i / (vals.length - 1) * cw;
+    var y = pad + ch - (vals[i] - minV) / range * ch;
+    pts.push({x: x, y: y, idx: i, date: dates[i], val: vals[i]});
+  }
+  var lineColor = vals[vals.length-1] >= vals[0] ? '#ef5350' : '#4caf50';
+  var polyPts = pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+  var svgHtml = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;margin:0 auto;background:transparent;">';
+  svgHtml += '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>';
+  svgHtml += '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + polyPts + ' ' + (pad+cw) + ',' + (pad+ch) + ' ' + pad + ',' + (pad+ch) + '"/>';
+  for (var j = 0; j < pts.length; j++) {
+    var p = pts[j];
+    var tip = p.date + ' | ' + (p.val >= 0 ? '+' : '') + p.val.toFixed(2) + '%';
+    svgHtml += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3" fill="' + lineColor + '" opacity="0.8" style="cursor:pointer;">';
+    svgHtml += '<title>' + tip + '</title>';
+    svgHtml += '</circle>';
+  }
+  svgHtml += '</svg>';
+  // 创建弹窗
+  var backdrop = document.getElementById('trendBackdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'trendBackdrop';
+    backdrop.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99998;display:flex;align-items:center;justify-content:center;';
+    backdrop.onclick = function(){ backdrop.style.display = 'none'; };
+    document.body.appendChild(backdrop);
+  }
+  backdrop.style.display = 'flex';
+  backdrop.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;max-width:480px;width:90%;" onclick="event.stopPropagation();">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+    + '<span style="color:#e0e0e0;font-size:14px;font-weight:600;">走势图</span>'
+    + '<span onclick="document.getElementById(\'trendBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:20px;">&times;</span></div>'
+    + svgHtml
+    + '<div style="text-align:center;margin-top:6px;font-size:11px;color:#666;">鼠标悬停查看日期和涨跌幅</div></div>';
+}
+
 </script>
 </body>
 </html>
