@@ -22,7 +22,9 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fund_utils import update_heartbeat, clear_heartbeat, _fetch_fund_estimate
+from fund_utils import update_heartbeat, clear_heartbeat, _fetch_fund_estimate, setup_log
+
+setup_log("recommend.log")
 
 try:
     from fund_watch import log, fetch

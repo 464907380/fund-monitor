@@ -79,9 +79,30 @@ HISTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── 日志 ──────────────────────────────────────
 _handlers: list[logging.Handler] = [logging.StreamHandler()]
+_log_name = "fund_watch.log"
+
+def setup_log(name: str) -> None:
+    """设置日志文件名，不同进程用不同文件名避免冲突"""
+    global _log_name, _handlers
+    _log_name = name
+    _handlers = [logging.StreamHandler()]
+    try:
+        _handlers.insert(0, RotatingFileHandler(
+            os.path.join(HISTORY_DIR, name),
+            maxBytes=5 * 1024 * 1024, backupCount=3,
+        ))
+    except OSError:
+        pass
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=_handlers,
+        force=True,
+    )
+
 try:
     _handlers.insert(0, RotatingFileHandler(
-        os.path.join(HISTORY_DIR, "fund_watch.log"),
+        os.path.join(HISTORY_DIR, _log_name),
         maxBytes=5 * 1024 * 1024, backupCount=3,
     ))
 except OSError:

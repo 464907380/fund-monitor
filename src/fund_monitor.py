@@ -12,7 +12,9 @@ import os
 import time
 import re
 from config import CFG, api_url
-from fund_utils import fetch, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html
+from fund_utils import fetch, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html, setup_log
+
+setup_log("monitor.log")
 from fund_watch import FUND_LIST, _parse_holdings, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────

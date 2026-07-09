@@ -16,7 +16,7 @@ import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR
+from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log
 from config import CFG, api_url, get_timeout, get_config
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -864,17 +864,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _fund_td_done = 0
                 with concurrent.futures.ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "server_fund_table", default=20)) as executor:
                     fut_map = {executor.submit(_process_one, f["code"]): f["code"] for f in _fund_list_for_progress}
-                    for fut in concurrent.futures.as_completed(fut_map):
-                        result = fut.result()
-                        _fund_td_done += 1
-                        _pct = int(_fund_td_done / len(_fund_list_for_progress) * 100) if _fund_list_for_progress else 100
-                        if _pct != _last_hb_pct or _fund_td_done == len(_fund_list_for_progress):
-                            _last_hb_pct = _pct
-                            update_heartbeat("fund-td-refresh", progress=_fund_td_done,
-                                             total=len(_fund_list_for_progress),
-                                             detail=f"{_fund_td_done}/{len(_fund_list_for_progress)} 只基金")
-                        if result is not None:
-                            rows.append(result)
+                    try:
+                        for fut in concurrent.futures.as_completed(fut_map, timeout=120):
+                            try:
+                                result = fut.result()
+                            except Exception:
+                                continue
+                    except concurrent.futures.TimeoutError:
+                        # 超时后取消剩余任务
+                        for _f in fut_map:
+                            _f.cancel()
+                        print(f"[fund-table] 超时: {_fund_td_done}/{len(_fund_list_for_progress)} 只完成", flush=True)
+                    _fund_td_done += 1
+                    _pct = int(_fund_td_done / len(_fund_list_for_progress) * 100) if _fund_list_for_progress else 100
+                    if _pct != _last_hb_pct or _fund_td_done == len(_fund_list_for_progress):
+                        _last_hb_pct = _pct
+                        update_heartbeat("fund-td-refresh", progress=_fund_td_done,
+                                         total=len(_fund_list_for_progress),
+                                         detail=f"{_fund_td_done}/{len(_fund_list_for_progress)} 只基金")
+                    if result is not None:
+                        rows.append(result)
                 clear_heartbeat("fund-td-refresh")
 
                 # 按 fund_list 原始顺序排序
@@ -1411,6 +1420,7 @@ def _background_refresh_recommend_cache():
 
 
 def main():
+    setup_log("server.log")
     # 启动时清理上次残留的心跳，避免前端读到旧进度
     for _hb_name in ["fund_recommend", "fund_watch", "fund_monitor", "fund_briefing"]:
         clear_heartbeat(_hb_name)
