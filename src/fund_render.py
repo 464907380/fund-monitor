@@ -61,21 +61,27 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         if _trend_data and len(_trend_data) >= 2:
             try:
                 _dates = [str(d) for d, _v in _trend_data]
-                _vals = [float(v) for _d, v in _trend_data]
-                _min_v = min(_vals)
-                _max_v = max(_vals)
+                _day_vals = [float(v) for _d, v in _trend_data]  # 日环比
+                # 算累计值用于画线
+                _cum_vals = []
+                _cum = 0.0
+                for _v in _day_vals:
+                    _cum += _v
+                    _cum_vals.append(_cum)
+                _min_v = min(_cum_vals)
+                _max_v = max(_cum_vals)
                 _range = _max_v - _min_v if _max_v != _min_v else 1
                 _svg_w = 60
                 _svg_h = 20
                 _pts = []
-                _n = len(_vals)
-                for _i, _v in enumerate(_vals):
+                _n = len(_cum_vals)
+                for _i, _cv in enumerate(_cum_vals):
                     _x = round(_i / (_n - 1) * (_svg_w - 2) + 1, 1)
-                    _y = round((1 - (_v - _min_v) / _range) * (_svg_h - 4) + 2, 1)
+                    _y = round((1 - (_cv - _min_v) / _range) * (_svg_h - 4) + 2, 1)
                     _pts.append(f"{_x},{_y}")
-                _line_color = "#ef5350" if _vals[-1] >= _vals[0] else "#4caf50"
+                _line_color = "#ef5350" if _cum_vals[-1] >= _cum_vals[0] else "#4caf50"
                 _poly_pts = " ".join(_pts)
-                _trend_json = _html.escape('{"d":' + __import__('json').dumps(_dates) + ',"v":' + __import__('json').dumps([round(v,2) for v in _vals]) + '}')
+                _trend_json = _html.escape('{"d":' + __import__('json').dumps(_dates) + ',"v":' + __import__('json').dumps([round(v,2) for v in _day_vals]) + '}')
                 _trend_html = f'<svg width="{_svg_w}" height="{_svg_h}" viewBox="0 0 {_svg_w} {_svg_h}" style="vertical-align:middle;margin-right:4px;cursor:pointer;" onclick="showTrendChart(this)" data-trend=\'{_trend_json}\'><polyline fill="none" stroke="{_line_color}" stroke-width="1.2" points="{_poly_pts}"/><polygon fill="{_line_color}" fill-opacity="0.08" points="{_poly_pts} {_svg_w-1},{_svg_h-2} 1,{_svg_h-2}"/></svg>'
             except (ValueError, ZeroDivisionError):
                 pass
