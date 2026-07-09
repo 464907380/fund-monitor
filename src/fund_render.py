@@ -63,8 +63,8 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                 _min_v = min(_vals)
                 _max_v = max(_vals)
                 _range = _max_v - _min_v if _max_v != _min_v else 1
-                _svg_w = 60
-                _svg_h = 20
+                _svg_w = 90
+                _svg_h = 28
                 _pts = []
                 _n = len(_vals)
                 for _i, _v in enumerate(_vals):
