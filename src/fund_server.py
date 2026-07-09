@@ -797,7 +797,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 row["_trend"] = _trend
                             elif code:
                                 try:
-                                    _nav_data = _fetch_nav_from_lsjz(code, max_pages=3)
+                                    _nav_data = _fetch_nav_from_lsjz(code, max_pages=1)
                                     if _nav_data and len(_nav_data) >= 2:
                                         _trend_list = [[_nav_data[0]["d"], 0.0]] + [[_nav_data[i]["d"], round((_nav_data[i]["v"] - _nav_data[i-1]["v"]) / _nav_data[i-1]["v"] * 100, 2)] for i in range(1, len(_nav_data))]
                                         row["_trend"] = _trend_list
@@ -854,7 +854,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         }
                         # 近20日净值走势
                         if len(navs) >= 2:
-                            _trend_navs = navs[-60:]
+                            _trend_navs = navs[-20:]
                             row["_trend"] = [[_trend_navs[0]["d"], 0.0]] + [[_trend_navs[i]["d"], round((_trend_navs[i]["v"] - _trend_navs[i-1]["v"]) / _trend_navs[i-1]["v"] * 100, 2)] for i in range(1, len(_trend_navs))]
                         score_d = {k: d.get(k) for k in (
                             "y1","m3","m1","f5","sy6","sy2","sy3",
