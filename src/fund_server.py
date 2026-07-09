@@ -1033,7 +1033,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 import importlib
                 import fund_scoring
                 importlib.reload(fund_scoring)
-                # 重新加载 fund_render（其内联 import 会拿到新的 fund_scoring）
                 import fund_render
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分（无需重新拉取数据）
@@ -1188,9 +1187,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwcfg:
                     json.dump(cfg, _fwcfg, indent=2, ensure_ascii=False)
                 # 重载 config 再重载 fund_render，让 _show_top 读到新值
-                import importlib, config, fund_render
-                importlib.reload(config)
-                importlib.reload(fund_render)
                 self._send(*_json_response({"ok": True, "message": "推荐配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
