@@ -1883,7 +1883,7 @@ function showScoreDetail(items) {
     var contrib = isNull ? 50 * weight : score * weight;
     var valStr = isNull ? '-' : (typeof value === 'number' ? value.toFixed(2) : value);
     var scoreColor = isNull ? '#ffa726' : (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350');
-    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:' + (isNull ? '#888' : '#e0e0e0') + ';">' + name + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
+    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:' + (isNull ? '#888' : '#e0e0e0') + ';cursor:help;" title="' + (item[4] || name) + '">' + name + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (isNull ? '#555' : '#888') + ';">' + valStr + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + scoreColor + ';">' + (isNull ? '50.0' : score.toFixed(1)) + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
