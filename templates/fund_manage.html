@@ -2103,6 +2103,7 @@ function showTrendChart(el) {
   try { data = JSON.parse(raw); } catch(e) { return; }
   var dates = data.d, dayVals = data.v;
   if (!dates || !dayVals || dayVals.length < 2) return;
+  var name = el.getAttribute('data-name') || '走势图';
   var cumVals = [], cum = 0;
   for (var vi = 0; vi < dayVals.length; vi++) { cum += dayVals[vi]; cumVals.push(cum); }
   var minV = Math.min.apply(null, cumVals), maxV = Math.max.apply(null, cumVals), range = maxV - minV || 1;
@@ -2132,7 +2133,7 @@ function showTrendChart(el) {
   backdrop.style.display = 'flex';
   backdrop.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;max-width:500px;width:90%;" onclick="event.stopPropagation();">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-    + '<span style="color:#e0e0e0;font-size:14px;font-weight:600;">走势图</span>'
+    + '<span style="color:#e0e0e0;font-size:14px;font-weight:600;">' + name + '</span>'
     + '<span onclick="document.getElementById(\'trendBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:20px;">&times;</span></div>'
     + '<div id="trendTooltip" style="text-align:center;font-size:13px;color:#e0e0e0;min-height:22px;margin-bottom:6px;">\u79fb\u52a8\u9f20\u6807\u67e5\u770b</div>'
     + svgHtml + '</div>';

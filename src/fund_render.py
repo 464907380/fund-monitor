@@ -82,7 +82,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                 _line_color = "#ef5350" if _cum_vals[-1] >= _cum_vals[0] else "#4caf50"
                 _poly_pts = " ".join(_pts)
                 _trend_json = _html.escape('{"d":' + __import__('json').dumps(_dates) + ',"v":' + __import__('json').dumps([round(v,2) for v in _day_vals]) + '}')
-                _trend_html = f'<svg width="{_svg_w}" height="{_svg_h}" viewBox="0 0 {_svg_w} {_svg_h}" style="vertical-align:middle;margin-right:4px;cursor:pointer;" onclick="showTrendChart(this)" data-trend=\'{_trend_json}\'><polyline fill="none" stroke="{_line_color}" stroke-width="1.2" points="{_poly_pts}"/><polygon fill="{_line_color}" fill-opacity="0.08" points="{_poly_pts} {_svg_w-1},{_svg_h-2} 1,{_svg_h-2}"/></svg>'
+                _trend_html = f'<svg width="{_svg_w}" height="{_svg_h}" viewBox="0 0 {_svg_w} {_svg_h}" style="vertical-align:middle;margin-right:4px;cursor:pointer;" onclick="showTrendChart(this)" data-trend=\'{_trend_json}\' data-name=\'{_fname_html}\'><polyline fill="none" stroke="{_line_color}" stroke-width="1.2" points="{_poly_pts}"/><polygon fill="{_line_color}" fill-opacity="0.08" points="{_poly_pts} {_svg_w-1},{_svg_h-2} 1,{_svg_h-2}"/></svg>'
             except (ValueError, ZeroDivisionError):
                 pass
         parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'' + _fcode + '\',\'' + _fname_js + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">' + _fname_html + '</span>' + _warn + '</td>')
