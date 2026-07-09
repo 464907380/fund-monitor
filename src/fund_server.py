@@ -791,10 +791,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "inst": cached.get("inst"),
                                 "td": _td,
                             }
-                            # 净值走势（从缓存取）
+                            # 净值走势（从缓存取，无缓存时尝试拉取）
                             _trend = cached.get("_trend")
                             if _trend and len(_trend) >= 2:
                                 row["_trend"] = _trend
+                            elif code:
+                                try:
+                                    _nav_data = _fetch_nav_from_lsjz(code, max_pages=3)
+                                    if _nav_data and len(_nav_data) >= 2:
+                                        row["_trend"] = [round(n["v"], 4) for n in _nav_data]
+                                except Exception:
+                                    pass
                             score_d = {k: cached.get(k) for k in (
                                 "y1","m3","m1","f5","sy6","sy2","sy3",
                                 "annual_return","sharpe","sortino",
