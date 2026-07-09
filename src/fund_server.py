@@ -937,6 +937,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(200, {"Content-Type": ctype}, data)
 
     def do_POST(self):
+        global _fund_table_cache
         length = 0
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -973,6 +974,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         existing.add(code)
                         added.append(code)
                 _save(funds)
+                _fund_table_cache = None
                 self._send(*_json_response({
                     "ok": True,
                     "added": added,
@@ -995,6 +997,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 removed = [f["code"] for f in funds if f["code"] in remove_set]
                 funds = [f for f in funds if f["code"] not in remove_set]
                 _save(funds)
+                _fund_table_cache = None
                 self._send(*_json_response({
                     "ok": True,
                     "removed": removed,
