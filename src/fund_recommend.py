@@ -650,38 +650,6 @@ def main() -> None:
 
                     cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
                 else:
-                    _t1 = time.time()
-                    print(f"\n📋 刷新前 {SHOW_TOP} 只显示涨跌 (td维度未开启)...")
-                    update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP,
-                                     overall_pct=0, phase="更新涨跌",
-                                     detail=f"并行获取前 {SHOW_TOP} 只实时涨跌", elapsed=_elapsed())
-
-                    day_map: dict[str, str] = {}
-                    with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_update_day", default=50)) as ex:
-                        def _update_day(code: str) -> tuple[str, str]:
-                            try:
-                                td = _fetch_fund_estimate(code)
-                                if td is not None:
-                                    return (code, f"{td[1]:+.2f}%")
-                            except Exception:
-                                pass
-                            return (code, "")
-
-                        futs = {ex.submit(_update_day, r.get("code", "")): r for r in cached_results[:SHOW_TOP]}
-                        for i, fut in enumerate(as_completed(futs), 1):
-                            code, day = fut.result()
-                            day_map[code] = day
-                            opct = i / SHOW_TOP * 95
-                            update_heartbeat("fund_recommend", progress=i, total=SHOW_TOP,
-                                             overall_pct=opct, phase="涨跌",
-                                             detail=f"刷新 {i}/{SHOW_TOP}", elapsed=_elapsed())
-
-                    print(f"  涨跌刷新完成 ({time.time()-_t1:.1f}s)")
-                    for r in cached_results:
-                        code = r.get("code", "")
-                        if code in day_map:
-                            r["day"] = day_map[code]
-
                     cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
                 print(f"\n💾 保存缓存结果...")
@@ -745,11 +713,15 @@ def main() -> None:
             limit_checked: list[dict] = []
 
             def _check_limit(c: dict) -> dict | None:
-                amount = _parse_purchase_limit(c["code"])
-                if amount is not None and amount <= 2:
+                try:
+                    amount = _parse_purchase_limit(c["code"])
+                    if amount is not None and amount <= 2:
+                        return None
+                    c["_limit_amount"] = amount
+                    return c
+                except Exception:
+                    log.warning("限购检查失败: %s", c["code"])
                     return None
-                c["_limit_amount"] = amount
-                return c
 
             with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_limit_check", default=50)) as _le:
                 _lfuts = {_le.submit(_check_limit, c): c for c in candidates}

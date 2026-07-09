@@ -19,11 +19,6 @@ from logging.handlers import RotatingFileHandler
 from config import CFG, get_secret, get_timeout, api_url
 
 # ── 交易日检测 ──────────────────────────────────
-FIXED_HOLIDAYS = {
-    (1, 1),   # 元旦
-    (5, 1), (5, 2), (5, 3),   # 劳动节
-    (10, 1), (10, 2), (10, 3), (10, 4), (10, 5), (10, 6), (10, 7),  # 国庆
-}
 
 _HOLIDAY_CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".holiday_cache.json")
 _HOLIDAY_CACHE_TTL = CFG.get("fund_monitor", {}).get("holiday_cache_ttl", 86400)
@@ -75,8 +70,6 @@ def is_trading_day(d: datetime.date) -> bool:
     if api_result is not None:
         return not api_result
     if d.weekday() >= 5:
-        return False
-    if (d.month, d.day) in FIXED_HOLIDAYS:
         return False
     return True
 

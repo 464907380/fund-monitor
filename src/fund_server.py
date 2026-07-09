@@ -385,7 +385,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 hb = read_all_heartbeats()
                 alive = {k: is_heartbeat_alive(k, 1800) for k in hb}
-                brief_path = os.path.join(_SCRIPT_DIR, ".briefing_fund.html")
+                brief_path = os.path.join(_PROJECT_ROOT, ".briefing_fund.html")
                 brief_mtime = os.path.getmtime(brief_path) if os.path.exists(brief_path) else 0
                 self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive, "briefing_mtime": brief_mtime}))
             except Exception as e:
