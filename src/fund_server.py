@@ -791,13 +791,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "inst": cached.get("inst"),
                                 "td": _td,
                             }
-                            # 获取近20日净值走势
-                            try:
-                                _nav_data = _fetch_nav_from_lsjz(code, max_pages=3)
-                                if _nav_data and len(_nav_data) >= 2:
-                                    row["_trend"] = [round(n["v"], 4) for n in _nav_data]
-                            except Exception:
-                                pass
+                            # 净值走势（从缓存取）
+                            _trend = cached.get("_trend")
+                            if _trend and len(_trend) >= 2:
+                                row["_trend"] = _trend
                             score_d = {k: cached.get(k) for k in (
                                 "y1","m3","m1","f5","sy6","sy2","sy3",
                                 "annual_return","sharpe","sortino",
@@ -849,7 +846,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         }
                         # 近20日净值走势
                         if len(navs) >= 2:
-                            row["_trend"] = [round(n["v"], 4) for n in navs]
+                            row["_trend"] = [round(n["v"], 4) for n in navs[-60:]]
                         score_d = {k: d.get(k) for k in (
                             "y1","m3","m1","f5","sy6","sy2","sy3",
                             "annual_return","sharpe","sortino",

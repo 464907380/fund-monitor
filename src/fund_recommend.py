@@ -421,6 +421,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
             "volatility": d.get("volatility"), "calmar": d.get("calmar"),
             "max_loss_days": d.get("max_loss_days"), "sy6": d.get("sy6"),
             "td": d.get("td"),
+            "_trend": [round(n["v"], 4) for n in d.get("nav", [])[-60:]] if d.get("nav") else None,
             "mgr": (d.get("mgr") or "")[:6],
             "day": day_str,
         }
