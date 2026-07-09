@@ -71,7 +71,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                     _x = round(_i / (_n - 1) * (_svg_w - 2) + 1, 1)
                     _y = round((1 - (_v - _min_v) / _range) * (_svg_h - 4) + 2, 1)
                     _pts.append(f"{_x},{_y}")
-                _line_color = "#4caf50" if _vals[-1] >= _vals[0] else "#ef5350"
+                _line_color = "#ef5350" if _vals[-1] >= _vals[0] else "#4caf50"
                 _poly_pts = " ".join(_pts)
                 _trend_html = f'<svg width="{_svg_w}" height="{_svg_h}" viewBox="0 0 {_svg_w} {_svg_h}" style="vertical-align:middle;margin-right:4px;"><polyline fill="none" stroke="{_line_color}" stroke-width="1.2" points="{_poly_pts}"/><polygon fill="{_line_color}" fill-opacity="0.08" points="{_poly_pts} {_svg_w-1},{_svg_h-2} 1,{_svg_h-2}"/></svg>'
             except (ValueError, ZeroDivisionError):
