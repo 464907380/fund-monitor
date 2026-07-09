@@ -793,7 +793,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             }
                             # 获取近20日净值走势
                             try:
-                                _nav_data = _fetch_nav_from_lsjz(code, max_pages=1)
+                                _nav_data = _fetch_nav_from_lsjz(code, max_pages=3)
                                 if _nav_data and len(_nav_data) >= 2:
                                     row["_trend"] = [round(n["v"], 4) for n in _nav_data]
                             except Exception:
