@@ -1414,6 +1414,8 @@ def main():
     # 启动时清理上次残留的心跳，避免前端读到旧进度
     for _hb_name in ["fund_recommend", "fund_watch", "fund_monitor", "fund_briefing"]:
         clear_heartbeat(_hb_name)
+    # 自动启动盘中监控
+    _spawn_task("fund_monitor")
     # 后台线程刷新推荐表缓存
     threading.Thread(target=_background_refresh_recommend_cache, daemon=True).start()
     host = "127.0.0.1"
