@@ -491,6 +491,19 @@ def monitor() -> None:
     while True:
         now = datetime.datetime.now()
 
+        # 每次轮询重新读取配置，支持运行中自动更新
+        _mc = CFG.get("fund_monitor", {})
+        globals()["ALERT_DROP_ONCE"] = _mc.get("alert_drop_once", -3)
+        globals()["ALERT_JUMP_ONCE"] = _mc.get("alert_jump_once", 5)
+        globals()["ALERT_ACCUM_DROP"] = _mc.get("alert_accum_drop", -7)
+        globals()["ALERT_ACCUM_JUMP"] = _mc.get("accum_jump", 10)
+        globals()["STOCK_DROP_RED"] = _mc.get("stock_alert_drop_red", -5)
+        globals()["STOCK_JUMP_RED"] = _mc.get("stock_alert_jump_red", 7)
+        globals()["STOCK_ACCUM_DROP_RED"] = _mc.get("stock_alert_accum_drop_red", -10)
+        globals()["STOCK_ACCUM_JUMP_RED"] = _mc.get("stock_alert_accum_jump_red", 12)
+        globals()["POLL_INTERVAL"] = _mc.get("poll_interval_seconds", 600)
+        globals()["MAX_EMPTY_ROUNDS"] = _mc.get("max_empty_rounds", 2)
+
         # 当天已收盘 → 清空状态，等明天
         if now.time() >= datetime.time(15, 5):
             states.clear()
