@@ -2095,46 +2095,30 @@ function showStockInfo(name, fullCode) {
   });
 }
 
-// 走势图放大弹窗
+// 走势图放大弹窗（鼠标移动自动定位最近数据点）
 function showTrendChart(el) {
   var raw = el.getAttribute('data-trend');
   if (!raw) return;
   var data;
   try { data = JSON.parse(raw); } catch(e) { return; }
-  var dates = data.d;
-  var dayVals = data.v;  // 日环比涨跌
+  var dates = data.d, dayVals = data.v;
   if (!dates || !dayVals || dayVals.length < 2) return;
-  // 算累计值用于画线
-  var cumVals = [];
-  var cum = 0;
+  var cumVals = [], cum = 0;
   for (var vi = 0; vi < dayVals.length; vi++) { cum += dayVals[vi]; cumVals.push(cum); }
-  var minV = Math.min.apply(null, cumVals);
-  var maxV = Math.max.apply(null, cumVals);
-  var range = maxV - minV || 1;
-  var w = 400, h = 200, pad = 30;
-  var cw = w - pad * 2, ch = h - pad * 2;
+  var minV = Math.min.apply(null, cumVals), maxV = Math.max.apply(null, cumVals), range = maxV - minV || 1;
+  var w = 400, h = 200, pad = 30, cw = w - pad * 2, ch = h - pad * 2;
   var pts = [];
   for (var i = 0; i < cumVals.length; i++) {
     var x = pad + i / (cumVals.length - 1) * cw;
     var y = pad + ch - (cumVals[i] - minV) / range * ch;
-    pts.push({x: x, y: y, idx: i, date: dates[i], val: dayVals[i]});
+    pts.push({x: x, y: y, idx: i, date: dates[i], val: dayVals[i], cum: cumVals[i]});
   }
   var lineColor = cumVals[cumVals.length-1] >= cumVals[0] ? '#ef5350' : '#4caf50';
   var polyPts = pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
-  var svgHtml = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;margin:0 auto;background:transparent;">';
+  var svgHtml = '<svg id="trendSvg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;margin:0 auto;background:transparent;cursor:crosshair;">';
   svgHtml += '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>';
   svgHtml += '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + polyPts + ' ' + (pad+cw) + ',' + (pad+ch) + ' ' + pad + ',' + (pad+ch) + '"/>';
-  for (var j = 0; j < pts.length; j++) {
-    var p = pts[j];
-    var tip = p.date + ' | ' + (p.val >= 0 ? '+' : '') + p.val.toFixed(2) + '%';
-    svgHtml += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3" fill="' + lineColor + '" opacity="0.8" style="cursor:pointer;">';
-    svgHtml += '<title>' + tip + '</title>';
-    svgHtml += '</circle>';
-    // 透明大圈提升鼠标悬停体验
-    svgHtml += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="12" fill="transparent" style="cursor:pointer;">';
-    svgHtml += '<title>' + tip + '</title>';
-    svgHtml += '</circle>';
-  }
+  svgHtml += '<line id="trendCrosshair" x1="0" y1="0" x2="0" y2="0" stroke="#888" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>';
   svgHtml += '</svg>';
   // 创建弹窗
   var backdrop = document.getElementById('trendBackdrop');
@@ -2146,12 +2130,37 @@ function showTrendChart(el) {
     document.body.appendChild(backdrop);
   }
   backdrop.style.display = 'flex';
-  backdrop.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;max-width:480px;width:90%;" onclick="event.stopPropagation();">'
+  backdrop.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;max-width:500px;width:90%;" onclick="event.stopPropagation();">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
     + '<span style="color:#e0e0e0;font-size:14px;font-weight:600;">走势图</span>'
     + '<span onclick="document.getElementById(\'trendBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:20px;">&times;</span></div>'
-    + svgHtml
-    + '<div style="text-align:center;margin-top:6px;font-size:11px;color:#666;">鼠标悬停查看日期和涨跌幅</div></div>';
+    + '<div id="trendTooltip" style="text-align:center;font-size:13px;color:#e0e0e0;min-height:22px;margin-bottom:6px;">\u79fb\u52a8\u9f20\u6807\u67e5\u770b</div>'
+    + svgHtml + '</div>';
+  // 鼠标移动事件
+  var svg = document.getElementById('trendSvg');
+  var crosshair = document.getElementById('trendCrosshair');
+  var tooltip = document.getElementById('trendTooltip');
+  svg.onmousemove = function(e) {
+    var rect = svg.getBoundingClientRect();
+    var scaleX = w / rect.width;
+    var mouseX = (e.clientX - rect.left) * scaleX;
+    // 找最近的X坐标数据点
+    var nearest = pts[0];
+    for (var k = 1; k < pts.length; k++) {
+      if (Math.abs(pts[k].x - mouseX) < Math.abs(nearest.x - mouseX)) nearest = pts[k];
+    }
+    var sign = nearest.val >= 0 ? '+' : '';
+    tooltip.innerHTML = '<span style="color:#aaa;">' + nearest.date + '</span> <span style="color:' + lineColor + ';font-weight:600;">' + sign + nearest.val.toFixed(2) + '%</span> <span style="color:#666;font-size:11px;margin-left:8px;">\u7d2f\u8ba1' + (nearest.cum >= 0 ? '+' : '') + nearest.cum.toFixed(2) + '%</span>';
+    crosshair.setAttribute('x1', nearest.x);
+    crosshair.setAttribute('x2', nearest.x);
+    crosshair.setAttribute('y1', pad);
+    crosshair.setAttribute('y2', pad + ch);
+    crosshair.setAttribute('opacity', '0.6');
+  };
+  svg.onmouseleave = function() {
+    crosshair.setAttribute('opacity', '0');
+    tooltip.innerHTML = '\u79fb\u52a8\u9f20\u6807\u67e5\u770b';
+  };
 }
 
 </script>
