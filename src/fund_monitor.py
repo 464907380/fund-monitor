@@ -11,7 +11,7 @@ import json
 import os
 import time
 import re
-from config import CFG, api_url
+from config import CFG, api_url, get_secret
 from fund_utils import fetch, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html, setup_log
 
 setup_log("monitor.log")
