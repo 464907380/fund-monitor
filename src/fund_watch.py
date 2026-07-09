@@ -244,7 +244,7 @@ def get(code: str) -> dict:
     # 完整净值（用于计算回撤/波动率/卡玛比率）
     if full_nav := _parse_full_nav(data):
         d["full_nav"] = full_nav
-        d["nav"] = _parse_net_trend(data, full_nav)
+        d["nav"] = full_nav
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
         # 从净值数据计算近3年收益
@@ -376,7 +376,7 @@ def get_scoring_data(code: str) -> dict:
     full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages)
     if full_nav:
         d["full_nav"] = full_nav
-        d["nav"] = full_nav[-6:]  # 最近6条（前端展示用）
+        d["nav"] = full_nav  # 完整净值数据
         # 计算风险指标
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
