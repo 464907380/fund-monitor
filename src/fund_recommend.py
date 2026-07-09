@@ -186,9 +186,12 @@ def _parse_rank_response(data: str) -> list[list[str]] | None:
 def _fetch_rank_list(pn: int) -> list[list[str]]:
     """从天天基金排行 API 获取全市场基金排行（并发多URL，走缓存）"""
     # 根据排序方式决定日期范围
-    sort_days = {"1n": 365, "6n": 180, "3y": 90, "1y": 30}
-    days = sort_days.get(_RANK_SORT, 365)
-    sd = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+    sort_days = {"1n": 365, "6n": 180, "3y": 90, "1y": 30, "2n": 730, "3n": 1095}
+    if _RANK_SORT == "zn":
+        sd = datetime.date(datetime.date.today().year, 1, 1).isoformat()
+    else:
+        days = sort_days.get(_RANK_SORT, 365)
+        sd = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
     ed = datetime.date.today().isoformat()
     sc = _RANK_SORT
     urls = [
