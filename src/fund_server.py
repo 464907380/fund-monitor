@@ -870,20 +870,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 result = fut.result()
                             except Exception:
                                 continue
+                            _fund_td_done += 1
+                            _pct = int(_fund_td_done / len(_fund_list_for_progress) * 100) if _fund_list_for_progress else 100
+                            if _pct != _last_hb_pct or _fund_td_done == len(_fund_list_for_progress):
+                                _last_hb_pct = _pct
+                                update_heartbeat("fund-td-refresh", progress=_fund_td_done,
+                                                 total=len(_fund_list_for_progress),
+                                                 detail=f"{_fund_td_done}/{len(_fund_list_for_progress)} 只基金")
+                            if result is not None:
+                                rows.append(result)
                     except concurrent.futures.TimeoutError:
                         # 超时后取消剩余任务
                         for _f in fut_map:
                             _f.cancel()
                         print(f"[fund-table] 超时: {_fund_td_done}/{len(_fund_list_for_progress)} 只完成", flush=True)
-                    _fund_td_done += 1
-                    _pct = int(_fund_td_done / len(_fund_list_for_progress) * 100) if _fund_list_for_progress else 100
-                    if _pct != _last_hb_pct or _fund_td_done == len(_fund_list_for_progress):
-                        _last_hb_pct = _pct
-                        update_heartbeat("fund-td-refresh", progress=_fund_td_done,
-                                         total=len(_fund_list_for_progress),
-                                         detail=f"{_fund_td_done}/{len(_fund_list_for_progress)} 只基金")
-                    if result is not None:
-                        rows.append(result)
                 clear_heartbeat("fund-td-refresh")
 
                 # 按 fund_list 原始顺序排序
