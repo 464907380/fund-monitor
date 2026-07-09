@@ -39,115 +39,68 @@ except ImportError:
 def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     """批量获取基金当日涨跌幅，返回 {code: 涨跌幅%, ...}
     
-    先使用新浪财经批量行情接口快速获取估算值（每批最多200只）。
-    收盘后（≥15:00）尝试用天天基金实际净值替换估算值，保证数据准确。
+    先用天天基金 fundgz 接口拉实时估值，取失败的逐个重试。
+    收盘后（≥15:00）用天天基金实际净值替换，保证数据准确。
     """
     result: dict[str, float] = {}
     if not codes:
         return result
-    batch_size = 200
-    batches = [codes[i:i + batch_size] for i in range(0, len(codes), batch_size)]
-
-    def _fetch_one(batch: list[str]) -> dict[str, float]:
-        batch_result: dict[str, float] = {}
-        try:
-            codes_str = ",".join("of" + c for c in batch)
-            url = "http://hq.sinajs.cn/list=" + codes_str
-            _req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "https://finance.sina.com.cn/",
-            })
-            with urllib.request.urlopen(_req, timeout=get_timeout("sina_quote", 15)) as _resp:
-                raw = _resp.read()
-            text = raw.decode("gbk", errors="ignore")
-            # 解析每行: var hq_str_of000001="name,?,?,nav_price,pct,date,...";
-            for line in text.strip().split("\n"):
-                line = line.strip()
-                if "hq_str_of" not in line:
-                    continue
-                parts = line.split('"')
-                if len(parts) < 2:
-                    continue
-                fields = parts[1].split(",")
-                if len(fields) < 5:
-                    continue
-                m = re.search(r'of(\d{6})', line[:30])
-                code = m.group(1) if m else ""
-                # fields[3]=基金净值, fields[4]=涨跌幅百分比
-                if code and fields[4]:
-                    try:
-                        pct = float(fields[4])
-                        batch_result[code] = pct
-                    except ValueError:
-                        pass
-        except Exception:
-            pass
-        return batch_result
-
-    with ThreadPoolExecutor(max_workers=min(5, len(batches))) as _ex:
-        _futs = {_ex.submit(_fetch_one, b): b for b in batches}
-        for _f in as_completed(_futs):
-            result.update(_f.result())
-
-    # 收盘后尝试用实际净值替换新浪估算值
     now = datetime.datetime.now()
     is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
 
-    # 用 fundgz 实时估值替换新浪数据（盘中更准确）
-    if result:
-        def _fetch_fundgz(code: str) -> tuple[str, float | None]:
-            try:
-                url = f"https://fundgz.1234567.com.cn/js/{code}.js"
-                _req_gz = urllib.request.Request(url, headers={
-                    "Referer": "https://fund.eastmoney.com/",
-                    "User-Agent": "Mozilla/5.0",
-                })
-                with urllib.request.urlopen(_req_gz, timeout=get_timeout("default", 10)) as _r_gz:
-                    raw_gz = _r_gz.read().decode("utf-8")
-                m = re.search(r'"gszzl":"([-+\d.]+)"', raw_gz)
-                if m and m.group(1):
-                    return (code, float(m.group(1)))
-            except Exception:
-                pass
-            return (code, None)
+    # 用 fundgz 实时估值拉取所有基金
+    def _fetch_fundgz(code: str) -> tuple[str, float | None]:
+        try:
+            url = f"https://fundgz.1234567.com.cn/js/{code}.js"
+            _req_gz = urllib.request.Request(url, headers={
+                "Referer": "https://fund.eastmoney.com/",
+                "User-Agent": "Mozilla/5.0",
+            })
+            with urllib.request.urlopen(_req_gz, timeout=get_timeout("default", 10)) as _r_gz:
+                raw_gz = _r_gz.read().decode("utf-8")
+            m = re.search(r'"gszzl":"([-+\d.]+)"', raw_gz)
+            if m and m.group(1):
+                return (code, float(m.group(1)))
+        except Exception:
+            pass
+        return (code, None)
 
-        codes_list = list(result.keys())
-        replaced_gz = 0
-        _failed_codes: list[str] = []
-        _total_gz = len(codes_list)
-        _start_gz = time.time()
-        _last_hb_pct = -1
-        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
-            _gfuts = {_ge.submit(_fetch_fundgz, c): c for c in codes_list}
-            for _gf in as_completed(_gfuts):
-                code, gz_val = _gf.result()
-                if gz_val is not None:
-                    result[code] = gz_val
-                    replaced_gz += 1
-                else:
-                    _failed_codes.append(code)
-                _done = replaced_gz + len(_failed_codes)
-                _pct = int(_done / _total_gz * 100) if _total_gz else 0
-                if _pct != _last_hb_pct and _done % 50 == 0 or _done == _total_gz:
-                    _last_hb_pct = _pct
-                    update_heartbeat("fund_recommend", progress=_done, total=_total_gz,
-                                     overall_pct=_pct, phase="刷新td",
-                                     detail=f"拉取实时估值 {_done}/{_total_gz} ({_pct}%)",
-                                     elapsed=round(time.time() - _start_gz, 1))
-        if _failed_codes:
-            # 失败的逐个重试（_fetch_fund_estimate 有多层降级）
-            from fund_utils import _fetch_fund_estimate
-            for _i, _code in enumerate(_failed_codes):
-                _td = _fetch_fund_estimate(_code)
-                if _td and _td[1] is not None:
-                    result[_code] = round(_td[1], 2)
-                    replaced_gz += 1
-                _done2 = replaced_gz + len(_failed_codes)
-                if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
-                    update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
-                                     overall_pct=int(_done2 / _total_gz * 100), phase="刷新td",
-                                     detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
-                                     elapsed=round(time.time() - _start_gz, 1))
+    replaced_gz = 0
+    _failed_codes: list[str] = []
+    _total_gz = len(codes)
+    _start_gz = time.time()
+    _last_hb_pct = -1
+    with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
+        _gfuts = {_ge.submit(_fetch_fundgz, c): c for c in codes}
+        for _gf in as_completed(_gfuts):
+            code, gz_val = _gf.result()
+            if gz_val is not None:
+                result[code] = gz_val
+                replaced_gz += 1
+            else:
+                _failed_codes.append(code)
+            _done = replaced_gz + len(_failed_codes)
+            _pct = int(_done / _total_gz * 100) if _total_gz else 0
+            if (_pct != _last_hb_pct and _done % 50 == 0) or _done == _total_gz:
+                _last_hb_pct = _pct
+                update_heartbeat("fund_recommend", progress=_done, total=_total_gz,
+                                 overall_pct=_pct, phase="刷新td",
+                                 detail=f"拉取实时估值 {_done}/{_total_gz} ({_pct}%)",
+                                 elapsed=round(time.time() - _start_gz, 1))
+    if _failed_codes:
+        # 失败的逐个重试（_fetch_fund_estimate 有多层降级）
+        from fund_utils import _fetch_fund_estimate
+        for _i, _code in enumerate(_failed_codes):
+            _td = _fetch_fund_estimate(_code)
+            if _td and _td[1] is not None:
+                result[_code] = round(_td[1], 2)
+                replaced_gz += 1
+            _done2 = replaced_gz + len(_failed_codes)
+            if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
+                update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
+                                 overall_pct=int(_done2 / _total_gz * 100), phase="刷新td",
+                                 detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
+                                 elapsed=round(time.time() - _start_gz, 1))
 
     # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
