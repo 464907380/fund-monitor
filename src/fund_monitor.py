@@ -13,7 +13,7 @@ import time
 import re
 from config import CFG, api_url
 from fund_utils import fetch, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html
-from fund_watch import FUND_LIST, _parse_holdings, _get_webhook, _ensure_fund_list_loaded
+from fund_watch import FUND_LIST, _parse_holdings, _ensure_fund_list_loaded
 
 # ── 基金急涨急跌阈值 ──────────────────────────
 ALERT_DROP_ONCE = CFG.get("fund_monitor", {}).get("alert_drop_once", -3)
@@ -452,7 +452,7 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
             lines.append(f"  {icon} {text}")
 
     content = "\n".join(lines)
-    if _get_webhook():
+    if get_secret("WECHAT_WEBHOOK"):
         send_wechat(content)
     else:
         _push_html(fund_alerts, stock_groups)
@@ -467,7 +467,7 @@ def monitor() -> None:
     _ensure_fund_list_loaded()
     write_heartbeat("fund_monitor")
     log.info("====== 盘中监控启动 ======")
-    log.info("推送方式: %s", "企业微信" if _get_webhook() else "邮件")
+    log.info("推送方式: %s", "企业微信" if get_secret("WECHAT_WEBHOOK") else "邮件")
     log.info("监控基金: %d 只", len(FUND_LIST))
     log.info("轮询间隔: %d 分钟", POLL_INTERVAL // 60)
     log.info("基金阈值: 单次超过%+.0f%%, 累计超过%+.0f%%",
