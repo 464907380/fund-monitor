@@ -446,7 +446,7 @@ input, select, button { font-family: inherit; outline: none; }
               <option value="zn">今年来</option>
             </select>
           </label>
-          <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;" title="筛掉近1月/3月/6月/1年/2年/3年/近一周/年化收益中任一数据缺失的基金（sy2/sy3=0也视为缺失）">
             <input type="checkbox" id="recSkipMissingPerf" checked style="accent-color:#42a5f5;"> 筛掉缺失收益数据
           </label>
           <label style="color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
@@ -849,10 +849,78 @@ async function loadSavedTables() {
       var ftHtml = await ftResp.text();
       if (ftHtml.indexOf('<tbody>') > 0) {
         var ftEl = document.getElementById('fundFullTable');
-        if (ftEl) { ftEl.innerHTML = ftHtml; document.getElementById('fundFullTableCard').style.display = ''; }
+        if (ftEl) { ftEl.innerHTML = ftHtml; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); }
       }
     }
   } catch(e) {}
+}
+
+function setupDragSort() {
+  var tbody = document.querySelector('#fundFullTable table tbody');
+  if (!tbody) return;
+  var rows = tbody.querySelectorAll('tr');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].draggable = true;
+    rows[i].style.cursor = 'grab';
+    rows[i].ondragstart = function(e) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', Array.from(tbody.children).indexOf(this));
+      this.style.opacity = '0.4';
+    };
+    rows[i].ondragend = function(e) {
+      this.style.opacity = '1';
+      document.querySelectorAll('#fundFullTable table tbody tr').forEach(function(r) { r.style.borderBottom = ''; r.style.background = ''; });
+    };
+    rows[i].ondragover = function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('#fundFullTable table tbody tr').forEach(function(r) { r.style.borderBottom = ''; r.style.background = ''; });
+      this.style.borderBottom = '2px solid #42a5f5';
+      this.style.background = 'rgba(66,165,245,0.08)';
+    };
+    rows[i].ondragleave = function(e) {
+      this.style.borderBottom = '';
+      this.style.background = '';
+    };
+    rows[i].ondrop = function(e) {
+      e.preventDefault();
+      this.style.borderBottom = '';
+      this.style.background = '';
+      var fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+      if (isNaN(fromIdx)) return;
+      var allRows = Array.from(tbody.children);
+      var toIdx = allRows.indexOf(this);
+      if (fromIdx === toIdx) return;
+      // 获取重排后的 code 顺序
+      var codes = [];
+      for (var j = 0; j < allRows.length; j++) {
+        var codeCell = allRows[j].querySelector('td:first-child');
+        if (codeCell) { codes.push(codeCell.textContent.trim()); }
+      }
+      // 交换
+      var item = codes.splice(fromIdx, 1)[0];
+      codes.splice(toIdx, 0, item);
+      // 发送到后端保存
+      fetch(API + '/api/reorder-funds', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({codes: codes}),
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok) { /* 重刷表格以反映新顺序 */ loadFundTable(); }
+      });
+    };
+  }
+}
+
+// 加载自选基金表（独立刷新用）
+function loadFundTable() {
+  var ct = document.getElementById('fundFullTable');
+  if (!ct) return;
+  ct.innerHTML = '<p style="padding:12px 4px;color:#666;">⏳ 加载中…</p>';
+  fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; }).then(function(h){
+    if (h && h.indexOf('<tbody>') > 0) { ct.innerHTML = h; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); }
+    else if (h) { ct.innerHTML = h; document.getElementById('fundFullTableCard').style.display = ''; }
+  });
 }
 
 async function loadHeartbeat() {
@@ -1274,7 +1342,7 @@ async function _refreshTablesWithProgress(progFill, progPct, progText, onDone) {
     var rtR = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
     if (rtR.ok) { var rtH = await rtR.text(); if (rtH.indexOf('<tbody>') > 0) { var rtE = document.getElementById('recommendFullTable'); if (rtE) { rtE.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (rtH) { var rtE2 = document.getElementById('recommendFullTable'); if (rtE2) { rtE2.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } }
     var ftR = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
-    if (ftR.ok) { var ftH = await ftR.text(); if (ftH.indexOf('<tbody>') > 0) { var ftE = document.getElementById('fundFullTable'); if (ftE) { ftE.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } else if (ftH) { var ftE2 = document.getElementById('fundFullTable'); if (ftE2) { ftE2.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } }
+    if (ftR.ok) { var ftH = await ftR.text(); if (ftH.indexOf('<tbody>') > 0) { var ftE = document.getElementById('fundFullTable'); if (ftE) { ftE.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (ftH) { var ftE2 = document.getElementById('fundFullTable'); if (ftE2) { ftE2.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } }
     clearInterval(poll);
   } catch(e) {}
   if (onDone) onDone();
@@ -1796,7 +1864,7 @@ async function runRecommendFromFilter() {
                 var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
                 var _tableOk = true;
                 try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
-                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
                 if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
                 if (statusEl) statusEl.textContent = _tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
                 if (prog) prog.style.width = '0%';
@@ -1811,7 +1879,7 @@ async function runRecommendFromFilter() {
                 var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
                 var _tableOk = true;
                 try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
-                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
                 if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
                 if (statusEl) statusEl.textContent = _tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
                 if (prog) prog.style.width = '0%';
@@ -2151,7 +2219,8 @@ function showTrendChart(el) {
       if (Math.abs(pts[k].x - mouseX) < Math.abs(nearest.x - mouseX)) nearest = pts[k];
     }
     var sign = nearest.val >= 0 ? '+' : '';
-    tooltip.innerHTML = '<span style="color:#aaa;">' + nearest.date + '</span> <span style="color:' + lineColor + ';font-weight:600;">' + sign + nearest.val.toFixed(2) + '%</span> <span style="color:#666;font-size:11px;margin-left:8px;">\u7d2f\u8ba1' + (nearest.cum >= 0 ? '+' : '') + nearest.cum.toFixed(2) + '%</span>';
+    var dayColor = nearest.val >= 0 ? '#ef5350' : '#66bb6a';
+    tooltip.innerHTML = '<span style="color:#aaa;">' + nearest.date + '</span> <span style="color:' + dayColor + ';font-weight:600;">' + sign + nearest.val.toFixed(2) + '%</span> <span style="color:#666;font-size:11px;margin-left:8px;">\u7d2f\u8ba1' + (nearest.cum >= 0 ? '+' : '') + nearest.cum.toFixed(2) + '%</span>';
     crosshair.setAttribute('x1', nearest.x);
     crosshair.setAttribute('x2', nearest.x);
     crosshair.setAttribute('y1', pad);

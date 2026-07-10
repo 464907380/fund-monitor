@@ -10,6 +10,7 @@ import subprocess
 import http.server
 import threading
 import time
+import datetime
 import urllib.parse
 import concurrent.futures
 import urllib.request
@@ -803,6 +804,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         row["_trend"] = _trend_list
                                 except Exception:
                                     pass
+                            # 追加今日实时涨跌到走势图末尾
+                            if _td is not None and row.get("_trend"):
+                                row["_trend"].append((datetime.date.today().isoformat(), round(_td, 2)))
                             score_d = {k: cached.get(k) for k in (
                                 "y1","m3","m1","f5","sy6","sy2","sy3",
                                 "annual_return","sharpe","sortino",
@@ -856,6 +860,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if len(navs) >= 2:
                             _trend_navs = navs[-20:]
                             row["_trend"] = [[_trend_navs[0]["d"], 0.0]] + [[_trend_navs[i]["d"], round((_trend_navs[i]["v"] - _trend_navs[i-1]["v"]) / _trend_navs[i-1]["v"] * 100, 2)] for i in range(1, len(_trend_navs))]
+                            # 追加今日实时涨跌到走势图末尾
+                            if td is not None:
+                                row["_trend"].append((datetime.date.today().isoformat(), round(td, 2)))
                         score_d = {k: d.get(k) for k in (
                             "y1","m3","m1","f5","sy6","sy2","sy3",
                             "annual_return","sharpe","sortino",
@@ -1028,6 +1035,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "removed": removed,
                     "total": len(funds),
                 }))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/reorder-funds":
+            try:
+                codes = body.get("codes", [])
+                if not isinstance(codes, list) or not codes:
+                    self._send(*_json_response({"ok": False, "error": "codes 不能为空"}, 400))
+                    return
+                funds = _load()
+                # 按新顺序重排，保留原名
+                code_map = {f["code"]: f.get("name", "") for f in funds}
+                new_funds = []
+                for c in codes:
+                    if c in code_map:
+                        new_funds.append({"code": c, "name": code_map[c]})
+                # 补上不在新顺序中的基金
+                existing = set(codes)
+                for f in funds:
+                    if f["code"] not in existing:
+                        new_funds.append(f)
+                _save(new_funds)
+                _fund_table_cache = None
+                self._send(*_json_response({"ok": True, "total": len(new_funds)}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return

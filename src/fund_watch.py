@@ -319,7 +319,7 @@ _DIM_LOOKBACK: dict[str, int] = {
 
 
 def _required_nav_pages() -> int:
-    """根据当前启用的评分维度计算需要拉取的 LSJZ 页数。
+    """根据当前启用的评分维度和筛选配置计算需要拉取的 LSJZ 页数。
     
     LSJZ 每页 20 条，额外加 5 页缓冲用于风险指标计算。
     最少 5 页（100 条），最多 38 页（760 条 ≈ 3 年）。
@@ -332,6 +332,19 @@ def _required_nav_pages() -> int:
                 days = _DIM_LOOKBACK.get(name, 0)
                 if days > max_days:
                     max_days = days
+        # 如果开启了"筛掉缺失收益数据"，需确保所有检查字段的数据足够
+        try:
+            from config import CFG
+            if CFG.get("recommend", {}).get("skip_missing_perf", False):
+                # skip_missing_perf 检查的字段所需最少天数
+                _perf_lookback = {"m1": 22, "m3": 66, "y1": 250, "f5": 5,
+                                  "sy6": 125, "sy2": 500, "sy3": 750,
+                                  "annual_return": 250}
+                for _need in _perf_lookback.values():
+                    if _need > max_days:
+                        max_days = _need
+        except Exception:
+            pass
     except Exception:
         max_days = 0
     # 至少有 100 条（5页）保证风险指标有意义
