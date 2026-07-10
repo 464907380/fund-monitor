@@ -304,21 +304,6 @@ def _curve_color(dim_name: str, raw_val) -> str:
     return "#bbb"
 
 
-def _validate_td(val) -> float | None:
-    """校验 td（当日涨跌幅）是否合理，不合理返回 None。
-    
-    典型涨跌幅在 -20% ~ +20% 之间。若超出此范围，
-    多半是存了基金净值而非涨跌幅百分比。
-    """
-    if val is None:
-        return None
-    if isinstance(val, (int, float)):
-        if abs(val) > 10:
-            return None
-        return float(val)
-    return None
-
-
 def _load_saved_recommend_data() -> list[dict]:
     """从保存的结果文件读取推荐数据，并用当前 SCORE_DIMS 重新评分。"""
     try:
@@ -346,7 +331,7 @@ def _load_saved_recommend_data() -> list[dict]:
                 "volatility": r.get("volatility"), "calmar": r.get("calmar"),
                 "max_loss_days": r.get("max_loss_days"),
                 "mgr": r.get("mgr", ""), "day": r.get("day", ""),
-                "td": _validate_td(r.get("td")),
+                "td": r.get("td"),
             }
             score_d = {k: entry.get(k) for k in (
                 "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",

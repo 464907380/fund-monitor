@@ -456,6 +456,7 @@ input, select, button { font-family: inherit; outline: none; }
       </div>
       <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <button onclick="runRecommendFromFilter()" id="recFilterBtn" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">▶ 运行推荐</button>
+        <button onclick="cancelRecommend()" id="recCancelBtn" style="display:none;background:linear-gradient(135deg,#ef5350,#d32f2f);border:none;border-radius:6px;color:#fff;padding:8px 20px;font-size:13px;cursor:pointer;">✖ 取消</button>
         <div style="flex:1;max-width:200px;">
           <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
             <div id="recFilterProgress" style="width:0%;height:100%;background:linear-gradient(90deg,#66bb6a,#42a5f5);border-radius:2px;transition:width 0.5s;"></div>
@@ -573,6 +574,7 @@ input, select, button { font-family: inherit; outline: none; }
 const API = '';
 let funds = [];
 let pendingCode = null;
+var _recCancelled = false;
 
 function showMsg(text, type) {
   const el = document.getElementById('msg');
@@ -1753,6 +1755,19 @@ function addFilterCondition(field, op, value) {
   condDiv.insertAdjacentHTML('beforeend', html);
 }
 
+function cancelRecommend() {
+  var btn = document.getElementById('recFilterBtn');
+  var cancelBtn = document.getElementById('recCancelBtn');
+  var prog = document.getElementById('recFilterProgress');
+  var statusEl = document.getElementById('recFilterStatus');
+  _recCancelled = true;
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+  if (prog) prog.style.width = '0%';
+  if (statusEl) statusEl.textContent = '✖ 已取消';
+  fetch(API + '/api/recommend/stop', { method: 'POST' }).catch(function(){});
+}
+
 async function runRecommendFromFilter() {
   var btn = document.getElementById('recFilterBtn');
   var prog = document.getElementById('recFilterProgress');
@@ -1786,12 +1801,15 @@ async function runRecommendFromFilter() {
     });
     var cfgData = await cfgResp.json();
     if (!cfgData.ok) {
-      showMsg('⚠ 筛选参数保存失败: ' + (cfgData.error || '未知错误'), 'fail');
+      if (statusEl) statusEl.textContent = '⚠ 筛选参数保存失败';
     }
   } catch(e) {
-    showMsg('⚠ 筛选参数保存失败: ' + (e.message || e), 'fail');
+    if (statusEl) statusEl.textContent = '⚠ 筛选参数保存失败';
   }
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 推荐中'; }
+  var cancelBtn = document.getElementById('recCancelBtn');
+  if (cancelBtn) cancelBtn.style.display = 'inline-block';
+  _recCancelled = false;
   if (prog) prog.style.width = '5%';
   if (statusEl) statusEl.textContent = '启动中...';
   try {
@@ -1800,21 +1818,20 @@ async function runRecommendFromFilter() {
       // HTTP 错误（非 200），直接显示状态码
       if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
       if (prog) prog.style.width = '0%';
-      if (statusEl) statusEl.textContent = '';
-      showMsg('✖ 服务错误: HTTP ' + r.status, 'fail');
+      if (statusEl) statusEl.textContent = '✖ 服务错误: HTTP ' + r.status;
       return;
     }
     const d = await r.json();
     if (!d.ok) {
       if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
       if (prog) prog.style.width = '0%';
-      if (statusEl) statusEl.textContent = '';
-      showMsg('✖ ' + (d.error || '启动失败'), 'fail');
+      if (statusEl) statusEl.textContent = '✖ ' + (d.error || '启动失败');
       return;
     }
     var startTime = Date.now();
     var MAX_WAIT = 1800000; // 30分钟超时保护
     var poll = setInterval(async function() {
+      if (_recCancelled) { clearInterval(poll); return; }
       try {
         var hb = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
         var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
@@ -1839,12 +1856,14 @@ async function runRecommendFromFilter() {
         } else if (!recAlive || recDone) {
           clearInterval(poll);
           // 子进程结束，开始刷新实时涨跌（用 fund_recommend 心跳看进度）
+          if (cancelBtn) cancelBtn.style.display = 'none';
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '⏳ 刷新实时涨跌...';
           if (btn) btn.textContent = '⏳ 刷新涨跌';
           // 继续轮询 td 刷新心跳
           var _tdStart = Date.now();
           poll = setInterval(async function() {
+            if (_recCancelled) { clearInterval(poll); return; }
             try {
               var hb2 = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
               var rec2 = hb2.heartbeats && hb2.heartbeats['recommend-td-refresh'];

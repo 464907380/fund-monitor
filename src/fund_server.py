@@ -23,7 +23,7 @@ from config import CFG, api_url, get_timeout, get_config
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── 后台任务管理 ──
-_recommend_proc: subprocess.Popen | None = None
+_recommend_state = {"proc": None}
 _proc_lock = threading.Lock()
 
 # 通用任务进程跟踪（供启停控制使用）
@@ -79,7 +79,6 @@ def _stop_task(task_id: str) -> bool:
 
 def _spawn_recommend() -> bool:
     """启动推荐任务，返回是否成功"""
-    global _recommend_proc
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
     try:
         proc = subprocess.Popen(
@@ -91,15 +90,14 @@ def _spawn_recommend() -> bool:
         # 立即写心跳，前端立刻就能看到进度
         write_heartbeat("fund_recommend", progress=0, total=0, status="启动中")
         with _proc_lock:
-            _recommend_proc = proc
+            _recommend_state["proc"] = proc
 
         def _wait_and_cleanup(p=proc) -> None:
             p.wait()
             clear_heartbeat("fund_recommend")
             with _proc_lock:
-                global _recommend_proc
-                if _recommend_proc is p:
-                    _recommend_proc = None
+                if _recommend_state["proc"] is p:
+                    _recommend_state["proc"] = None
 
         threading.Thread(target=_wait_and_cleanup, daemon=True).start()
         return True
@@ -302,13 +300,8 @@ def _recalc_cached_scores() -> None:
             "max_dd", "volatility", "max_loss_days",
             "sc", "rate", "inst", "td",
         ]
-        def _validate_td(val):
-            if val is None: return None
-            if isinstance(val, (int, float)) and abs(val) > 10: return None
-            return val
-
         for r in results:
-            score_d = {k: _validate_td(r.get(k)) if k == "td" else r.get(k) for k in score_keys}
+            score_d = {k: r.get(k) for k in score_keys}
             score, details, skipped = calc_score_detail(score_d)
             r["score"] = score
             r["_score_detail"] = details
@@ -1240,10 +1233,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if self.path == "/api/recommend/stop":
+            try:
+                with _proc_lock:
+                    if _recommend_state["proc"] and _recommend_state["proc"].poll() is None:
+                        _recommend_state["proc"].terminate()
+                        _recommend_state["proc"] = None
+                        clear_heartbeat("fund_recommend")
+                        self._send(*_json_response({"ok": True, "message": "推荐任务已取消"}))
+                        print("[recommend] 用户取消推荐任务", flush=True)
+                    else:
+                        self._send(*_json_response({"ok": False, "error": "当前没有正在运行的推荐任务"}, 404))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if self.path == "/api/recommend":
             try:
                 with _proc_lock:
-                    if _recommend_proc and _recommend_proc.poll() is None:
+                    if _recommend_state["proc"] and _recommend_state["proc"].poll() is None:
                         self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
                         return
                 if _spawn_recommend():
@@ -1251,6 +1259,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 else:
                     self._send(*_json_response({"ok": False, "error": "推荐任务启动失败"}, 500))
             except Exception as e:
+                print(f"[ERROR] /api/recommend 异常: {e}", flush=True)
+                import traceback; traceback.print_exc()
                 clear_heartbeat("fund_recommend")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
