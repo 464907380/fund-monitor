@@ -36,8 +36,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     # 动态维度列
     for dn in dim_names:
         parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
-    parts.append('<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">经理</th>'
-                 '</tr></thead><tbody>')
+    parts.append('</tr></thead><tbody>')
     for r in rows:
         parts.append('<tr>')
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-family:Consolas;color:#888;">{_html.escape(str(r.get("code","")))}</td>')
@@ -110,7 +109,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
                 if raw_val is not None and raw_val != "":
                     color = _curve_color(dim_name, raw_val)
             parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}white-space:nowrap;" {title_attr}>{display_val}</td>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-size:12px;color:#888;white-space:nowrap;">{_html.escape(str(r.get("mgr","")))}</td>')
+
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
     return "\n".join(parts)
