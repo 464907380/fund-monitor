@@ -362,6 +362,11 @@ input, select, button { font-family: inherit; outline: none; }
 
   <div class="card" id="fundFullTableCard">
     <div class="divider"></div>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px 0;">
+      <span style="font-size:13px;font-weight:600;color:#ccc;flex:1;">📊 自选基金完整数据</span>
+      <span id="fundAutoRefreshStatus" style="font-size:11px;color:#555;"></span>
+      <button onclick="toggleAutoRefresh()" id="fundAutoRefreshBtn" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#888;padding:3px 10px;font-size:11px;cursor:pointer;">🔄 自动刷新</button>
+    </div>
     <div id="fundFullTable" style="padding:0;font-size:12px;color:#666;"><p style="padding:12px 4px;">⏳ 加载中…</p></div>
   </div>
 
@@ -855,6 +860,72 @@ async function loadSavedTables() {
       }
     }
   } catch(e) {}
+}
+
+// ── 自选基金自动刷新 ──
+var _autoRefreshTimer = null;
+var _autoRefreshCountdown = null;
+var _autoRefreshEnabled = false;
+var _autoRefreshTicks = 0; // 距下次刷新的秒数
+
+function toggleAutoRefresh() {
+  var btn = document.getElementById('fundAutoRefreshBtn');
+  var statusEl = document.getElementById('fundAutoRefreshStatus');
+  if (_autoRefreshEnabled) {
+    // 关闭
+    _autoRefreshEnabled = false;
+    if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+    if (_autoRefreshCountdown) { clearInterval(_autoRefreshCountdown); _autoRefreshCountdown = null; }
+    if (btn) { btn.style.borderColor = 'rgba(255,255,255,0.1)'; btn.style.color = '#888'; btn.textContent = '🔄 自动刷新'; }
+    if (statusEl) statusEl.textContent = '';
+  } else {
+    // 检查时间
+    var now = new Date();
+    var h = now.getHours(), m = now.getMinutes();
+    var isMarketDay = h >= 9 && (h < 15 || (h === 15 && m === 0));
+    if (!isMarketDay) {
+      if (statusEl) statusEl.textContent = '非交易时间';
+      setTimeout(function() { if (statusEl) statusEl.textContent = ''; }, 3000);
+      return;
+    }
+    // 开启
+    _autoRefreshEnabled = true;
+    _autoRefreshTicks = 600;
+    if (btn) { btn.style.borderColor = '#42a5f5'; btn.style.color = '#42a5f5'; btn.textContent = '🔄 自动刷新中'; }
+    _updateCountdownDisplay();
+    _autoRefreshCountdown = setInterval(function() {
+      _autoRefreshTicks--;
+      if (_autoRefreshTicks <= 0) _autoRefreshTicks = 0;
+      _updateCountdownDisplay();
+    }, 1000);
+    _doAutoRefresh();
+    _autoRefreshTimer = setInterval(_doAutoRefresh, 600000); // 10分钟
+  }
+}
+
+function _updateCountdownDisplay() {
+  if (!_autoRefreshEnabled) return;
+  var statusEl = document.getElementById('fundAutoRefreshStatus');
+  var min = Math.floor(_autoRefreshTicks / 60);
+  var sec = _autoRefreshTicks % 60;
+  if (statusEl) statusEl.textContent = min + '分' + (sec < 10 ? '0' : '') + sec + '秒后刷新';
+}
+
+function _doAutoRefresh() {
+  if (!_autoRefreshEnabled) return;
+  _autoRefreshTicks = 600;
+  var statusEl = document.getElementById('fundAutoRefreshStatus');
+  if (statusEl) statusEl.textContent = '刷新中...';
+  _updateCountdownDisplay();
+  fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; }).then(function(h){
+    if (h && h.indexOf('<tbody>') > 0) {
+      var ct = document.getElementById('fundFullTable');
+      if (ct) { ct.innerHTML = h; setupDragSort(); }
+    }
+    if (statusEl && _autoRefreshEnabled) _updateCountdownDisplay();
+  }).catch(function(){
+    if (statusEl && _autoRefreshEnabled) _updateCountdownDisplay();
+  });
 }
 
 function setupDragSort() {

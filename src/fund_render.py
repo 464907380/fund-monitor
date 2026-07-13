@@ -25,7 +25,6 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
-             '<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f4ca 自选基金完整数据</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
              '<thead><tr style="background:#2a2a2a;">'
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">代码</th>'
