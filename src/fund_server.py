@@ -354,6 +354,68 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/check-trade-time":
+            """轻量接口：判断当前是否为交易时间（无外部请求，不耗流量）"""
+            try:
+                from fund_utils import is_trading_day
+                import datetime
+                now = datetime.datetime.now()
+                today = now.date()
+                is_trading_day_bool = is_trading_day(today)
+                h, m = now.hour, now.minute
+                in_time = (h > 9 or (h == 9 and m >= 30)) and h < 15
+                is_trading = is_trading_day_bool and in_time
+                # 下次刷新参考时间（秒）
+                next_in = 0
+                if not is_trading_day_bool:
+                    next_in = 86400  # 明天再说
+                elif not in_time:
+                    if h < 9 or (h == 9 and m < 30):
+                        # 盘前，距离开盘
+                        next_in = (9 * 3600 + 30 * 60) - (h * 3600 + m * 60)
+                    else:
+                        # 盘后，距离明天开盘 15小时+（简化）
+                        next_in = (24 * 3600 - h * 3600 - m * 60) + 9 * 3600 + 30 * 60
+                self._send(*_json_response({"ok": True, "is_trading": is_trading, "next_check_seconds": next_in}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if parsed.path == "/api/market-indices":
+            try:
+                from fund_utils import fetch_bytes, is_trading_day
+                import datetime
+                today = datetime.date.today()
+                is_trading = is_trading_day(today) and (datetime.datetime.now().hour >= 9 and datetime.datetime.now().hour < 15)
+                url = "http://hq.sinajs.cn/list=sh000001,sz399001,sz399006"
+                raw = fetch_bytes(url, {"Referer": "https://finance.sina.com.cn/"})
+                indices = []
+                if raw:
+                    text = raw.decode("gbk", errors="ignore")
+                    for line in text.strip().split("\n"):
+                        if "hq_str_" not in line:
+                            continue
+                        parts = line.split('"')
+                        if len(parts) < 2:
+                            continue
+                        fields = parts[1].split(",")
+                        if len(fields) < 30:
+                            continue
+                        name = fields[0]
+                        # 字段格式: name,今开,昨收,现价,最高,最低,...
+                        prev_close = float(fields[2]) if fields[2] else 0
+                        price = float(fields[3]) if fields[3] else 0
+                        chg_pts = price - prev_close
+                        chg_pct = (chg_pts / prev_close * 100) if prev_close else 0
+                        indices.append({
+                            "name": name, "price": price,
+                            "change_points": round(chg_pts, 2), "change_pct": round(chg_pct, 2),
+                        })
+                self._send(*_json_response({"ok": True, "indices": indices, "is_trading": is_trading}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/search":
             try:
                 q = params.get("q", [""])[0]
@@ -719,10 +781,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/fund-table":
             """为自选基金生成完整数据富表格（含评分）—— 并行拉取数据"""
-            # 短缓存：30秒内不重复拉取
+            # 检查是否有 fresh=1 参数强制跳过缓存（自动刷新用）
+            _skip_cache = params.get("fresh", [""])[0] == "1"
             global _fund_table_cache
             now = time.time()
-            if _fund_table_cache and now - _fund_table_cache[0] < _FUND_TABLE_CACHE_TTL:
+            if not _skip_cache and _fund_table_cache and now - _fund_table_cache[0] < _FUND_TABLE_CACHE_TTL:
                 self._send(200, {"Content-Type": "text/html; charset=utf-8"}, _fund_table_cache[1].encode("utf-8"))
                 return
             try:
@@ -758,7 +821,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         cached = _rec_cache.get(code)
                         if cached:
                             # ── 推荐缓存命中：直接用缓存数据，不另行拉取 ──
-                            _td = cached.get("td")
+                            _td = _parse_real_time(code) if _skip_cache else cached.get("td")
                             day_s = f"{_td:+.2f}%" if _td is not None else ""
                             name = cached.get("name", "")
                             row = {

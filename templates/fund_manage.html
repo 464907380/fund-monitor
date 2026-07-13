@@ -360,6 +360,16 @@ input, select, button { font-family: inherit; outline: none; }
 
   <div id="msg" class="msg"></div>
 
+  <!-- 📊 大盘看板 -->
+  <div class="card" id="marketBoard" style="display:none;">
+    <div class="divider"></div>
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;font-size:13px;">
+      <span style="font-weight:600;color:#ccc;">🇨🇳 中国股市</span>
+      <span id="marketIndices" style="display:flex;gap:16px;flex-wrap:wrap;flex:1;"></span>
+      <span id="marketTime" style="font-size:11px;color:#555;"></span>
+    </div>
+  </div>
+
   <div class="card" id="fundFullTableCard">
     <div class="divider"></div>
     <div style="display:flex;align-items:center;gap:8px;padding:8px 10px 0;">
@@ -880,10 +890,7 @@ function toggleAutoRefresh() {
     if (statusEl) statusEl.textContent = '';
   } else {
     // 检查时间
-    var now = new Date();
-    var h = now.getHours(), m = now.getMinutes();
-    var isMarketDay = h >= 9 && (h < 15 || (h === 15 && m === 0));
-    if (!isMarketDay) {
+    if (!_isTradingTime) {
       if (statusEl) statusEl.textContent = '非交易时间';
       setTimeout(function() { if (statusEl) statusEl.textContent = ''; }, 3000);
       return;
@@ -917,7 +924,7 @@ function _doAutoRefresh() {
   var statusEl = document.getElementById('fundAutoRefreshStatus');
   if (statusEl) statusEl.textContent = '刷新中...';
   _updateCountdownDisplay();
-  fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; }).then(function(h){
+  fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; }).then(function(h){
     if (h && h.indexOf('<tbody>') > 0) {
       var ct = document.getElementById('fundFullTable');
       if (ct) { ct.innerHTML = h; setupDragSort(); }
@@ -927,6 +934,47 @@ function _doAutoRefresh() {
     if (statusEl && _autoRefreshEnabled) _updateCountdownDisplay();
   });
 }
+
+// ── 交易时间判断（统一入口，节省流量）──
+var _isTradingTime = false;
+
+// ── 大盘指数看板 ──
+var _marketTimer = null;
+function loadMarketIndices() {
+  fetch(API + '/api/market-indices?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
+    if (!d.ok || !d.indices || !d.indices.length) { document.getElementById('marketBoard').style.display = 'none'; return; }
+    document.getElementById('marketBoard').style.display = '';
+    var container = document.getElementById('marketIndices');
+    var timeEl = document.getElementById('marketTime');
+    var html = '';
+    for (var i = 0; i < d.indices.length; i++) {
+      var idx = d.indices[i];
+      var color = idx.change_pct > 0 ? '#ef5350' : (idx.change_pct < 0 ? '#66bb6a' : '#888');
+      var sign = idx.change_pct > 0 ? '+' : '';
+      var ptsSign = idx.change_points > 0 ? '+' : '';
+      html += '<span style="white-space:nowrap;">'
+        + '<span style="color:#aaa;">' + idx.name + '</span> '
+        + '<span style="font-family:Consolas;font-weight:600;color:#e0e0e0;">' + idx.price.toFixed(2) + '</span> '
+        + '<span style="font-family:Consolas;color:' + color + ';">' + ptsSign + idx.change_points.toFixed(2) + '</span> '
+        + '<span style="font-family:Consolas;font-weight:600;color:' + color + ';">' + sign + idx.change_pct.toFixed(2) + '%</span>'
+        + '</span>';
+    }
+    container.innerHTML = html;
+    timeEl.textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }).catch(function(){});
+}
+
+// ── 启动时检查交易时间，非交易时间不发起任何数据请求 ──
+fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
+  if (!d.ok) return;
+  _isTradingTime = d.is_trading === true;
+  if (_isTradingTime) {
+    // 交易时间：拉取大盘数据，每分钟自动刷新
+    loadMarketIndices();
+    _marketTimer = setInterval(loadMarketIndices, 60000);
+  }
+  // 非交易时间：不请求任何数据，不启动任何定时器
+}).catch(function(){});
 
 function setupDragSort() {
   var tbody = document.querySelector('#fundFullTable table tbody');
