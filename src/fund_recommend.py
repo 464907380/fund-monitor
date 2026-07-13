@@ -542,13 +542,16 @@ def _supplement_self_selected() -> None:
         _missing = [f for f in _fl_data if f["code"] not in _existing]
         if not _missing:
             return
-        print(f"\n📋 补拉 {len(_missing)} 只自选基金数据...")
-        _extra = []
-        for _f in _missing:
-            _r = _score_one(_f["code"], _f.get("name", ""))
-            if _r:
-                # 检查是否满足当前筛选条件
-                _pass = True
+        _total = len(_missing)
+        print(f"\n📋 补拉 {_total} 只自选基金数据...")
+        _extra: list[dict] = []
+        _done_supp = 0
+
+        def _score_and_check(f: dict) -> dict | None:
+            try:
+                _r = _score_one(f["code"], f.get("name", ""))
+                if not _r:
+                    return None
                 for _cond in _FILTER_CONDITIONS:
                     _fld = _cond.get("field", "")
                     _op = _cond.get("op", "gte")
@@ -557,23 +560,33 @@ def _supplement_self_selected() -> None:
                         continue
                     _raw = _r.get(_fld)
                     if _raw is None:
-                        _pass = False
-                        break
+                        return None
                     try:
                         if _op == "gte" and not (float(_raw) >= _val):
-                            _pass = False
-                            break
+                            return None
                         elif _op == "lte" and not (float(_raw) <= _val):
-                            _pass = False
-                            break
+                            return None
                     except (ValueError, TypeError):
-                        _pass = False
-                        break
-                if _pass:
+                        return None
+                return _r
+            except Exception:
+                return None
+
+        with ThreadPoolExecutor(max_workers=min(20, _total)) as _se:
+            _sfuts = {_se.submit(_score_and_check, f): f for f in _missing}
+            for _sf in as_completed(_sfuts):
+                _f = _sfuts[_sf]
+                _r = _sf.result()
+                _done_supp += 1
+                if _r:
                     _extra.append(_r)
                     print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
                 else:
-                    print(f"  ⏭️ {_f['code']} {_r.get('name','')} — 不满足筛选条件，跳过")
+                    print(f"  ⏭️ {_f['code']} {_f.get('name','')[:12]} — 跳过")
+                if _done_supp % 5 == 0 or _done_supp == _total:
+                    update_heartbeat("fund_recommend", progress=_done_supp, total=_total,
+                                     overall_pct=98, phase="检查自选基金",
+                                     detail=f"补充自选基金 {_done_supp}/{_total}")
         if not _extra:
             return
         _old_list = _old or []
@@ -615,16 +628,12 @@ def main() -> None:
                 print(f"   缓存 config_hash={str(old.get('config_hash',''))[:12]}..  filter_hash={str(old.get('filter_hash',''))[:12]}..")
 
                 if saved_date == datetime.date.today().isoformat():
-                    if old.get("config_hash") == cur_hash:
-                        print(f"✅ 评分配置与筛选条件未变化 ({_elapsed()}s)")
+                    if old.get("filter_hash") == cur_filter_hash:
+                        print(f"✅ 筛选条件未变化 ({_elapsed()}s)")
                         print(f"   使用缓存结果（仅更新涨跌）")
                         cache_mode = "full"
-                    elif old.get("filter_hash") == cur_filter_hash:
-                        print(f"⚠️ 筛选条件未变化，评分权重变更 ({_elapsed()}s)")
-                        print(f"   使用缓存数据重新评分（保留候选基金列表）")
-                        cache_mode = "re-score"
                     else:
-                        print(f"🔄 筛选参数已变化 ({_elapsed()}s)")
+                        print(f"🔄 筛选条件已变化 ({_elapsed()}s)")
                         print(f"   全量重新拉取排行和评分")
                 else:
                     print(f"📅 缓存日期 ({saved_date}) ≠ 今天 ({datetime.date.today()})")
