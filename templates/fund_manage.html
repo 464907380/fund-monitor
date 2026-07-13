@@ -1845,7 +1845,7 @@ async function runRecommendFromFilter() {
           if (prog) prog.style.width = Math.min(displayPct, 99) + '%';
           // 构建详细状态字符串
           var phaseIcon = {'获取排行':'📥','初筛':'📊','限购':'🔒','评分':'🧮','保存':'💾','完成':'✅',
-                           '刷新td':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋'};
+                           '刷新td':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋','检查自选基金':'📋'};
           var icon = phaseIcon[recData.phase] || '⏳';
           var statusParts = [icon];
           if (recData.phase) statusParts.push(recData.phase);

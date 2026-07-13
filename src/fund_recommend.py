@@ -541,6 +541,9 @@ def _supplement_self_selected() -> None:
         _existing = {r["code"] for r in _old} if _old else set()
         _missing = [f for f in _fl_data if f["code"] not in _existing]
         if not _missing:
+            update_heartbeat("fund_recommend", progress=1, total=1,
+                             overall_pct=98, phase="检查自选基金",
+                             detail="自选基金数据已存在")
             return
         _total = len(_missing)
         print(f"\n📋 补拉 {_total} 只自选基金数据...")
@@ -585,7 +588,8 @@ def _supplement_self_selected() -> None:
                     print(f"  ⏭️ {_f['code']} {_f.get('name','')[:12]} — 跳过")
                 if _done_supp % 5 == 0 or _done_supp == _total:
                     update_heartbeat("fund_recommend", progress=_done_supp, total=_total,
-                                     overall_pct=98, phase="检查自选基金",
+                                     overall_pct=max(97, 97 + int(_done_supp / _total * 2)),
+                                     phase="检查自选基金",
                                      detail=f"补充自选基金 {_done_supp}/{_total}")
         if not _extra:
             return
@@ -821,10 +825,12 @@ def main() -> None:
         print(f"   └─ 保存结果: {time.time()-_t5:.1f}s")
     finally:
         update_heartbeat("fund_recommend", progress=0, total=0,
-                         overall_pct=98, phase="检查自选基金",
+                         overall_pct=97, phase="检查自选基金",
                          detail="补充自选基金数据", elapsed=_elapsed())
         _supplement_self_selected()
-        clear_heartbeat("fund_recommend")
+        update_heartbeat("fund_recommend", progress=1, total=1,
+                         overall_pct=100, phase="完成",
+                         detail="推荐完成", elapsed=_elapsed())
         if _timeout_count > 0:
             print(f"\n⚠️ 超时警告: {_timeout_count} 次请求超时")
             for _td in _timeout_details[:10]:
