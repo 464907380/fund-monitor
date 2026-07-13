@@ -1884,8 +1884,11 @@ async function runRecommendFromFilter() {
                 var _tableOk = true;
                 try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
                 try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                // 获取超时统计
+                var _timeoutInfo = '';
+                try { var _r = await fetch(API + '/api/recommend?_t=' + Date.now()).then(function(r){ return r.json(); }); if (_r && _r.timeout_count > 0) { _timeoutInfo = ' ⚠' + _r.timeout_count + '次超时'; } } catch(e) {}
                 if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-                if (statusEl) statusEl.textContent = _tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
+                if (statusEl) statusEl.textContent = (_tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）') + _timeoutInfo;
                 if (prog) prog.style.width = '0%';
                 setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
               } else {
@@ -1899,8 +1902,11 @@ async function runRecommendFromFilter() {
                 var _tableOk = true;
                 try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
                 try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+                // 获取超时统计
+                var _timeoutInfo = '';
+                try { var _r = await fetch(API + '/api/recommend?_t=' + Date.now()).then(function(r){ return r.json(); }); if (_r && _r.timeout_count > 0) { _timeoutInfo = ' ⚠' + _r.timeout_count + '次超时'; } } catch(e) {}
                 if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-                if (statusEl) statusEl.textContent = _tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）';
+                if (statusEl) statusEl.textContent = (_tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）') + _timeoutInfo;
                 if (prog) prog.style.width = '0%';
                 setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
               }

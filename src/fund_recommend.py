@@ -169,6 +169,27 @@ _RECOMMEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
 _FUND_LIST_FILE = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
 
+# ── 超时统计（供推荐任务结束时展示）──
+_timeout_count = 0
+_timeout_details: list[str] = []
+
+
+def _increment_timeout(url: str = "") -> None:
+    """增加超时计数并记录详情"""
+    global _timeout_count, _timeout_details
+    _timeout_count += 1
+    _timeout_details.append(url[:80])
+    if len(_timeout_details) > 50:
+        _timeout_details.pop(0)
+
+
+def _safe_fetch(url: str, headers: dict | None = None) -> str:
+    """带超时统计的 fetch"""
+    result = fetch(url, headers)
+    if not result:
+        _increment_timeout(url)
+    return result
+
 # 启动时打印配置，方便排查缓存问题
 print(f"[CFG] top_n={_TOP}, show_top={SHOW_TOP}, skip_missing={_SKIP_MISSING_PERF}, skip_limited={_SKIP_LIMITED}, rank_sort={_RANK_SORT}", file=sys.stderr)
 
@@ -209,7 +230,7 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
 
     def _try_one(url: str) -> list[list[str]] | None:
         try:
-            data = fetch(url, {"Referer": "https://fund.eastmoney.com/"})
+            data = _safe_fetch(url, {"Referer": "https://fund.eastmoney.com/"})
             return _parse_rank_response(data)
         except Exception:
             return None
@@ -313,6 +334,7 @@ def _save_result(results: list[dict]) -> bool:
             "config_hash": _config_hash(),
             "filter_hash": _filter_hash(),
             "results": results,
+            "timeout_count": _timeout_count,
         }
         with open(_RESULT_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -794,6 +816,10 @@ def main() -> None:
                          detail="补充自选基金数据", elapsed=_elapsed())
         _supplement_self_selected()
         clear_heartbeat("fund_recommend")
+        if _timeout_count > 0:
+            print(f"\n⚠️ 超时警告: {_timeout_count} 次请求超时")
+            for _td in _timeout_details[:10]:
+                print(f"   ⏱  {_td}")
         print(f"\n✅ 推荐任务完成 ({_elapsed()}s)")
 
 

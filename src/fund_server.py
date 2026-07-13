@@ -710,7 +710,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 try:
                     with open(path, encoding="utf-8") as f:
                         data = json.load(f)
-                    self._send(*_json_response({"ok": True, "date": data.get("date", ""), "results": data.get("results", [])}))
+                    self._send(*_json_response({"ok": True, "date": data.get("date", ""), "results": data.get("results", []), "timeout_count": data.get("timeout_count", 0)}))
                 except Exception as e:
                     self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             else:
