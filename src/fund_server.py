@@ -817,6 +817,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
                 def _process_one(code: str) -> dict | None:
                     """拉取一只基金数据并计算评分（优先从推荐缓存复用）"""
+                    import datetime
                     try:
                         cached = _rec_cache.get(code)
                         if cached:
