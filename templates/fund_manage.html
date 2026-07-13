@@ -964,16 +964,16 @@ function loadMarketIndices() {
   }).catch(function(){});
 }
 
-// ── 启动时检查交易时间，非交易时间不发起任何数据请求 ──
+// ── 启动时检查交易时间，大盘数据始终加载，自动刷新仅交易时段开启 ──
 fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
   if (!d.ok) return;
   _isTradingTime = d.is_trading === true;
+  // 大盘数据始终加载（收盘后仍有最新行情）
+  loadMarketIndices();
   if (_isTradingTime) {
-    // 交易时间：拉取大盘数据，每分钟自动刷新
-    loadMarketIndices();
+    // 交易时间：每分钟自动刷新
     _marketTimer = setInterval(loadMarketIndices, 60000);
   }
-  // 非交易时间：不请求任何数据，不启动任何定时器
 }).catch(function(){});
 
 function setupDragSort() {
