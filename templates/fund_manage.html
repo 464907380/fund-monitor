@@ -363,10 +363,12 @@ input, select, button { font-family: inherit; outline: none; }
   <!-- 📊 大盘看板 -->
   <div class="card" id="marketBoard" style="display:none;">
     <div class="divider"></div>
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;font-size:13px;">
-      <span style="font-weight:600;color:#ccc;">🇨🇳 中国股市</span>
-      <span id="marketIndices" style="display:flex;gap:16px;flex-wrap:wrap;flex:1;"></span>
-      <span id="marketTime" style="font-size:11px;color:#555;"></span>
+    <div style="padding:12px 14px 8px;font-size:13px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-weight:600;color:#ccc;font-size:14px;">🇨🇳 中国股市</span>
+        <span id="marketTime" style="font-size:11px;color:#555;"></span>
+      </div>
+      <div id="marketIndices" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
     </div>
   </div>
 
@@ -1031,14 +1033,17 @@ function loadMarketIndices() {
       var color = idx.change_pct > 0 ? '#ef5350' : (idx.change_pct < 0 ? '#66bb6a' : '#888');
       var sign = idx.change_pct > 0 ? '+' : '';
       var ptsSign = idx.change_points > 0 ? '+' : '';
-      html += '<span style="white-space:nowrap;" data-idx-name="' + idx.name + '">'
-        + '<span class="marketSparkline" style="display:inline-block;width:60px;height:16px;vertical-align:middle;margin-right:4px;"></span>'
-        + '<span style="color:#aaa;">' + idx.name + '</span> '
-        + '<span style="font-family:Consolas;font-weight:600;color:#e0e0e0;">' + idx.price.toFixed(2) + '</span> '
-        + '<span style="font-family:Consolas;color:' + color + ';">' + ptsSign + idx.change_points.toFixed(2) + '</span> '
-        + '<span style="font-family:Consolas;font-weight:600;color:' + color + ';">' + sign + idx.change_pct.toFixed(2) + '%</span>'
-        + '</span>';
-    }
+      html += '<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px;" data-idx-name="' + idx.name + '">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
+        + '<span style="color:#aaa;font-size:12px;">' + idx.name + '</span>'
+        + '<span style="font-family:Consolas;font-weight:600;font-size:14px;color:#e0e0e0;">' + idx.price.toFixed(2) + '</span>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<span class="marketSparkline" style="display:inline-block;width:100px;height:24px;flex-shrink:0;"></span>'
+        + '<span style="font-family:Consolas;font-size:12px;color:' + color + ';">' + ptsSign + idx.change_points.toFixed(2) + '</span>'
+        + '<span style="font-family:Consolas;font-size:12px;font-weight:600;color:' + color + ';">' + sign + idx.change_pct.toFixed(2) + '%</span>'
+        + '</div>'
+        + '</div>';
     container.innerHTML = html;
     timeEl.textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
     // 加载分时折线图
@@ -1054,22 +1059,25 @@ function _renderMarketSparklines() {
       var t = d.trends[i];
       var closes = t.closes;
       if (!closes || closes.length < 2) continue;
-      var min = closes[0], max = closes[0];
+      var mn = closes[0], mx = closes[0];
       for (var k = 1; k < closes.length; k++) {
-        if (closes[k] < min) min = closes[k];
-        if (closes[k] > max) max = closes[k];
+        if (closes[k] < mn) mn = closes[k];
+        if (closes[k] > mx) mx = closes[k];
       }
-      var range = max - min || 1;
-      var sw = 60, sh = 16;
+      var range = mx - mn || 1;
+      var sw = 100, sh = 24, pad = 1;
       var pts = [];
       for (var k = 0; k < closes.length; k++) {
-        var x = k / (closes.length - 1) * (sw - 2) + 1;
-        var y = sh - 2 - (closes[k] - min) / range * (sh - 4);
+        var x = k / (closes.length - 1) * (sw - pad * 2) + pad;
+        var y = sh - pad - (closes[k] - mn) / range * (sh - pad * 2);
         pts.push(x.toFixed(1) + ',' + y.toFixed(1));
       }
       var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
-      var svg = '<svg width="60" height="16" viewBox="0 0 60 16" style="vertical-align:middle;">'
-        + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="1.2" points="' + pts.join(' ') + '"/>'
+      var polyPts = pts.join(' ');
+      var bgPts = polyPts + ' ' + (sw - pad).toFixed(1) + ',' + (sh - pad).toFixed(1) + ' ' + pad.toFixed(1) + ',' + (sh - pad).toFixed(1);
+      var svg = '<svg width="100" height="24" viewBox="0 0 100 24" style="display:block;">'
+        + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="1.5" points="' + polyPts + '"/>'
+        + '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + bgPts + '"/>'
         + '</svg>';
       if (containers[i]) containers[i].innerHTML = svg;
     }
