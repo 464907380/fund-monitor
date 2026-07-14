@@ -870,6 +870,83 @@ async function loadSavedTables() {
       }
     }
   } catch(e) {}
+  // 检查是否有推荐任务正在后台运行，有则恢复进度显示
+  try {
+    var hbR = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
+    if (hbR.ok && hbR.alive && hbR.alive.fund_recommend && hbR.heartbeats && hbR.heartbeats.fund_recommend) {
+      _resumeRecommendProgress();
+    }
+  } catch(e) {}
+}
+/** 页面恢复时接手正在运行的推荐进度 */
+function _resumeRecommendProgress() {
+  _recCancelled = false;
+  var btn = document.getElementById('recFilterBtn');
+  var cancelBtn = document.getElementById('recCancelBtn');
+  var prog = document.getElementById('recFilterProgress');
+  var statusEl = document.getElementById('recFilterStatus');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 推荐中'; }
+  if (cancelBtn) cancelBtn.style.display = 'inline-block';
+  if (prog) prog.style.width = '5%';
+  if (statusEl) statusEl.textContent = '恢复进度...';
+  var MAX_WAIT = 1800000;
+  var poll = setInterval(async function() {
+    if (_recCancelled) { clearInterval(poll); return; }
+    try {
+      var hb = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
+      var recData = hb.heartbeats && hb.heartbeats.fund_recommend;
+      var recAlive = hb.alive && hb.alive.fund_recommend;
+      var recDone = recData && (recData.overall_pct >= 100 || recData.phase === '完成' || recData.phase === '刷新完成');
+      if (recAlive && recData && !recDone) {
+        var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
+        var displayPct = recData.overall_pct != null ? Math.round(recData.overall_pct) : pct;
+        if (prog) prog.style.width = Math.min(displayPct, 99) + '%';
+        var phaseIcon = {'获取排行':'📥','初筛':'📊','限购':'🔒','评分':'🧮','保存':'💾','完成':'✅',
+                         '刷新td':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋','检查自选基金':'📋'};
+        var icon = phaseIcon[recData.phase] || '⏳';
+        var statusParts = [icon];
+        if (recData.phase) statusParts.push(recData.phase);
+        if (recData.detail) statusParts.push(recData.detail);
+        if (recData.elapsed != null) statusParts.push(Math.round(recData.elapsed) + 's');
+        if (statusEl) statusEl.textContent = statusParts.join(' | ');
+        if (btn) btn.textContent = '⏳ ' + displayPct + '%';
+      } else if (!recAlive || recDone) {
+        clearInterval(poll);
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (prog) prog.style.width = '100%';
+        if (statusEl) statusEl.textContent = '⏳ 刷新实时涨跌...';
+        if (btn) btn.textContent = '⏳ 刷新涨跌';
+        var _tdStart = Date.now();
+        poll = setInterval(async function() {
+          if (_recCancelled) { clearInterval(poll); return; }
+          try {
+            var hb2 = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
+            var rec2 = hb2.heartbeats && hb2.heartbeats['recommend-td-refresh'];
+            var tdAlive = hb2.alive && hb2.alive['recommend-td-refresh'];
+            if (tdAlive && rec2) {
+              var pct = rec2.total > 0 ? Math.round(rec2.progress / rec2.total * 100) : 0;
+              if (prog) prog.style.width = Math.min(pct, 99) + '%';
+              if (statusEl) statusEl.textContent = '📋 刷新td ' + (rec2.detail || '') + ' | ' + pct + '%';
+              if (btn) btn.textContent = '⏳ ' + pct + '%';
+            } else if (!tdAlive) {
+              clearInterval(poll);
+              if (prog) prog.style.width = '100%';
+              if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
+              if (btn) btn.textContent = '⏳ 渲染表格';
+              var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+              var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+              try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) {}
+              try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) {}
+              if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+              if (statusEl) statusEl.textContent = '✔ 已恢复（上次推荐已完成）';
+              if (prog) prog.style.width = '0%';
+              setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('已恢复') >= 0) statusEl.textContent = ''; }, 4000);
+            }
+          } catch(e) {}
+        }, 800);
+      }
+    } catch(e) {}
+  }, 800);
 }
 
 // ── 自选基金自动刷新 ──
