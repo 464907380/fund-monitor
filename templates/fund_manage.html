@@ -965,6 +965,7 @@ function toggleAutoRefresh() {
     if (_autoRefreshCountdown) { clearInterval(_autoRefreshCountdown); _autoRefreshCountdown = null; }
     if (btn) { btn.style.borderColor = 'rgba(255,255,255,0.1)'; btn.style.color = '#888'; btn.textContent = '🔄 自动刷新'; }
     if (statusEl) statusEl.textContent = '';
+    try { localStorage.setItem('fundAutoRefresh', '0'); } catch(e) {}
   } else {
     // 检查时间
     if (!_isTradingTime) {
@@ -983,6 +984,7 @@ function toggleAutoRefresh() {
       _updateCountdownDisplay();
     }, 1000);
     _doAutoRefresh();
+    try { localStorage.setItem('fundAutoRefresh', '1'); } catch(e) {}
     _autoRefreshTimer = setInterval(_doAutoRefresh, 600000); // 10分钟
   }
 }
@@ -1047,7 +1049,9 @@ loadMarketIndices();
   fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok) return;
     _isTradingTime = d.is_trading === true;
+    // 恢复自动刷新状态
     if (_isTradingTime) {
+      try { if (localStorage.getItem('fundAutoRefresh') === '1') toggleAutoRefresh(); } catch(e) {}
       _marketTimer = setInterval(loadMarketIndices, 60000);
     } else if (d.next_check_seconds > 0) {
       setTimeout(function(){
