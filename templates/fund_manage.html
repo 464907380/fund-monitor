@@ -1052,9 +1052,11 @@ function loadMarketIndices() {
   }).catch(function(){});
 }
 /** 渲染大盘分时折线图 */
+var _marketTrendData = [];
 function _renderMarketSparklines() {
   fetch(API + '/api/market-trends?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok || !d.trends) return;
+    _marketTrendData = d.trends;
     var containers = document.querySelectorAll('.marketSparkline');
     for (var i = 0; i < d.trends.length; i++) {
       var t = d.trends[i];
@@ -1076,13 +1078,92 @@ function _renderMarketSparklines() {
       var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
       var polyPts = pts.join(' ');
       var bgPts = polyPts + ' ' + (sw - pad).toFixed(1) + ',' + (sh - pad).toFixed(1) + ' ' + pad.toFixed(1) + ',' + (sh - pad).toFixed(1);
-      var svg = '<svg width="100" height="24" viewBox="0 0 100 24" style="display:block;">'
+      var svg = '<svg width="100" height="24" viewBox="0 0 100 24" style="display:block;cursor:pointer;" onclick="showMarketTrend(' + i + ')">'
         + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="1.5" points="' + polyPts + '"/>'
         + '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + bgPts + '"/>'
         + '</svg>';
       if (containers[i]) containers[i].innerHTML = svg;
     }
   }).catch(function(){});
+}
+/** 大盘分时折线图弹窗 */
+function showMarketTrend(idx) {
+  var t = _marketTrendData[idx];
+  if (!t || !t.closes || t.closes.length < 2) return;
+  var closes = t.closes;
+  var name = t.name;
+  var mn = closes[0], mx = closes[0];
+  for (var k = 1; k < closes.length; k++) {
+    if (closes[k] < mn) mn = closes[k];
+    if (closes[k] > mx) mx = closes[k];
+  }
+  var range = mx - mn || 1;
+  var w = 480, h = 220, pad = 30, cw = w - pad * 2, ch = h - pad * 2;
+  var pts = [];
+  for (var i = 0; i < closes.length; i++) {
+    var x = pad + i / (closes.length - 1) * cw;
+    var y = pad + ch - (closes[i] - mn) / range * ch;
+    pts.push({x: x, y: y, idx: i, val: closes[i]});
+  }
+  var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
+  var polyPts = pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+  var svgHtml = '<svg id="mktTrendSvg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;margin:0 auto;background:transparent;cursor:crosshair;">'
+    + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>'
+    + '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + polyPts + ' ' + (pad+cw) + ',' + (pad+ch) + ' ' + pad + ',' + (pad+ch) + '"/>'
+    + '<line id="mktCrosshair" x1="0" y1="0" x2="0" y2="0" stroke="#888" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>'
+    + '</svg>';
+  var backdrop = document.getElementById('trendBackdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'trendBackdrop';
+    backdrop.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99998;display:flex;align-items:center;justify-content:center;';
+    backdrop.onclick = function(){ backdrop.style.display = 'none'; };
+    document.body.appendChild(backdrop);
+  }
+  backdrop.style.display = 'flex';
+  backdrop.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;max-width:550px;width:90%;" onclick="event.stopPropagation();">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+    + '<span style="color:#e0e0e0;font-size:15px;font-weight:600;">' + name + ' - 今日分时走势</span>'
+    + '<span onclick="document.getElementById(\'trendBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:20px;">&times;</span></div>'
+    + '<div id="mktTooltip" style="text-align:center;font-size:13px;color:#e0e0e0;min-height:22px;margin-bottom:6px;">\u79fb\u52a8\u9f20\u6807\u67e5\u770b\u8be6\u60c5</div>'
+    + svgHtml + '</div>';
+  var svg = document.getElementById('mktTrendSvg');
+  var crosshair = document.getElementById('mktCrosshair');
+  var tooltip = document.getElementById('mktTooltip');
+  svg.onmousemove = function(e) {
+    var rect = svg.getBoundingClientRect();
+    var scaleX = w / rect.width;
+    var mouseX = (e.clientX - rect.left) * scaleX;
+    var nearest = pts[0];
+    for (var k = 1; k < pts.length; k++) {
+      if (Math.abs(pts[k].x - mouseX) < Math.abs(nearest.x - mouseX)) nearest = pts[k];
+    }
+    var openVal = closes[0];
+    var chg = nearest.val - openVal;
+    var pct = openVal ? (chg / openVal * 100) : 0;
+    var sign = chg >= 0 ? '+' : '';
+    var color = chg >= 0 ? '#ef5350' : '#66bb6a';
+    // 估算时间
+    var totalMin = 240; // 9:30~13:30 = 4h = 240min
+    var minIdx = Math.round(nearest.idx / (closes.length - 1) * totalMin);
+    var hh = Math.floor(minIdx / 60) + 9;
+    var mm = minIdx % 60 + (hh >= 11 ? 30 : 0); // 11:30休市
+    if (hh > 11) hh += 1; // 下午从13:00开始
+    var timeStr = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
+    tooltip.innerHTML = '<span style="color:#aaa;">' + timeStr + '</span> '
+      + '<span style="font-family:Consolas;color:#e0e0e0;">' + nearest.val.toFixed(2) + '</span> '
+      + '<span style="font-family:Consolas;color:' + color + ';font-weight:600;">' + sign + chg.toFixed(2) + '</span> '
+      + '<span style="font-family:Consolas;color:' + color + ';">' + sign + pct.toFixed(2) + '%</span>';
+    crosshair.setAttribute('x1', nearest.x);
+    crosshair.setAttribute('x2', nearest.x);
+    crosshair.setAttribute('y1', pad);
+    crosshair.setAttribute('y2', pad + ch);
+    crosshair.setAttribute('opacity', '0.6');
+  };
+  svg.onmouseleave = function() {
+    crosshair.setAttribute('opacity', '0');
+    tooltip.innerHTML = '\u79fb\u52a8\u9f20\u6807\u67e5\u770b\u8be6\u60c5';
+  };
 }
 
 // ── 大盘看板：页面加载立即拉取行情，再检测交易时间决定是否开启定时刷新 ──
