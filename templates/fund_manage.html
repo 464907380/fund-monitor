@@ -934,7 +934,7 @@ function _resumeRecommendProgress() {
               if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
               if (btn) btn.textContent = '⏳ 渲染表格';
               var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-              var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+              var ftPromise = fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
               try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) {}
               try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) {}
               if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
@@ -2089,7 +2089,7 @@ async function runRecommendFromFilter() {
                 if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
                 if (btn) btn.textContent = '⏳ 渲染表格';
                 var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-                var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+                var ftPromise = fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
                 var _tableOk = true;
                 try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
                 try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
@@ -2107,7 +2107,7 @@ async function runRecommendFromFilter() {
                 if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
                 if (btn) btn.textContent = '⏳ 渲染表格';
                 var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-                var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+                var ftPromise = fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
                 var _tableOk = true;
                 try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
                 try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
