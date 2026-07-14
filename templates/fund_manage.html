@@ -1001,8 +1001,8 @@ function _updateCountdownDisplay() {
 
 function _doAutoRefresh() {
   if (!_autoRefreshEnabled) return;
-  // 收盘后自动停止自动刷新
-  if (!_isTradingTime) {
+  // 收盘后（≥15:00）自动停止自动刷新
+  if (new Date().getHours() >= 15) {
     toggleAutoRefresh();
     return;
   }
