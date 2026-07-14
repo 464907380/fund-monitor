@@ -416,6 +416,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/market-trends":
+            """大盘指数当日5分钟K线数据（用于画分时折线图）"""
+            try:
+                from fund_utils import fetch
+                import datetime, json as _json
+                now = datetime.datetime.now()
+                today_str = now.strftime("%Y-%m-%d")
+                symbols = [
+                    ("sh000001", "上证指数"),
+                    ("sz399001", "深证成指"),
+                    ("sz399006", "创业板指"),
+                ]
+                result = []
+                for sym, name in symbols:
+                    url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
+                    raw = fetch(url)
+                    points = _json.loads(raw)
+                    # 只取今日数据
+                    today_points = [p for p in points if p.get("day", "").startswith(today_str)]
+                    closes = [float(p["close"]) for p in today_points if p.get("close")]
+                    result.append({
+                        "name": name,
+                        "symbol": sym,
+                        "closes": closes,
+                    })
+                self._send(*_json_response({"ok": True, "trends": result}))
+            except Exception as e:
+                print(f"[ERROR] /api/market-trends: {e}", flush=True)
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/search":
             try:
                 q = params.get("q", [""])[0]
