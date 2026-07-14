@@ -1027,6 +1027,13 @@ var _isTradingTime = false;
 // ── 大盘指数看板 ──
 var _marketTimer = null;
 function loadMarketIndices() {
+  // 收盘后（≥15:00）停止大盘定时刷新
+  var _nowH = new Date().getHours();
+  if (_nowH >= 15 && _marketTimer) {
+    clearInterval(_marketTimer);
+    _marketTimer = null;
+    return;
+  }
   fetch(API + '/api/market-indices?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok || !d.indices || !d.indices.length) { document.getElementById('marketBoard').style.display = 'none'; return; }
     document.getElementById('marketBoard').style.display = '';
