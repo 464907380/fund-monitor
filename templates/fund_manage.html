@@ -1039,7 +1039,7 @@ function loadMarketIndices() {
         + '<span style="font-family:Consolas;font-weight:600;font-size:14px;color:#e0e0e0;">' + idx.price.toFixed(2) + '</span>'
         + '</div>'
         + '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<span class="marketSparkline" style="display:inline-block;width:100px;height:24px;flex-shrink:0;"></span>'
+        + '<span class="marketSparkline" style="display:inline-block;width:160px;height:48px;flex-shrink:0;"></span>'
         + '<span style="font-family:Consolas;font-size:12px;color:' + color + ';">' + ptsSign + idx.change_points.toFixed(2) + '</span>'
         + '<span style="font-family:Consolas;font-size:12px;font-weight:600;color:' + color + ';">' + sign + idx.change_pct.toFixed(2) + '%</span>'
         + '</div>'
@@ -1068,7 +1068,7 @@ function _renderMarketSparklines() {
         if (closes[k] > mx) mx = closes[k];
       }
       var range = mx - mn || 1;
-      var sw = 100, sh = 24, pad = 1;
+      var sw = 160, sh = 48, pad = 2;
       var pts = [];
       for (var k = 0; k < closes.length; k++) {
         var x = k / (closes.length - 1) * (sw - pad * 2) + pad;
@@ -1078,8 +1078,8 @@ function _renderMarketSparklines() {
       var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
       var polyPts = pts.join(' ');
       var bgPts = polyPts + ' ' + (sw - pad).toFixed(1) + ',' + (sh - pad).toFixed(1) + ' ' + pad.toFixed(1) + ',' + (sh - pad).toFixed(1);
-      var svg = '<svg width="100" height="24" viewBox="0 0 100 24" style="display:block;cursor:pointer;" onclick="showMarketTrend(' + i + ')">'
-        + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="1.5" points="' + polyPts + '"/>'
+      var svg = '<svg width="160" height="48" viewBox="0 0 160 48" style="display:block;cursor:pointer;" onclick="showMarketTrend(' + i + ')">'
+        + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>'
         + '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + bgPts + '"/>'
         + '</svg>';
       if (containers[i]) containers[i].innerHTML = svg;
