@@ -970,24 +970,17 @@ fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r
   _isTradingTime = d.is_trading === true;
   // 大盘数据始终加载（收盘后仍有最新行情）
   loadMarketIndices();
-  _startMarketTimerIfTrading();
-}).catch(function(){});
-
-// 每分钟检测一次是否需要启动大盘定时器（解决跨日后页面未刷新的问题）
-function _startMarketTimerIfTrading() {
-  if (_isTradingTime && !_marketTimer) {
+  if (_isTradingTime) {
     _marketTimer = setInterval(loadMarketIndices, 60000);
+  } else if (d.next_check_seconds > 0) {
+    // 非交易时间：等下次交易时段再启动（跨日自动恢复）
+    setTimeout(function(){
+      _isTradingTime = true;
+      loadMarketIndices();
+      _marketTimer = setInterval(loadMarketIndices, 60000);
+    }, d.next_check_seconds * 1000);
   }
-}
-setInterval(function(){
-  if (_isTradingTime && !_marketTimer) {
-    fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
-      if (!d.ok) return;
-      _isTradingTime = d.is_trading === true;
-      _startMarketTimerIfTrading();
-    }).catch(function(){});
-  }
-}, 60000);
+}).catch(function(){});
 
 function setupDragSort() {
   var tbody = document.querySelector('#fundFullTable table tbody');
