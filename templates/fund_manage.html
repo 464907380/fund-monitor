@@ -1044,6 +1044,7 @@ function loadMarketIndices() {
         + '<span style="font-family:Consolas;font-size:12px;font-weight:600;color:' + color + ';">' + sign + idx.change_pct.toFixed(2) + '%</span>'
         + '</div>'
         + '</div>';
+    }
     container.innerHTML = html;
     timeEl.textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
     // 加载分时折线图
