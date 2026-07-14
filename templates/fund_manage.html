@@ -964,17 +964,15 @@ function loadMarketIndices() {
   }).catch(function(){});
 }
 
-// ── 启动时检查交易时间，大盘数据始终加载，自动刷新仅交易时段开启 ──
-(function _initMarketBoard(retries) {
+// ── 大盘看板：页面加载立即拉取行情，再检测交易时间决定是否开启定时刷新 ──
+loadMarketIndices();
+(function _initMarketTimer() {
   fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok) return;
     _isTradingTime = d.is_trading === true;
-    // 大盘数据始终加载（收盘后仍有最新行情）
-    loadMarketIndices();
     if (_isTradingTime) {
       _marketTimer = setInterval(loadMarketIndices, 60000);
     } else if (d.next_check_seconds > 0) {
-      // 非交易时间：等下次交易时段再启动（跨日自动恢复）
       setTimeout(function(){
         _isTradingTime = true;
         loadMarketIndices();
@@ -982,9 +980,10 @@ function loadMarketIndices() {
       }, d.next_check_seconds * 1000);
     }
   }).catch(function(){
-    if (retries > 0) setTimeout(function(){ _initMarketBoard(retries - 1); }, 5000);
+    // 检测失败则持续重试（大盘定时器依赖这个结果）
+    setTimeout(_initMarketTimer, 5000);
   });
-})(3);
+})();
 
 function setupDragSort() {
   var tbody = document.querySelector('#fundFullTable table tbody');
