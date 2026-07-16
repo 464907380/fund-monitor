@@ -81,3 +81,5 @@ recommend.log
 # 评分配置（本地自定义，不提交）
 data/config.json
 .venv312/
+
+tmp_*
