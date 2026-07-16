@@ -83,3 +83,5 @@ data/config.json
 .venv312/
 
 tmp_*
+# 调试脚本
+_*.py
