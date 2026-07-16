@@ -377,6 +377,13 @@ input, select, button { font-family: inherit; outline: none; }
     <div style="display:flex;align-items:center;gap:8px;padding:8px 10px 0;">
       <span style="font-size:13px;font-weight:600;color:#ccc;flex:1;">📊 自选基金完整数据</span>
       <span id="fundAutoRefreshStatus" style="font-size:11px;color:#555;"></span>
+      <select id="fundRefreshInterval" onchange="_saveRefreshInterval()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#888;padding:2px 4px;font-size:11px;cursor:pointer;">
+        <option value="60">1分钟</option>
+        <option value="120">2分钟</option>
+        <option value="300">5分钟</option>
+        <option value="600" selected>10分钟</option>
+        <option value="1800">30分钟</option>
+      </select>
       <button onclick="toggleAutoRefresh()" id="fundAutoRefreshBtn" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#888;padding:3px 10px;font-size:11px;cursor:pointer;">🔄 自动刷新</button>
     </div>
     <div id="fundFullTable" style="padding:0;font-size:12px;color:#666;"><p style="padding:12px 4px;">⏳ 加载中…</p></div>
@@ -955,7 +962,8 @@ function _resumeRecommendProgress() {
 var _autoRefreshTimer = null;
 var _autoRefreshCountdown = null;
 var _autoRefreshEnabled = false;
-var _autoRefreshTicks = 0; // 距下次刷新的秒数
+var _autoRefreshTicks = 0;
+var _autoRefreshInterval = 600; // 默认10分钟（秒） // 距下次刷新的秒数
 
 function toggleAutoRefresh() {
   var btn = document.getElementById('fundAutoRefreshBtn');
@@ -977,7 +985,7 @@ function toggleAutoRefresh() {
     }
     // 开启
     _autoRefreshEnabled = true;
-    _autoRefreshTicks = 600;
+    _autoRefreshTicks = _autoRefreshInterval;
     if (btn) { btn.style.borderColor = '#42a5f5'; btn.style.color = '#42a5f5'; btn.textContent = '🔄 自动刷新中'; }
     _updateCountdownDisplay();
     _autoRefreshCountdown = setInterval(function() {
@@ -987,7 +995,24 @@ function toggleAutoRefresh() {
     }, 1000);
     _doAutoRefresh();
     try { localStorage.setItem('fundAutoRefresh', '1'); } catch(e) {}
-    _autoRefreshTimer = setInterval(_doAutoRefresh, 600000); // 10分钟
+    _autoRefreshTimer = setInterval(_doAutoRefresh, _autoRefreshInterval * 1000);
+  }
+}
+
+/** 保存刷新间隔选择到localStorage */
+function _saveRefreshInterval() {
+  var sel = document.getElementById('fundRefreshInterval');
+  if (!sel) return;
+  _autoRefreshInterval = parseInt(sel.value, 10) || 600;
+  try { localStorage.setItem('fundRefreshInterval', _autoRefreshInterval); } catch(e) {}
+  // 如果正在刷新中，重置倒计时和定时器
+  if (_autoRefreshEnabled) {
+    _autoRefreshTicks = _autoRefreshInterval;
+    _updateCountdownDisplay();
+    if (_autoRefreshTimer) {
+      clearInterval(_autoRefreshTimer);
+      _autoRefreshTimer = setInterval(_doAutoRefresh, _autoRefreshInterval * 1000);
+    }
   }
 }
 
@@ -1006,7 +1031,7 @@ function _doAutoRefresh() {
     toggleAutoRefresh();
     return;
   }
-  _autoRefreshTicks = 600;
+  _autoRefreshTicks = _autoRefreshInterval;
   var statusEl = document.getElementById('fundAutoRefreshStatus');
   if (statusEl) statusEl.textContent = '刷新中...';
   _updateCountdownDisplay();
@@ -1205,7 +1230,15 @@ loadMarketIndices();
   fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok) return;
     _isTradingTime = d.is_trading === true;
-    // 恢复自动刷新状态
+    // 恢复刷新间隔和自动刷新状态
+    try {
+      var savedInterval = parseInt(localStorage.getItem('fundRefreshInterval'), 10);
+      if (savedInterval && [60,120,300,600,1800].indexOf(savedInterval) >= 0) {
+        _autoRefreshInterval = savedInterval;
+        var sel = document.getElementById('fundRefreshInterval');
+        if (sel) sel.value = savedInterval;
+      }
+    } catch(e) {}
     if (_isTradingTime) {
       try { if (localStorage.getItem('fundAutoRefresh') === '1') toggleAutoRefresh(); } catch(e) {}
       _marketTimer = setInterval(loadMarketIndices, 60000);
