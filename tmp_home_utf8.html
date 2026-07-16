@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -616,67 +616,86 @@ async function loadList() {
   render();
 }
 
-function render() {
-  const el = document.getElementById('list');
-  document.getElementById('count').textContent = funds.length + ' 只';
-  if (!funds.length) {
-    el.innerHTML = '<div class="empty">暂无监控基金</div>';
-    return;
+function fetchHoldings(code, name, contentEl) {
+  // 发起请求并填充到指定 content 元素
+  contentEl.innerHTML = '\u23f3 \u52a0\u8f7d\u4e2d...';
+  return fetch(API + '/api/holdings?code=' + encodeURIComponent(code))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) {
+        contentEl.innerHTML = '<div style="color:#ef5350;">加载失败：' + (d.error || '服务端返回错误') + '</div>'
+          + '<div style="margin-top:8px;text-align:right;"><button onclick="fetchHoldings(\'' + code + '\', \'' + htmlEscape(name) + '\', document.getElementById(\'holdingsContent\'))" style="padding:6px 10px;border-radius:4px;border:1px solid #444;background:#222;color:#fff;cursor:pointer;">重试</button></div>';
+        return;
+      }
+      if (!d.holdings || d.holdings.length === 0) {
+        // 提示可能原因并提供重试
+        var reason = '<div style="color:#666;">暂无持仓数据</div>';
+        if (d.source === 'remote' && d.fetched === false) {
+          reason = '<div style="color:#666;">未能从目标站点抓取到数据（远端无数据或请求被阻止）</div>';
+        }
+        contentEl.innerHTML = reason
+          + '<div style="margin-top:8px;text-align:right;"><button onclick="fetchHoldings(\'' + code + '\', \'' + htmlEscape(name) + '\', document.getElementById(\'holdingsContent\'))" style="padding:6px 10px;border-radius:4px;border:1px solid #444;background:#222;color:#fff;cursor:pointer;">重试</button></div>';
+        return;
+      }
+      var tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
+        + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">股票</th>'
+        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实时涨跌</th></tr></thead><tbody>';
+      d.holdings.forEach(function(h){
+        var chgStr = '';
+        var chgColor = '#888';
+        if (h.chg !== null && h.chg !== undefined) {
+          chgStr = (h.chg > 0 ? '+' : '') + h.chg.toFixed(2) + '%';
+          chgColor = h.chg > 0 ? '#ef5350' : '#66bb6a';
+        } else {
+          chgStr = '-';
+        }
+        var stockFullCode = (h.m || 'sz') + h.c;
+        tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">'
+          + '<span onclick="event.stopPropagation();showStockInfo(\'' + htmlEscape(h.n || '') + '\',\'' + stockFullCode + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.25);" title="点击查看详情">' + htmlEscape(h.n || '') + '</span></td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td></tr>';
+      });
+      tbl += '</tbody></table>';
+      contentEl.innerHTML = tbl;
+    })
+    .catch(function(){
+      contentEl.innerHTML = '<div style="color:#ef5350;">加载失败（网络或解析错误）</div>'
+        + '<div style="margin-top:8px;text-align:right;"><button onclick="fetchHoldings(\'' + code + '\', \'' + htmlEscape(name) + '\', document.getElementById(\'holdingsContent\'))" style="padding:6px 10px;border-radius:4px;border:1px solid #444;background:#222;color:#fff;cursor:pointer;">重试</button></div>';
+    });
+}
+
+function showHoldings(code, name) {
+  var backdrop = document.getElementById("holdingsBackdrop");
+  if (!backdrop) {
+    backdrop = document.createElement("div");
+    backdrop.id = "holdingsBackdrop";
+    document.body.appendChild(backdrop);
   }
-  el.innerHTML = funds.map(f => {
-    const name = htmlEscape(f.name || '');
-    const code = htmlEscape(f.code || '');
-    return `<div class="fund-row">
-      <div class="info">
-        <span class="name">${name || code}</span>
-        <span class="code">${name ? code : ''}</span>
-      </div>
-      <button class="del-btn" onclick="openModal('${htmlEscape(f.code)}', '${htmlEscape(f.name || '')}')">删除</button>
-    </div>`;
-  }).join('');
-}
+  backdrop.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:9998;background:rgba(0,0,0,0.5);";
+  backdrop.onclick = function(){ backdrop.style.display='none'; var m=document.getElementById('holdingsModal'); if(m)m.style.display='none'; };
 
-async function addFunds() {
-  const input = document.getElementById('addInput');
-  const raw = input.value.trim();
-  if (!raw) return;
-  const codes = raw.split(/[\s,，、;；]+/).filter(Boolean);
-  const r = await fetch(API + '/api/add', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ codes }),
-  });
-  const d = await r.json();
-  input.value = '';
-  if (d.ok) {
-    const parts = [];
-    if (d.added.length) parts.push('✅ 添加 ' + d.added.join(', '));
-    if (d.skipped.length) parts.push('⏭️ 已存在 ' + d.skipped.join(', '));
-    if (d.invalid.length) parts.push('⚠️ 格式错误 ' + d.invalid.join(', '));
-    showMsg(parts.join('；') + `（当前 ${d.total} 只）`, 'ok');
-    await loadList();
-    loadSavedTables();
-  } else {
-    showMsg('❌ ' + (d.error || '添加失败'), 'err');
+  var el = document.getElementById("holdingsModal");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "holdingsModal";
+    document.body.appendChild(el);
   }
-}
+  el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:480px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+    + '<div><span style="font-size:13px;font-weight:600;color:#e0e0e0;">\ud83d\udcc8 ' + name + '</span> <span style="color:#666;font-size:11px;">' + code + '</span></div>'
+    + '<span onclick="this.closest(\'#holdingsModal\').style.display=\'none\';document.getElementById(\'holdingsBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:16px;">&times;</span></div>'
+    + '<div id="holdingsContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
+    + '</div>';
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:90%;max-width:480px;";
+  el.onclick = function(e){ e.stopPropagation(); };
 
-function openModal(code, name) {
-  pendingCode = code;
-  document.getElementById('modalCode').textContent = code;
-  document.getElementById('modalName').textContent = name;
-  document.getElementById('modal').classList.add('show');
+  // 发起一次请求
+  var content = document.getElementById('holdingsContent');
+  fetchHoldings(code, name, content);
 }
-
-function closeModal() {
-  pendingCode = null;
-  document.getElementById('modal').classList.remove('show');
-}
-
-async function confirmRemove() {
-  if (!pendingCode) return;
-  const code = pendingCode;
-  closeModal();
   const r = await fetch(API + '/api/remove', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1065,16 +1084,6 @@ function loadMarketIndices() {
 }
 /** 渲染大盘分时折线图 */
 var _marketTrendData = [];
-/** 解析交易时间偏移量：09:30→0, 11:30→120, 13:00→120, 15:00→240 */
-function _parseTradingOffset(tStr) {
-  var m = tStr.match(/(\d{2}):(\d{2})/);
-  if (!m) return 0;
-  var mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-  if (mins < 570) return 0;       // 09:30之前
-  if (mins <= 690) return mins - 570; // 09:30-11:30
-  if (mins < 780) return 120;     // 11:30-13:00 午休
-  return 120 + (mins - 780);      // 13:00-15:00
-}
 function _renderMarketSparklines() {
   fetch(API + '/api/market-trends?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok || !d.trends) return;
@@ -1082,9 +1091,7 @@ function _renderMarketSparklines() {
     var containers = document.querySelectorAll('.marketSparkline');
     for (var i = 0; i < d.trends.length; i++) {
       var t = d.trends[i];
-      // 优先用 points（含 offset），降级到 closes
-      var ptsData = t.points || t.closes.map(function(c, idx){ return {close: c, offset: (t.points && t.points[idx] ? t.points[idx].offset : idx / (t.closes.length-1) * 240)}; });
-      var closes = ptsData.map(function(p){ return p.close; });
+      var closes = t.closes;
       if (!closes || closes.length < 2) continue;
       var mn = closes[0], mx = closes[0];
       for (var k = 1; k < closes.length; k++) {
@@ -1092,17 +1099,15 @@ function _renderMarketSparklines() {
         if (closes[k] > mx) mx = closes[k];
       }
       var range = mx - mn || 1;
-      var sw = 160, sh = 48, pad = 2, maxOff = 240;
-      var svgPts = [];
-      for (var k = 0; k < ptsData.length; k++) {
-        var off = ptsData[k].offset !== undefined ? ptsData[k].offset : k / (ptsData.length - 1) * maxOff;
-        var x = off / maxOff * (sw - pad * 2) + pad;
+      var sw = 160, sh = 48, pad = 2;
+      var pts = [];
+      for (var k = 0; k < closes.length; k++) {
+        var x = k / (closes.length - 1) * (sw - pad * 2) + pad;
         var y = sh - pad - (closes[k] - mn) / range * (sh - pad * 2);
-        svgPts.push(x.toFixed(1) + ',' + y.toFixed(1));
+        pts.push(x.toFixed(1) + ',' + y.toFixed(1));
       }
-      var basePrice = t.pre_close || closes[0];
-      var lineColor = closes[closes.length - 1] >= basePrice ? '#ef5350' : '#66bb6a';
-      var polyPts = svgPts.join(' ');
+      var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
+      var polyPts = pts.join(' ');
       var bgPts = polyPts + ' ' + (sw - pad).toFixed(1) + ',' + (sh - pad).toFixed(1) + ' ' + pad.toFixed(1) + ',' + (sh - pad).toFixed(1);
       var svg = '<svg width="160" height="48" viewBox="0 0 160 48" style="display:block;cursor:pointer;" onclick="showMarketTrend(' + i + ')">'
         + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>'
@@ -1115,10 +1120,8 @@ function _renderMarketSparklines() {
 /** 大盘分时折线图弹窗 */
 function showMarketTrend(idx) {
   var t = _marketTrendData[idx];
-  if (!t) return;
-  var ptsData = t.points || t.closes.map(function(c, i){ return {close: c, offset: i / (t.closes.length-1) * 240}; });
-  var closes = ptsData.map(function(p){ return p.close; });
-  if (!closes || closes.length < 2) return;
+  if (!t || !t.closes || t.closes.length < 2) return;
+  var closes = t.closes;
   var name = t.name;
   var mn = closes[0], mx = closes[0];
   for (var k = 1; k < closes.length; k++) {
@@ -1126,17 +1129,14 @@ function showMarketTrend(idx) {
     if (closes[k] > mx) mx = closes[k];
   }
   var range = mx - mn || 1;
-  var maxOff = 240;
   var w = 480, h = 220, pad = 30, cw = w - pad * 2, ch = h - pad * 2;
   var pts = [];
-  for (var i = 0; i < ptsData.length; i++) {
-    var off = ptsData[i].offset !== undefined ? ptsData[i].offset : i / (ptsData.length - 1) * maxOff;
-    var x = pad + off / maxOff * cw;
+  for (var i = 0; i < closes.length; i++) {
+    var x = pad + i / (closes.length - 1) * cw;
     var y = pad + ch - (closes[i] - mn) / range * ch;
-    pts.push({x: x, y: y, idx: i, val: closes[i], off: off});
+    pts.push({x: x, y: y, idx: i, val: closes[i]});
   }
-  var basePrice = t.pre_close || closes[0];
-  var lineColor = closes[closes.length - 1] >= basePrice ? '#ef5350' : '#66bb6a';
+  var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
   var polyPts = pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
   var svgHtml = '<svg id="mktTrendSvg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;margin:0 auto;background:transparent;cursor:crosshair;">'
     + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>'
@@ -1169,20 +1169,18 @@ function showMarketTrend(idx) {
     for (var k = 1; k < pts.length; k++) {
       if (Math.abs(pts[k].x - mouseX) < Math.abs(nearest.x - mouseX)) nearest = pts[k];
     }
-    var openVal = t.pre_close || closes[0];
+    var openVal = closes[0];
     var chg = nearest.val - openVal;
     var pct = openVal ? (chg / openVal * 100) : 0;
     var sign = chg >= 0 ? '+' : '';
     var color = chg >= 0 ? '#ef5350' : '#66bb6a';
-    // 用offset反推时间
-    var _off = nearest.off;
-    var _hh, _mm;
-    if (_off <= 120) {
-      _hh = 9; _mm = 30 + _off;
-    } else {
-      _hh = 13; _mm = _off - 120;
-    }
-    var timeStr = ('0' + _hh).slice(-2) + ':' + ('0' + _mm).slice(-2);
+    // 估算时间
+    var totalMin = 240; // 9:30~13:30 = 4h = 240min
+    var minIdx = Math.round(nearest.idx / (closes.length - 1) * totalMin);
+    var hh = Math.floor(minIdx / 60) + 9;
+    var mm = minIdx % 60 + (hh >= 11 ? 30 : 0); // 11:30休市
+    if (hh > 11) hh += 1; // 下午从13:00开始
+    var timeStr = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
     tooltip.innerHTML = '<span style="color:#aaa;">' + timeStr + '</span> '
       + '<span style="font-family:Consolas;color:#e0e0e0;">' + nearest.val.toFixed(2) + '</span> '
       + '<span style="font-family:Consolas;color:' + color + ';font-weight:600;">' + sign + chg.toFixed(2) + '</span> '
@@ -2626,6 +2624,7 @@ function showTrendChart(el) {
 </script>
 </body>
 </html>
+
 
 
 

@@ -450,6 +450,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
                     raw = fetch(url)
                     points = _json.loads(raw)
+                    # 从原始数据中提取昨日收盘价（最后一个非今日的close）
+                    pre_close = None
+                    for p in reversed(points):
+                        if not p.get("day", "").startswith(today_str) and p.get("close"):
+                            pre_close = float(p["close"])
+                            break
                     # 只取今日数据
                     today_points = [p for p in points if p.get("day", "").startswith(today_str)]
                     pt_list = []
@@ -464,6 +470,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "symbol": sym,
                         "closes": closes,
                         "points": pt_list,
+                        "pre_close": pre_close,
                     })
                 self._send(*_json_response({"ok": True, "trends": result}))
             except Exception as e:
