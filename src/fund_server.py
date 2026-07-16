@@ -1287,6 +1287,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         else:
                             score = round(pct_pos * 100)
                         curve.append([v, score])
+                    # 极值延展：在得分接近0的一端外推一段，让超低/超高值也有区分度
+                    data_range = curve[-1][0] - curve[0][0] if len(curve) >= 2 else 10
+                    extend = max(round(data_range * 0.3, 2), round(abs(curve[0][0]) * 0.15, 2), 3)
+                    if not is_lower and len(curve) >= 2 and curve[0][1] < 10:
+                        # 越高越好：左端延展（提升首点分数+加左延展点）
+                        bump = min(10, max(5, curve[1][1] / 2))
+                        new_left = round(curve[0][0] - extend, 2)
+                        curve.insert(0, [new_left, 0])
+                        if len(curve) >= 3 and curve[2][1] > bump:
+                            curve[1][1] = round(bump)
+                    elif is_lower and len(curve) >= 2 and curve[-1][1] < 10:
+                        # 越低越好：右端延展（提升末点分数+加右延展点）
+                        bump = min(10, max(5, curve[-2][1] / 2))
+                        new_right = round(curve[-1][0] + extend, 2)
+                        curve.append([new_right, 0])
+                        if len(curve) >= 3 and curve[-3][1] > bump:
+                            curve[-2][1] = round(bump)
                     dim["curve"] = {"points": curve}
 
                 with open(_CONFIG_PATH, "w", encoding="utf-8") as _fw:
