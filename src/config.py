@@ -115,7 +115,7 @@ _DEFAULTS = {
             "fund_pingzhongdata": "https://fund.eastmoney.com/pingzhongdata/{code}.js",
             "fund_estimate": "https://fundgz.1234567.com.cn/js/{code}.js",
             "fund_estimate_fallback": "http://fundgz.1234567.com.cn/js/{code}.js",
-            "fund_holdings": "https://fund.eastmoney.com/f10/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=10&year=&month=&rt=0.1",
+            "fund_holdings": "https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code={code}&topline=10&year=&month=&rt=0.1",
             "fund_rank": "https://fund.eastmoney.com/data/rankhandler.aspx",
             "fund_search_index": "https://fund.eastmoney.com/js/fundcode_search.js",
             "sina_hq": "https://hq.sinajs.cn/list={code}",

@@ -156,7 +156,7 @@ def _parse_holdings(code: str) -> list[dict] | None:
     import html as _html
     url = api_url("fund_holdings", code=code)
     try:
-        jj = fetch(url)
+        jj = fetch(url, headers={"Referer": "https://fundf10.eastmoney.com/"})
         cm = re.search(r'content:"(.+?)"', jj, re.DOTALL)
         if not cm:
             return None
