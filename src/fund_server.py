@@ -428,6 +428,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     ("sz399001", "深证成指"),
                     ("sz399006", "创业板指"),
                 ]
+                def _trading_offset(day_str: str) -> int:
+                    """计算交易偏移量（分钟），09:30→0, 11:30→120, 13:00→120, 15:00→240"""
+                    import datetime as _dt
+                    try:
+                        dt = _dt.datetime.strptime(day_str, "%Y-%m-%d %H:%M:%S")
+                        mins = dt.hour * 60 + dt.minute
+                        if mins < 570:  # 09:30 之前
+                            return 0
+                        if mins <= 690:  # 09:30-11:30
+                            return mins - 570
+                        if mins < 780:  # 11:30-13:00 午休
+                            return 120
+                        # 13:00-15:00
+                        return 120 + (mins - 780)
+                    except Exception:
+                        return 0
+
                 result = []
                 for sym, name in symbols:
                     url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
@@ -435,11 +452,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     points = _json.loads(raw)
                     # 只取今日数据
                     today_points = [p for p in points if p.get("day", "").startswith(today_str)]
-                    closes = [float(p["close"]) for p in today_points if p.get("close")]
+                    pt_list = []
+                    for p in today_points:
+                        day_str = p.get("day", "")
+                        close = float(p.get("close", 0))
+                        off = _trading_offset(day_str)
+                        pt_list.append({"t": day_str, "close": close, "offset": off})
+                    closes = [pt["close"] for pt in pt_list]
                     result.append({
                         "name": name,
                         "symbol": sym,
                         "closes": closes,
+                        "points": pt_list,
                     })
                 self._send(*_json_response({"ok": True, "trends": result}))
             except Exception as e:

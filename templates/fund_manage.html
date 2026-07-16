@@ -1065,6 +1065,16 @@ function loadMarketIndices() {
 }
 /** 渲染大盘分时折线图 */
 var _marketTrendData = [];
+/** 解析交易时间偏移量：09:30→0, 11:30→120, 13:00→120, 15:00→240 */
+function _parseTradingOffset(tStr) {
+  var m = tStr.match(/(\d{2}):(\d{2})/);
+  if (!m) return 0;
+  var mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  if (mins < 570) return 0;       // 09:30之前
+  if (mins <= 690) return mins - 570; // 09:30-11:30
+  if (mins < 780) return 120;     // 11:30-13:00 午休
+  return 120 + (mins - 780);      // 13:00-15:00
+}
 function _renderMarketSparklines() {
   fetch(API + '/api/market-trends?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok || !d.trends) return;
@@ -1072,7 +1082,9 @@ function _renderMarketSparklines() {
     var containers = document.querySelectorAll('.marketSparkline');
     for (var i = 0; i < d.trends.length; i++) {
       var t = d.trends[i];
-      var closes = t.closes;
+      // 优先用 points（含 offset），降级到 closes
+      var ptsData = t.points || t.closes.map(function(c, idx){ return {close: c, offset: (t.points && t.points[idx] ? t.points[idx].offset : idx / (t.closes.length-1) * 240)}; });
+      var closes = ptsData.map(function(p){ return p.close; });
       if (!closes || closes.length < 2) continue;
       var mn = closes[0], mx = closes[0];
       for (var k = 1; k < closes.length; k++) {
@@ -1080,15 +1092,16 @@ function _renderMarketSparklines() {
         if (closes[k] > mx) mx = closes[k];
       }
       var range = mx - mn || 1;
-      var sw = 160, sh = 48, pad = 2;
-      var pts = [];
-      for (var k = 0; k < closes.length; k++) {
-        var x = k / (closes.length - 1) * (sw - pad * 2) + pad;
+      var sw = 160, sh = 48, pad = 2, maxOff = 240;
+      var svgPts = [];
+      for (var k = 0; k < ptsData.length; k++) {
+        var off = ptsData[k].offset !== undefined ? ptsData[k].offset : k / (ptsData.length - 1) * maxOff;
+        var x = off / maxOff * (sw - pad * 2) + pad;
         var y = sh - pad - (closes[k] - mn) / range * (sh - pad * 2);
-        pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+        svgPts.push(x.toFixed(1) + ',' + y.toFixed(1));
       }
       var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
-      var polyPts = pts.join(' ');
+      var polyPts = svgPts.join(' ');
       var bgPts = polyPts + ' ' + (sw - pad).toFixed(1) + ',' + (sh - pad).toFixed(1) + ' ' + pad.toFixed(1) + ',' + (sh - pad).toFixed(1);
       var svg = '<svg width="160" height="48" viewBox="0 0 160 48" style="display:block;cursor:pointer;" onclick="showMarketTrend(' + i + ')">'
         + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>'
@@ -1101,8 +1114,10 @@ function _renderMarketSparklines() {
 /** 大盘分时折线图弹窗 */
 function showMarketTrend(idx) {
   var t = _marketTrendData[idx];
-  if (!t || !t.closes || t.closes.length < 2) return;
-  var closes = t.closes;
+  if (!t) return;
+  var ptsData = t.points || t.closes.map(function(c, i){ return {close: c, offset: i / (t.closes.length-1) * 240}; });
+  var closes = ptsData.map(function(p){ return p.close; });
+  if (!closes || closes.length < 2) return;
   var name = t.name;
   var mn = closes[0], mx = closes[0];
   for (var k = 1; k < closes.length; k++) {
@@ -1110,12 +1125,14 @@ function showMarketTrend(idx) {
     if (closes[k] > mx) mx = closes[k];
   }
   var range = mx - mn || 1;
+  var maxOff = 240;
   var w = 480, h = 220, pad = 30, cw = w - pad * 2, ch = h - pad * 2;
   var pts = [];
-  for (var i = 0; i < closes.length; i++) {
-    var x = pad + i / (closes.length - 1) * cw;
+  for (var i = 0; i < ptsData.length; i++) {
+    var off = ptsData[i].offset !== undefined ? ptsData[i].offset : i / (ptsData.length - 1) * maxOff;
+    var x = pad + off / maxOff * cw;
     var y = pad + ch - (closes[i] - mn) / range * ch;
-    pts.push({x: x, y: y, idx: i, val: closes[i]});
+    pts.push({x: x, y: y, idx: i, val: closes[i], off: off});
   }
   var lineColor = closes[closes.length - 1] >= closes[0] ? '#ef5350' : '#66bb6a';
   var polyPts = pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
@@ -1155,13 +1172,15 @@ function showMarketTrend(idx) {
     var pct = openVal ? (chg / openVal * 100) : 0;
     var sign = chg >= 0 ? '+' : '';
     var color = chg >= 0 ? '#ef5350' : '#66bb6a';
-    // 估算时间
-    var totalMin = 240; // 9:30~13:30 = 4h = 240min
-    var minIdx = Math.round(nearest.idx / (closes.length - 1) * totalMin);
-    var hh = Math.floor(minIdx / 60) + 9;
-    var mm = minIdx % 60 + (hh >= 11 ? 30 : 0); // 11:30休市
-    if (hh > 11) hh += 1; // 下午从13:00开始
-    var timeStr = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
+    // 用offset反推时间
+    var _off = nearest.off;
+    var _hh, _mm;
+    if (_off <= 120) {
+      _hh = 9; _mm = 30 + _off;
+    } else {
+      _hh = 13; _mm = _off - 120;
+    }
+    var timeStr = ('0' + _hh).slice(-2) + ':' + ('0' + _mm).slice(-2);
     tooltip.innerHTML = '<span style="color:#aaa;">' + timeStr + '</span> '
       + '<span style="font-family:Consolas;color:#e0e0e0;">' + nearest.val.toFixed(2) + '</span> '
       + '<span style="font-family:Consolas;color:' + color + ';font-weight:600;">' + sign + chg.toFixed(2) + '</span> '
