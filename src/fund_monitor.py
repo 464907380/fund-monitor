@@ -377,7 +377,7 @@ def _push_html(fund_alerts: list[str],
     )]
     if remaining:
         html_remaining = ''.join(
-            f'<p style="margin:2px 0;font-size:12px;color:{"#ef5350" if a.startswith("🔴") else "#66bb6a"};">{_icon_text(a)[0]} {_icon_text(a)[1]}</p>'
+            f'<p style="margin:2px 0;font-size:12px;color:{"#66bb6a" if a.startswith("🔴") else "#ef5350"};">{_icon_text(a)[0]} {_icon_text(a)[1]}</p>'
             for a in remaining
         )
         rows.append(f'<tr><td style="padding:6px 12px;"><p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#ccc;">其他</p>{html_remaining}</td></tr>')
@@ -407,12 +407,12 @@ def _render_fund_section(fund_name: str, fund_code: str,
     for a in matched_fa:
         icon, text = _icon_text(a)
         clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
-        color = "#ef5350" if icon == "🔴" else "#66bb6a"
+        color = "#66bb6a" if icon == "🔴" else "#ef5350"
         parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 基金：{clean_fa}</p>')
     for a in s_alerts:
         icon, text = _icon_text(a)
         clean = text.split("持仓", 1)[-1] if "持仓" in a else text
-        color = "#ef5350" if icon == "🔴" else "#66bb6a"
+        color = "#66bb6a" if icon == "🔴" else "#ef5350"
         parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 持股·{clean}</p>')
     parts.append('</div></td></tr>')
     return '\n'.join(parts)
