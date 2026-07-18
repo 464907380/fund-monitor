@@ -586,7 +586,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
                     return
                 from fund_watch import _parse_holdings
-                from fund_utils import fetch
+                from fund_utils import fetch, _retry_fetch
                 holds = _parse_holdings(code) or []
                 # 用腾讯财经接口批量获取实时涨跌（速度快，不需要Referer）
                 if holds:
@@ -595,7 +595,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for h in holds
                     )
                     try:
-                        raw = fetch(api_url("tencent_realtime", code=codes_str))
+                        raw = _retry_fetch(api_url("tencent_realtime", code=codes_str))
                         for line in raw.strip().split(";"):
                             if not line:
                                 continue
