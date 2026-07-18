@@ -674,6 +674,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         nav_ps = _fget("每股净资产")
                         if nav_ps is not None:
                             h["nav_ps"] = round(nav_ps, 2)
+                    # 从新浪F10公司概况页获取基本面信息
+                    for h in holds:
+                        stock_code = h.get("c", "")
+                        if not stock_code:
+                            continue
+                        cache_key = f"corp_{stock_code}"
+                        cached = _f10_cache.get(cache_key)
+                        if cached and _f10_now - cached[0] < 86400:
+                            corp_html = cached[1]
+                        else:
+                            try:
+                                corp_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CorpInfo/stockid/{stock_code}.phtml"
+                                corp_req = _f10_ur.Request(corp_url, headers={"User-Agent": "Mozilla/5.0"})
+                                with _f10_ur.urlopen(corp_req, timeout=10) as corp_r:
+                                    corp_html = corp_r.read().decode("gbk", errors="ignore")
+                                _f10_cache[cache_key] = (_f10_now, corp_html)
+                            except Exception:
+                                continue
+                        # 解析基本面字段（值单元格可能含有a标签等内嵌HTML）
+                        corp_pairs = _f10_re.findall(
+                            r'<td[^>]*>([^<]*(?:上市日期|机构类型|主营业务|所属行业)[^<]*)</td>\s*<td[^>]*>(.*?)</td>',
+                            corp_html
+                        )
+                        for label, value_html in corp_pairs:
+                            label_c = label.strip().rstrip("：:")
+                            # 提取纯文本（去掉内嵌的HTML标签）
+                            val_c = _f10_re.sub(r'<[^>]+>', '', value_html).strip()
+                            if "上市日期" in label_c:
+                                h["listing_date"] = val_c
+                            elif "机构类型" in label_c or "所属行业" in label_c:
+                                h["industry"] = val_c
+                            elif "主营业务" in label_c:
+                                h["main_biz"] = val_c[:80]  # 截断过长文本
                 self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
