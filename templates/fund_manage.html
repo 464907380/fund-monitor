@@ -2431,7 +2431,7 @@ function showHoldings(code, name) {
         content.innerHTML = '<span style="color:#666;">暂无持仓数据</span>';
         return;
       }
-      var tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
+      var tbl = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;white-space:nowrap;">'
         + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">股票</th>'
         + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th>'
@@ -2491,7 +2491,7 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.cf_ps != null ? '#888' : '#888') + ';">' + (h.cf_ps != null ? h.cf_ps.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.nav_ps != null ? h.nav_ps.toFixed(2) : '-') + '</td></tr>';
       });
-      tbl += '</tbody></table>';
+      tbl += '</tbody></table></div>';
       content.innerHTML = tbl;
     })
     .catch(function(){
