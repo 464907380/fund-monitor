@@ -2433,7 +2433,7 @@ function showHoldings(code, name) {
       }
       var tbl = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;white-space:nowrap;">'
         + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;position:sticky;left:0;z-index:3;background:#2a2a2a;">股票</th>'
-        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;position:sticky;left:120px;z-index:3;background:#2a2a2a;">代码</th>'
+        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实时涨跌</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市盈率(PE)=股价÷每股收益。衡量股价相对于盈利是否合理，PE越高说明市场对该公司未来越乐观，但也可能意味着估值泡沫。横向同行业对比更有意义。">PE</th>'
@@ -2482,7 +2482,7 @@ function showHoldings(code, name) {
           pegColor = h.peg < 1 ? '#66bb6a' : (h.peg <= 2 ? '#ffa726' : '#ef5350');
         }
         tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;max-width:120px;overflow:hidden;text-overflow:ellipsis;position:sticky;left:0;z-index:1;background:#1a1a1a;"><span onclick="event.stopPropagation();showStockInfo(\'' + htmlEscape(h.n || '') + '\',\'' + stockFullCode + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.25);" title="上市：' + (h.listing_date || '-') + '\n行业：' + (h.industry || '-') + '\n点击查看详情">' + htmlEscape(h.n || '') + '</span></td>'
-          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;position:sticky;left:120px;z-index:1;background:#1a1a1a;">' + htmlEscape(h.c || '') + '</td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + peStr + '</td>'
