@@ -8,7 +8,7 @@ import time
 import datetime
 from config import CFG, api_url, get_timeout
 from config import get_secret as _get_secret
-from fund_utils import fetch, _retry_fetch, log, HISTORY_DIR, _fetch_fund_estimate
+from fund_utils import fetch, log, HISTORY_DIR, _fetch_fund_estimate
 from fund_scoring import SCORE_DIMS, calc_score_detail
 from fund_metrics import _calc_nav_metrics
 
@@ -156,7 +156,7 @@ def _parse_holdings(code: str) -> list[dict] | None:
     import html as _html
     url = api_url("fund_holdings", code=code)
     try:
-        jj = _retry_fetch(url, headers={"Referer": "https://fundf10.eastmoney.com/"})
+        jj = fetch(url, headers={"Referer": "https://fundf10.eastmoney.com/"})
         cm = re.search(r'content:"(.+?)"', jj, re.DOTALL)
         if not cm:
             return None
