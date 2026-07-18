@@ -630,6 +630,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         h["float_mkt_cap"] = float_mkt_cap
                                         h["open"] = open_price
                                         h["amplitude"] = amplitude
+                                        # 52周最高/最低
+                                        wk_high = float(parts[67]) if len(parts) > 67 and parts[67] else None
+                                        wk_low = float(parts[68]) if len(parts) > 68 and parts[68] else None
+                                        h["wk_high"] = wk_high
+                                        h["wk_low"] = wk_low
+                                        if wk_high is not None and wk_low is not None and wk_high > wk_low and price:
+                                            h["wk_position"] = round((price - wk_low) / (wk_high - wk_low) * 100, 1)
                                         break
                     except Exception:
                         pass
