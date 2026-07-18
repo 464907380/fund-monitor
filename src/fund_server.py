@@ -614,6 +614,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 turnover = float(parts[38]) if len(parts) > 38 and parts[38] else None  # 换手率%
                                 vol_ratio = float(parts[49]) if len(parts) > 49 and parts[49] else None  # 量比
                                 float_mkt_cap = float(parts[44]) if len(parts) > 44 and parts[44] else None  # 流通市值(亿)
+                                open_price = float(parts[5]) if len(parts) > 5 and parts[5] else None  # 今开
+                                amplitude = float(parts[43]) if len(parts) > 43 and parts[43] else None  # 振幅%
                                 for h in holds:
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
@@ -626,6 +628,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         h["turnover"] = turnover
                                         h["vol_ratio"] = vol_ratio
                                         h["float_mkt_cap"] = float_mkt_cap
+                                        h["open"] = open_price
+                                        h["amplitude"] = amplitude
                                         break
                     except Exception:
                         pass
@@ -717,6 +721,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         total_assets = _fget("总资产(元)", "总资产)(元")
                         if total_assets is not None:
                             h["total_assets"] = round(total_assets / 1e8, 2)  # 转亿
+                        net_profit_margin = _fget("销售净利率")
+                        if net_profit_margin is not None:
+                            h["net_profit_margin"] = round(net_profit_margin, 2)
+                        main_biz_margin = _fget("主营业务利润率")
+                        if main_biz_margin is not None:
+                            h["main_biz_margin"] = round(main_biz_margin, 2)
+                        current_ratio = _fget("流动比率")
+                        if current_ratio is not None:
+                            h["current_ratio"] = round(current_ratio, 2)
+                        net_asset_growth = _fget("净资产增长率")
+                        if net_asset_growth is not None:
+                            h["net_asset_growth"] = round(net_asset_growth, 2)
+                        capital_reserve_ps = _fget("每股资本公积金")
+                        if capital_reserve_ps is not None:
+                            h["capital_reserve_ps"] = round(capital_reserve_ps, 4)
+                        roa = _fget("总资产利润率")
+                        if roa is not None:
+                            h["roa"] = round(roa, 2)
                     # 从新浪F10公司概况页获取基本面信息
                     for h in holds:
                         stock_code = h.get("c", "")
