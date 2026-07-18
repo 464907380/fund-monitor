@@ -445,6 +445,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     except Exception:
                         return 0
 
+                def _fetch_pre_close(sym: str) -> float | None:
+                    """从日K线获取昨日收盘价"""
+                    try:
+                        daily_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=2"
+                        raw_daily = fetch(daily_url)
+                        daily_data = _json.loads(raw_daily)
+                        if daily_data and len(daily_data) >= 2:
+                            return float(daily_data[-2]["close"])
+                    except Exception:
+                        pass
+                    return None
+
                 result = []
                 for sym, name in symbols:
                     url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
@@ -456,17 +468,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if not p.get("day", "").startswith(today_str) and p.get("close"):
                             pre_close = float(p["close"])
                             break
+                    # 如果5分钟K线中没有非今日数据（如全天的数据全是今天），从日K线获取
+                    if pre_close is None:
+                        pre_close = _fetch_pre_close(sym)
                     # 只取今日数据；若今日无数据（如周末），取最近一天
                     today_points = [p for p in points if p.get("day", "").startswith(today_str)]
                     if not today_points and points:
-                        # 找到最近有数据的交易日
                         last_day = points[-1].get("day", "")[:10]
                         today_points = [p for p in points if p.get("day", "").startswith(last_day)]
-                        # 重新获取昨日收盘价（用倒数第二个交易日）
-                        for p in reversed(points):
-                            if not p.get("day", "").startswith(last_day) and p.get("close"):
-                                pre_close = float(p["close"])
-                                break
+                        # 重新获取昨日收盘价（用日K线API）
+                        pre_close = _fetch_pre_close(sym)
                     pt_list = []
                     for p in today_points:
                         day_str = p.get("day", "")
