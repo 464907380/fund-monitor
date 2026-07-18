@@ -585,9 +585,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 price = float(parts[3]) if parts[3] else 0
                                 prev_close = float(parts[4]) if parts[4] else 0
                                 chg = round((price - prev_close) / prev_close * 100, 2) if prev_close else None
+                                # PE(39) 和 净利润增长率%(63)
+                                pe = float(parts[39]) if len(parts) > 39 and parts[39] else None
+                                growth = float(parts[63]) if len(parts) > 63 and parts[63] else None
+                                peg = round(pe / growth, 2) if (pe and growth and growth > 0) else None
                                 for h in holds:
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
+                                        h["pe"] = pe
+                                        h["growth"] = growth
+                                        h["peg"] = peg
                                         break
                     except Exception:
                         pass
