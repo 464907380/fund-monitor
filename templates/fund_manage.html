@@ -2559,32 +2559,90 @@ function showHoldings(code, name) {
       });
       tbl += '</tbody></table></div>';
       content.innerHTML = tbl;
-      // 列拖动排序
+      // 列拖动排序（带localStorage持久化）
       (function(){
         var tblEl = content.querySelector('table');
         if (!tblEl) return;
         var thead = tblEl.querySelector('thead');
         var tbody = tblEl.querySelector('tbody');
+        var STORAGE_KEY = 'fund_holdings_col_order';
+        // 获取当前列名列表
+        function _getColNames() {
+          return Array.from(thead.querySelectorAll('tr:first-child th')).map(function(t){ return t.textContent; });
+        }
+        // 按保存的顺序重排列
+        function _applySavedOrder() {
+          try {
+            var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+            if (!saved || !saved.length) return;
+            var cur = _getColNames();
+            // 找出交集顺序
+            var order = saved.filter(function(n){ return cur.indexOf(n) >= 0; });
+            if (order.length < 2) return;
+            var headerRow = thead.querySelector('tr:first-child');
+            order.forEach(function(name, pos){
+              var allThs = headerRow.querySelectorAll('th');
+              for (var i = 0; i < allThs.length; i++) {
+                if (allThs[i].textContent === name && i !== pos) {
+                  // 移到pos位置
+                  var ref = allThs[pos];
+                  if (pos === 0) {
+                    headerRow.insertBefore(allThs[i], headerRow.firstChild);
+                  } else if (i > pos) {
+                    headerRow.insertBefore(allThs[i], ref.nextSibling);
+                  } else {
+                    headerRow.insertBefore(allThs[i], ref);
+                  }
+                  // 同步移动数据格
+                  Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
+                    var tds = tr.querySelectorAll('td');
+                    if (tds.length <= Math.max(i, pos)) return;
+                    var refTd = tds[pos];
+                    if (pos === 0) {
+                      tr.insertBefore(tds[i], tr.firstChild);
+                    } else if (i > pos) {
+                      tr.insertBefore(tds[i], refTd.nextSibling);
+                    } else {
+                      tr.insertBefore(tds[i], refTd);
+                    }
+                  });
+                  break;
+                }
+              }
+            });
+          } catch(e) {}
+        }
+        _applySavedOrder();
         var ths = thead.querySelectorAll('tr:first-child th');
-        var dragSrcIdx = -1;
-        Array.from(ths).forEach(function(th, idx){
+        // 获取th的当前索引
+        function _thIdx(t) {
+          var all = thead.querySelectorAll('tr:first-child th');
+          for (var i = 0; i < all.length; i++) { if (all[i] === t) return i; }
+          return -1;
+        }
+        // 保存当前顺序
+        function _saveOrder() {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(_getColNames()));
+        }
+        var dragSrcEl = null;
+        Array.from(ths).forEach(function(th){
           th.draggable = true;
           th.style.cursor = 'grab';
           var origTitle = th.title || '';
           th.title = (origTitle ? origTitle + '\n' : '') + '拖动调整顺序，双击移至最前';
           th.addEventListener('dragstart', function(e){
-            dragSrcIdx = idx;
+            dragSrcEl = th;
             e.dataTransfer.effectAllowed = 'move';
             th.style.opacity = '0.5';
           });
           th.addEventListener('dragend', function(){
             th.style.opacity = '';
-            Array.from(ths).forEach(function(t){ t.style.borderLeft = ''; });
+            Array.from(thead.querySelectorAll('th')).forEach(function(t){ t.style.borderLeft = ''; });
           });
           th.addEventListener('dragover', function(e){
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-            Array.from(ths).forEach(function(t){ t.style.borderLeft = ''; });
+            Array.from(thead.querySelectorAll('th')).forEach(function(t){ t.style.borderLeft = ''; });
             th.style.borderLeft = '2px solid #888';
           });
           th.addEventListener('dragleave', function(){
@@ -2593,43 +2651,43 @@ function showHoldings(code, name) {
           th.addEventListener('drop', function(e){
             e.preventDefault();
             th.style.borderLeft = '';
-            if (dragSrcIdx < 0 || dragSrcIdx === idx) return;
-            // 交换表头
-            var srcTh = ths[dragSrcIdx];
-            var tgtTh = ths[idx];
-            if (idx > dragSrcIdx) {
-              tgtTh.parentNode.insertBefore(srcTh, tgtTh.nextSibling);
+            if (!dragSrcEl || dragSrcEl === th) return;
+            var srcIdx = _thIdx(dragSrcEl);
+            var tgtIdx = _thIdx(th);
+            if (srcIdx < 0 || tgtIdx < 0 || srcIdx === tgtIdx) return;
+            var headerRow = thead.querySelector('tr:first-child');
+            if (tgtIdx > srcIdx) {
+              headerRow.insertBefore(dragSrcEl, th.nextSibling);
             } else {
-              tgtTh.parentNode.insertBefore(srcTh, tgtTh);
+              headerRow.insertBefore(dragSrcEl, th);
             }
-            // 交换每行数据格
             Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
               var tds = tr.querySelectorAll('td');
-              if (tds.length <= Math.max(dragSrcIdx, idx)) return;
-              var srcTd = tds[dragSrcIdx];
-              var tgtTd = tds[idx];
-              if (idx > dragSrcIdx) {
+              if (tds.length <= Math.max(srcIdx, tgtIdx)) return;
+              var srcTd = tds[srcIdx];
+              var tgtTd = tds[tgtIdx];
+              if (tgtIdx > srcIdx) {
                 tr.insertBefore(srcTd, tgtTd.nextSibling);
               } else {
                 tr.insertBefore(srcTd, tgtTd);
               }
             });
-            // 更新ths引用
-            ths = thead.querySelectorAll('tr:first-child th');
-            dragSrcIdx = -1;
+            _saveOrder();
+            dragSrcEl = null;
           });
           // 双击列头将该列移至最前
-          th.addEventListener('dblclick', function(){
-            if (idx === 0) return;
-            var moveTh = ths[idx];
-            var firstTh = ths[0];
-            firstTh.parentNode.insertBefore(moveTh, firstTh);
+          th.addEventListener('dblclick', function(e){
+            e.stopPropagation();
+            var curIdx = _thIdx(th);
+            if (curIdx <= 0) return;
+            var headerRow = thead.querySelector('tr:first-child');
+            headerRow.insertBefore(th, headerRow.firstChild);
             Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
               var tds = tr.querySelectorAll('td');
-              if (tds.length <= idx) return;
-              tr.insertBefore(tds[idx], tds[0]);
+              if (tds.length <= curIdx) return;
+              tr.insertBefore(tds[curIdx], tds[0]);
             });
-            ths = thead.querySelectorAll('tr:first-child th');
+            _saveOrder();
           });
         });
       })();
