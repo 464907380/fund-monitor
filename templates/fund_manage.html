@@ -2570,6 +2570,8 @@ function showHoldings(code, name) {
         Array.from(ths).forEach(function(th, idx){
           th.draggable = true;
           th.style.cursor = 'grab';
+          var origTitle = th.title || '';
+          th.title = (origTitle ? origTitle + '\n' : '') + '拖动调整顺序，双击移至最前';
           th.addEventListener('dragstart', function(e){
             dragSrcIdx = idx;
             e.dataTransfer.effectAllowed = 'move';
@@ -2615,6 +2617,19 @@ function showHoldings(code, name) {
             // 更新ths引用
             ths = thead.querySelectorAll('tr:first-child th');
             dragSrcIdx = -1;
+          });
+          // 双击列头将该列移至最前
+          th.addEventListener('dblclick', function(){
+            if (idx === 0) return;
+            var moveTh = ths[idx];
+            var firstTh = ths[0];
+            firstTh.parentNode.insertBefore(moveTh, firstTh);
+            Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
+              var tds = tr.querySelectorAll('td');
+              if (tds.length <= idx) return;
+              tr.insertBefore(tds[idx], tds[0]);
+            });
+            ths = thead.querySelectorAll('tr:first-child th');
           });
         });
       })();
