@@ -2448,7 +2448,11 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股经营性现金流(元)。衡量公司真实现金造血能力，比每股收益(EPS)更真实。每股现金流>EPS说明利润质量高。">每股经营现金流</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股净资产(元)。每股含多少净资产，是PB(市净率)的估值基础。净资产越高说明家底越厚。">每股净资产</th>'
         + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;" title="股票上市日期，越长说明公司经营历史越久。">上市日期</th>'
-        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;" title="公司所属行业/机构类型。">行业</th></tr></thead><tbody>';
+        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;" title="公司所属行业/机构类型。">行业</th>'
+        + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;max-width:140px;" title="公司主营业务简介。">主营业务</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="总市值(亿元)。公司整体市场估值，值越大说明公司规模越大。">总市值</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="注册资本(元)。公司注册时的资本总额。">注册资本</th>'
+        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;" title="公司成立日期。">成立日期</th></tr></thead><tbody>';
       d.holdings.forEach(function(h){
         var chgStr = '';
         var chgColor = '#888';
@@ -2477,7 +2481,7 @@ function showHoldings(code, name) {
           pegStr = h.peg.toFixed(2);
           pegColor = h.peg < 1 ? '#66bb6a' : (h.peg <= 2 ? '#ffa726' : '#ef5350');
         }
-        tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;max-width:120px;overflow:hidden;text-overflow:ellipsis;"><span onclick="event.stopPropagation();showStockInfo(\'' + htmlEscape(h.n || '') + '\',\'' + stockFullCode + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.25);" title="' + htmlEscape((h.main_biz ? h.main_biz : '') || h.n || '') + '\n上市：' + (h.listing_date || '-') + '\n行业：' + (h.industry || '-') + '\n点击查看详情">' + htmlEscape(h.n || '') + '</span></td>'
+        tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;max-width:120px;overflow:hidden;text-overflow:ellipsis;"><span onclick="event.stopPropagation();showStockInfo(\'' + htmlEscape(h.n || '') + '\',\'' + stockFullCode + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.25);" title="上市：' + (h.listing_date || '-') + '\n行业：' + (h.industry || '-') + '\n点击查看详情">' + htmlEscape(h.n || '') + '</span></td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td>'
@@ -2493,7 +2497,11 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.cf_ps != null ? '#888' : '#888') + ';">' + (h.cf_ps != null ? h.cf_ps.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.nav_ps != null ? h.nav_ps.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.listing_date || '-') + '</td>'
-          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:#888;font-size:11px;">' + (h.industry || '-') + '</td></tr>';
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;color:#888;font-size:11px;">' + (h.industry || '-') + '</td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#888;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;" title="' + htmlEscape(h.main_biz || '') + '">' + htmlEscape((h.main_biz || '') ? (h.main_biz.length > 30 ? h.main_biz.substring(0, 28) + '…' : h.main_biz) : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.mkt_cap != null ? h.mkt_cap.toFixed(1) + '亿' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.reg_capital || '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.establish_date || '-') + '</td></tr>';
       });
       tbl += '</tbody></table></div>';
       content.innerHTML = tbl;

@@ -694,7 +694,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 continue
                         # 解析基本面字段（值单元格可能含有a标签等内嵌HTML）
                         corp_pairs = _f10_re.findall(
-                            r'<td[^>]*>([^<]*(?:上市日期|机构类型|主营业务|所属行业)[^<]*)</td>\s*<td[^>]*>(.*?)</td>',
+                            r'<td[^>]*>([^<]*(?:上市日期|机构类型|主营业务|所属行业|成立日期|注册资本)[^<]*)</td>\s*<td[^>]*>(.*?)</td>',
                             corp_html
                         )
                         for label, value_html in corp_pairs:
@@ -706,7 +706,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             elif "机构类型" in label_c or "所属行业" in label_c:
                                 h["industry"] = val_c
                             elif "主营业务" in label_c:
-                                h["main_biz"] = val_c[:80]  # 截断过长文本
+                                h["main_biz"] = val_c[:80]
+                            elif "成立日期" in label_c:
+                                h["establish_date"] = val_c
+                            elif "注册资本" in label_c:
+                                h["reg_capital"] = val_c
                 self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
