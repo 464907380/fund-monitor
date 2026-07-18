@@ -592,6 +592,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 mkt_cap = float(parts[45]) if len(parts) > 45 and parts[45] else None  # 总市值(亿)
                                 pb = float(parts[46]) if len(parts) > 46 and parts[46] else None  # 市净率
                                 turnover = float(parts[38]) if len(parts) > 38 and parts[38] else None  # 换手率%
+                                vol_ratio = float(parts[49]) if len(parts) > 49 and parts[49] else None  # 量比
                                 float_mkt_cap = float(parts[44]) if len(parts) > 44 and parts[44] else None  # 流通市值(亿)
                                 for h in holds:
                                     if h["c"] == code_from_resp:
@@ -603,6 +604,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         h["mkt_cap"] = mkt_cap
                                         h["pb"] = pb
                                         h["turnover"] = turnover
+                                        h["vol_ratio"] = vol_ratio
                                         h["float_mkt_cap"] = float_mkt_cap
                                         break
                     except Exception:
