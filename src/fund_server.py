@@ -637,17 +637,43 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 fin_data[name_clean] = float(v_latest.strip()) if v_latest.strip() not in ["", "--"] else None
                             except ValueError:
                                 pass
+                        # 模糊匹配：字段名可能带前缀（如"成长能力主营业务收入增长率(%)"）
+                        def _fget(*keys):
+                            for k in keys:
+                                for fk, fv in fin_data.items():
+                                    if k in fk and fv is not None:
+                                        return fv
+                            return None
                         # 股息率 = 股息发放率 × 每股收益 ÷ 股价
-                        div_payout = fin_data.get("股息发放率(%)")
-                        eps_val = fin_data.get("摊薄每股收益(元)") or fin_data.get("每股收益_调整后(元)")
+                        div_payout = _fget("股息发放率")
+                        eps_val = _fget("摊薄每股收益", "每股收益_调整后", "加权每股收益")
                         if div_payout is not None and eps_val is not None and h.get("price"):
                             h["dividend_yield"] = round(div_payout * eps_val / h["price"], 4)
-                        # 市销率 PS = 总市值 ÷ 营业收入（从主营业务利润和利润率估算）
-                        op_profit = fin_data.get("主营业务利润(元)")
-                        op_margin = fin_data.get("主营业务利润率(%)")
+                        # 市销率 PS
+                        op_profit = _fget("主营业务利润(元)")
+                        op_margin = _fget("主营业务利润率")
                         if op_profit is not None and op_margin is not None and op_margin > 0 and h.get("mkt_cap"):
                             estimated_revenue = op_profit / (op_margin / 100)
-                            h["ps"] = round(h["mkt_cap"] * 1e8 / estimated_revenue, 2)  # mkt_cap是亿，转为元
+                            h["ps"] = round(h["mkt_cap"] * 1e8 / estimated_revenue, 2)
+                        # 扩展财务指标（模糊匹配）
+                        roe = _fget("净资产收益率")
+                        if roe is not None:
+                            h["roe"] = round(roe, 2)
+                        op_margin_rate = _fget("营业利润率")
+                        if op_margin_rate is not None:
+                            h["op_margin"] = round(op_margin_rate, 2)
+                        rev_growth = _fget("主营业务收入增长率", "营业收入增长率")
+                        if rev_growth is not None:
+                            h["rev_growth"] = round(rev_growth, 2)
+                        debt_ratio = _fget("资产负债率")
+                        if debt_ratio is not None:
+                            h["debt_ratio"] = round(debt_ratio, 2)
+                        cf_ps = _fget("每股经营性现金流")
+                        if cf_ps is not None:
+                            h["cf_ps"] = round(cf_ps, 4)
+                        nav_ps = _fget("每股净资产")
+                        if nav_ps is not None:
+                            h["nav_ps"] = round(nav_ps, 2)
                 self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))

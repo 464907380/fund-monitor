@@ -2414,13 +2414,13 @@ function showHoldings(code, name) {
     el.id = "holdingsModal";
     document.body.appendChild(el);
   }
-  el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:680px;">'
+  el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:1200px;overflow-x:auto;">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
     + '<div><span style="font-size:13px;font-weight:600;color:#e0e0e0;">\ud83d\udcc8 ' + name + '</span> <span style="color:#666;font-size:11px;">' + code + '</span></div>'
     + '<span onclick="this.closest(\'#holdingsModal\').style.display=\'none\';document.getElementById(\'holdingsBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:16px;">&times;</span></div>'
     + '<div id="holdingsContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
     + '</div>';
-  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:95%;max-width:680px;";
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:98%;max-width:1200px;overflow-x:auto;";
   el.onclick = function(e){ e.stopPropagation(); };
 
   fetch(API + '/api/holdings?code=' + code)
@@ -2440,7 +2440,13 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净利润同比增长率(%)。净利润增长越快，说明公司盈利能力越强，股价上涨的业绩基础越扎实。连续多年稳定增长的公司更值得关注。">净利润增长率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="PEG=市盈率÷净利润增速。核心看股价匹配业绩增长速度。PEG≈1估值合理，PEG＜1低估，PEG＞2泡沫风险大。仅适用于净利润连续稳定增长的企业，亏损/周期股不适用。">PEG</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="股息率=股息发放率×每股收益÷股价。衡量每年现金分红回报，适合长期吃股息的保守投资者。数据来自最新财报，部分股票可能无数据。">股息率</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市销率(PS)=总市值÷营业收入。不看利润只看营收规模，适用于亏损/微利/周期底部企业。PS越低说明营收相对市值越便宜，需同行业对比。">PS(市销率)</th></tr></thead><tbody>';
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市销率(PS)=总市值÷营业收入。不看利润只看营收规模，适用于亏损/微利/周期底部企业。PS越低说明营收相对市值越便宜，需同行业对比。">PS(市销率)</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净资产收益率(ROE)=净利润÷净资产。巴菲特最看重的指标，衡量公司为股东创造回报的能力。>15%优秀，>20%卓越。">ROE</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="营业利润率=营业利润÷营业收入。反映主营业务的盈利水平，>20%说明公司有较强定价权和护城河。">营业利润率</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="主营业务收入增长率(%)。与净利润增长率对照看，若营收增长但利润不增，说明增收不增利、利润质量堪忧。">营收增长率</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="资产负债率=总负债÷总资产。衡量财务杠杆风险，<50%稳健，50-70%正常，>70%偏高需警惕。">资产负债率</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股经营性现金流(元)。衡量公司真实现金造血能力，比每股收益(EPS)更真实。每股现金流>EPS说明利润质量高。">每股经营现金流</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股净资产(元)。每股含多少净资产，是PB(市净率)的估值基础。净资产越高说明家底越厚。">每股净资产</th></tr></thead><tbody>';
       d.holdings.forEach(function(h){
         var chgStr = '';
         var chgColor = '#888';
@@ -2477,7 +2483,13 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + growthColor + ';">' + growthStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + pegColor + ';">' + pegStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.dividend_yield ? (h.dividend_yield * 100).toFixed(2) + '%' : '-') + '</td>'
-          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.ps ? h.ps.toFixed(2) : '-') + '</td></tr>';
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.ps ? h.ps.toFixed(2) : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.roe != null ? (h.roe >= 15 ? '#66bb6a' : h.roe >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.roe != null ? h.roe.toFixed(1) + '%' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.op_margin != null ? (h.op_margin >= 20 ? '#66bb6a' : h.op_margin >= 10 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.op_margin != null ? h.op_margin.toFixed(1) + '%' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.rev_growth != null ? (h.rev_growth >= 10 ? '#ef5350' : h.rev_growth >= 0 ? '#ffa726' : '#66bb6a') : '#888') + ';">' + (h.rev_growth != null ? (h.rev_growth > 0 ? '+' : '') + h.rev_growth.toFixed(1) + '%' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.debt_ratio != null ? (h.debt_ratio < 50 ? '#66bb6a' : h.debt_ratio <= 70 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.debt_ratio != null ? h.debt_ratio.toFixed(1) + '%' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.cf_ps != null ? '#888' : '#888') + ';">' + (h.cf_ps != null ? h.cf_ps.toFixed(2) : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.nav_ps != null ? h.nav_ps.toFixed(2) : '-') + '</td></tr>';
       });
       tbl += '</tbody></table>';
       content.innerHTML = tbl;
