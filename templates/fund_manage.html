@@ -2436,9 +2436,9 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实时涨跌</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">PE</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净利润同比增长率">净利润增长率</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="估值(PEG)：PE÷净利润增长率">PEG</th></tr></thead><tbody>';
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市盈率(PE)=股价÷每股收益。衡量股价相对于盈利是否合理，PE越高说明市场对该公司未来越乐观，但也可能意味着估值泡沫。横向同行业对比更有意义。">PE</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净利润同比增长率(%)。净利润增长越快，说明公司盈利能力越强，股价上涨的业绩基础越扎实。连续多年稳定增长的公司更值得关注。">净利润增长率</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="PEG=市盈率÷净利润增速。核心看股价匹配业绩增长速度。PEG≈1估值合理，PEG＜1低估，PEG＞2泡沫风险大。仅适用于净利润连续稳定增长的企业，亏损/周期股不适用。">PEG</th></tr></thead><tbody>';
       d.holdings.forEach(function(h){
         var chgStr = '';
         var chgColor = '#888';
