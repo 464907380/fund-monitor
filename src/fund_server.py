@@ -456,8 +456,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if not p.get("day", "").startswith(today_str) and p.get("close"):
                             pre_close = float(p["close"])
                             break
-                    # 只取今日数据
+                    # 只取今日数据；若今日无数据（如周末），取最近一天
                     today_points = [p for p in points if p.get("day", "").startswith(today_str)]
+                    if not today_points and points:
+                        # 找到最近有数据的交易日
+                        last_day = points[-1].get("day", "")[:10]
+                        today_points = [p for p in points if p.get("day", "").startswith(last_day)]
+                        # 重新获取昨日收盘价（用倒数第二个交易日）
+                        for p in reversed(points):
+                            if not p.get("day", "").startswith(last_day) and p.get("close"):
+                                pre_close = float(p["close"])
+                                break
                     pt_list = []
                     for p in today_points:
                         day_str = p.get("day", "")
