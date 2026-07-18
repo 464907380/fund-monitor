@@ -2559,6 +2559,65 @@ function showHoldings(code, name) {
       });
       tbl += '</tbody></table></div>';
       content.innerHTML = tbl;
+      // 列拖动排序
+      (function(){
+        var tblEl = content.querySelector('table');
+        if (!tblEl) return;
+        var thead = tblEl.querySelector('thead');
+        var tbody = tblEl.querySelector('tbody');
+        var ths = thead.querySelectorAll('tr:first-child th');
+        var dragSrcIdx = -1;
+        Array.from(ths).forEach(function(th, idx){
+          th.draggable = true;
+          th.style.cursor = 'grab';
+          th.addEventListener('dragstart', function(e){
+            dragSrcIdx = idx;
+            e.dataTransfer.effectAllowed = 'move';
+            th.style.opacity = '0.5';
+          });
+          th.addEventListener('dragend', function(){
+            th.style.opacity = '';
+            Array.from(ths).forEach(function(t){ t.style.borderLeft = ''; });
+          });
+          th.addEventListener('dragover', function(e){
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            Array.from(ths).forEach(function(t){ t.style.borderLeft = ''; });
+            th.style.borderLeft = '2px solid #888';
+          });
+          th.addEventListener('dragleave', function(){
+            th.style.borderLeft = '';
+          });
+          th.addEventListener('drop', function(e){
+            e.preventDefault();
+            th.style.borderLeft = '';
+            if (dragSrcIdx < 0 || dragSrcIdx === idx) return;
+            // 交换表头
+            var srcTh = ths[dragSrcIdx];
+            var tgtTh = ths[idx];
+            if (idx > dragSrcIdx) {
+              tgtTh.parentNode.insertBefore(srcTh, tgtTh.nextSibling);
+            } else {
+              tgtTh.parentNode.insertBefore(srcTh, tgtTh);
+            }
+            // 交换每行数据格
+            Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
+              var tds = tr.querySelectorAll('td');
+              if (tds.length <= Math.max(dragSrcIdx, idx)) return;
+              var srcTd = tds[dragSrcIdx];
+              var tgtTd = tds[idx];
+              if (idx > dragSrcIdx) {
+                tr.insertBefore(srcTd, tgtTd.nextSibling);
+              } else {
+                tr.insertBefore(srcTd, tgtTd);
+              }
+            });
+            // 更新ths引用
+            ths = thead.querySelectorAll('tr:first-child th');
+            dragSrcIdx = -1;
+          });
+        });
+      })();
     })
     .catch(function(){
       var content = document.getElementById('holdingsContent');
