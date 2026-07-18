@@ -589,15 +589,65 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 pe = float(parts[39]) if len(parts) > 39 and parts[39] else None
                                 growth = float(parts[63]) if len(parts) > 63 and parts[63] else None
                                 peg = round(pe / growth, 2) if (pe and growth and growth > 0) else None
+                                mkt_cap = float(parts[45]) if len(parts) > 45 and parts[45] else None  # 总市值(亿)
                                 for h in holds:
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
                                         h["pe"] = pe
                                         h["growth"] = growth
                                         h["peg"] = peg
+                                        h["price"] = price
+                                        h["mkt_cap"] = mkt_cap
                                         break
                     except Exception:
                         pass
+                    # 从新浪F10财务指标页获取股息率和市销率数据
+                    import urllib.request as _f10_ur, re as _f10_re
+                    _f10_cache = globals().setdefault("_f10_cache", {})
+                    _f10_now = time.time()
+                    for h in holds:
+                        stock_code = h.get("c", "")
+                        if not stock_code or not h.get("mkt_cap"):
+                            continue
+                        cache_key = f"fgl_{stock_code}"
+                        cached = _f10_cache.get(cache_key)
+                        if cached and _f10_now - cached[0] < 86400:
+                            fgl_html = cached[1]
+                        else:
+                            try:
+                                fgl_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/{stock_code}/displaytype/4.phtml"
+                                fgl_req = _f10_ur.Request(fgl_url, headers={"User-Agent": "Mozilla/5.0"})
+                                with _f10_ur.urlopen(fgl_req, timeout=10) as fgl_r:
+                                    fgl_html = fgl_r.read().decode("gbk", errors="ignore")
+                                _f10_cache[cache_key] = (_f10_now, fgl_html)
+                            except Exception:
+                                continue
+                        # 解析财务指标
+                        fgl_rows = _f10_re.findall(
+                            r'<tr[^>]*>'
+                            r'<td[^>]*>(.*?)</td>'
+                            r'\s*<td[^>]*>([^<]*)</td>'
+                            r'\s*<td[^>]*>([^<]*)</td>',
+                            fgl_html, _f10_re.DOTALL
+                        )
+                        fin_data = {}
+                        for name_raw, v_latest, _ in fgl_rows:
+                            name_clean = _f10_re.sub(r'<[^>]+>', '', name_raw).strip()
+                            try:
+                                fin_data[name_clean] = float(v_latest.strip()) if v_latest.strip() not in ["", "--"] else None
+                            except ValueError:
+                                pass
+                        # 股息率 = 股息发放率 × 每股收益 ÷ 股价
+                        div_payout = fin_data.get("股息发放率(%)")
+                        eps_val = fin_data.get("摊薄每股收益(元)") or fin_data.get("每股收益_调整后(元)")
+                        if div_payout is not None and eps_val is not None and h.get("price"):
+                            h["dividend_yield"] = round(div_payout * eps_val / h["price"], 4)
+                        # 市销率 PS = 总市值 ÷ 营业收入（从主营业务利润和利润率估算）
+                        op_profit = fin_data.get("主营业务利润(元)")
+                        op_margin = fin_data.get("主营业务利润率(%)")
+                        if op_profit is not None and op_margin is not None and op_margin > 0 and h.get("mkt_cap"):
+                            estimated_revenue = op_profit / (op_margin / 100)
+                            h["ps"] = round(h["mkt_cap"] * 1e8 / estimated_revenue, 2)  # mkt_cap是亿，转为元
                 self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))

@@ -2438,7 +2438,9 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实时涨跌</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市盈率(PE)=股价÷每股收益。衡量股价相对于盈利是否合理，PE越高说明市场对该公司未来越乐观，但也可能意味着估值泡沫。横向同行业对比更有意义。">PE</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净利润同比增长率(%)。净利润增长越快，说明公司盈利能力越强，股价上涨的业绩基础越扎实。连续多年稳定增长的公司更值得关注。">净利润增长率</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="PEG=市盈率÷净利润增速。核心看股价匹配业绩增长速度。PEG≈1估值合理，PEG＜1低估，PEG＞2泡沫风险大。仅适用于净利润连续稳定增长的企业，亏损/周期股不适用。">PEG</th></tr></thead><tbody>';
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="PEG=市盈率÷净利润增速。核心看股价匹配业绩增长速度。PEG≈1估值合理，PEG＜1低估，PEG＞2泡沫风险大。仅适用于净利润连续稳定增长的企业，亏损/周期股不适用。">PEG</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="股息率=股息发放率×每股收益÷股价。衡量每年现金分红回报，适合长期吃股息的保守投资者。数据来自最新财报，部分股票可能无数据。">股息率</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市销率(PS)=总市值÷营业收入。不看利润只看营收规模，适用于亏损/微利/周期底部企业。PS越低说明营收相对市值越便宜，需同行业对比。">PS(市销率)</th></tr></thead><tbody>';
       d.holdings.forEach(function(h){
         var chgStr = '';
         var chgColor = '#888';
@@ -2473,7 +2475,9 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + peStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + growthColor + ';">' + growthStr + '</td>'
-          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + pegColor + ';">' + pegStr + '</td></tr>';
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + pegColor + ';">' + pegStr + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.dividend_yield ? (h.dividend_yield * 100).toFixed(2) + '%' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.ps ? h.ps.toFixed(2) : '-') + '</td></tr>';
       });
       tbl += '</tbody></table>';
       content.innerHTML = tbl;
