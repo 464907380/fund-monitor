@@ -770,8 +770,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             continue
                         closes = [float(p["close"]) for p in kline]
                         latest = closes[-1]
-                        # 近1月/3月/6月收益
-                        for days, key in [(22, "ret_1m"), (66, "ret_3m"), (126, "ret_6m")]:
+                        # 近1月/3月/6月/1年收益
+                        for days, key in [(22, "ret_1m"), (66, "ret_3m"), (126, "ret_6m"), (252, "ret_1y")]:
                             if len(closes) >= days + 1:
                                 h[key] = round((latest - closes[-(days + 1)]) / closes[-(days + 1)] * 100, 2)
                         # 最大回撤: 近1年(252天)和近2年(504天)
