@@ -2414,13 +2414,13 @@ function showHoldings(code, name) {
     el.id = "holdingsModal";
     document.body.appendChild(el);
   }
-  el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:560px;">'
+  el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:680px;">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
     + '<div><span style="font-size:13px;font-weight:600;color:#e0e0e0;">\ud83d\udcc8 ' + name + '</span> <span style="color:#666;font-size:11px;">' + code + '</span></div>'
     + '<span onclick="this.closest(\'#holdingsModal\').style.display=\'none\';document.getElementById(\'holdingsBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:16px;">&times;</span></div>'
     + '<div id="holdingsContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
     + '</div>';
-  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:90%;max-width:560px;";
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:95%;max-width:680px;";
   el.onclick = function(e){ e.stopPropagation(); };
 
   fetch(API + '/api/holdings?code=' + code)
@@ -2436,6 +2436,8 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实时涨跌</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">PE</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净利润同比增长率">净利润增长率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="估值(PEG)：PE÷净利润增长率">PEG</th></tr></thead><tbody>';
       d.holdings.forEach(function(h){
         var chgStr = '';
@@ -2447,6 +2449,18 @@ function showHoldings(code, name) {
           chgStr = '-';
         }
         var stockFullCode = (h.m || 'sz') + h.c;
+        var peStr = '-';
+        if (h.pe !== null && h.pe !== undefined && h.pe > 0) {
+          peStr = h.pe.toFixed(2);
+        } else if (h.pe !== null && h.pe !== undefined && h.pe < 0) {
+          peStr = '<span style="color:#ef5350;">亏损</span>';
+        }
+        var growthStr = '-';
+        var growthColor = '#888';
+        if (h.growth !== null && h.growth !== undefined) {
+          growthStr = (h.growth > 0 ? '+' : '') + h.growth.toFixed(2) + '%';
+          growthColor = h.growth > 0 ? '#ef5350' : '#66bb6a';
+        }
         var pegStr = '-';
         var pegColor = '#888';
         if (h.peg !== null && h.peg !== undefined && h.peg > 0) {
@@ -2457,6 +2471,8 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + peStr + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + growthColor + ';">' + growthStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + pegColor + ';">' + pegStr + '</td></tr>';
       });
       tbl += '</tbody></table>';
