@@ -590,6 +590,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 growth = float(parts[63]) if len(parts) > 63 and parts[63] else None
                                 peg = round(pe / growth, 2) if (pe and growth and growth > 0) else None
                                 mkt_cap = float(parts[45]) if len(parts) > 45 and parts[45] else None  # 总市值(亿)
+                                pb = float(parts[46]) if len(parts) > 46 and parts[46] else None  # 市净率
+                                turnover = float(parts[38]) if len(parts) > 38 and parts[38] else None  # 换手率%
+                                float_mkt_cap = float(parts[44]) if len(parts) > 44 and parts[44] else None  # 流通市值(亿)
                                 for h in holds:
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
@@ -598,6 +601,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         h["peg"] = peg
                                         h["price"] = price
                                         h["mkt_cap"] = mkt_cap
+                                        h["pb"] = pb
+                                        h["turnover"] = turnover
+                                        h["float_mkt_cap"] = float_mkt_cap
                                         break
                     except Exception:
                         pass
@@ -674,6 +680,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         nav_ps = _fget("每股净资产")
                         if nav_ps is not None:
                             h["nav_ps"] = round(nav_ps, 2)
+                        gross_margin = _fget("销售毛利率")
+                        if gross_margin is not None:
+                            h["gross_margin"] = round(gross_margin, 2)
+                        quick_ratio = _fget("速动比率")
+                        if quick_ratio is not None:
+                            h["quick_ratio"] = round(quick_ratio, 2)
+                        weighted_roe = _fget("加权净资产收益率")
+                        if weighted_roe is not None:
+                            h["weighted_roe"] = round(weighted_roe, 2)
+                        retained_ps = _fget("每股未分配利润")
+                        if retained_ps is not None:
+                            h["retained_ps"] = round(retained_ps, 2)
+                        total_assets = _fget("总资产(元)", "总资产)(元")
+                        if total_assets is not None:
+                            h["total_assets"] = round(total_assets / 1e8, 2)  # 转亿
                     # 从新浪F10公司概况页获取基本面信息
                     for h in holds:
                         stock_code = h.get("c", "")
