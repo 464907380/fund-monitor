@@ -746,6 +746,47 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         roa = _fget("总资产利润率")
                         if roa is not None:
                             h["roa"] = round(roa, 2)
+                    # 获取个股日K线数据计算收益和回撤
+                    for h in holds:
+                        stock_code = h.get("c", "")
+                        market = h.get("m", "sz")
+                        if not stock_code:
+                            continue
+                        cache_key = f"kline_{stock_code}"
+                        cached = _f10_cache.get(cache_key)
+                        if cached and _f10_now - cached[0] < 86400:
+                            kline = cached[1]
+                        else:
+                            try:
+                                kl_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={market}{stock_code}&scale=240&ma=no&datalen=504"
+                                kl_req = _f10_ur.Request(kl_url, headers={"User-Agent": "Mozilla/5.0"})
+                                with _f10_ur.urlopen(kl_req, timeout=10) as kl_r:
+                                    kl_raw = kl_r.read().decode()
+                                kline = json.loads(kl_raw)
+                                _f10_cache[cache_key] = (_f10_now, kline)
+                            except Exception:
+                                continue
+                        if not kline or len(kline) < 2:
+                            continue
+                        closes = [float(p["close"]) for p in kline]
+                        latest = closes[-1]
+                        # 近1月/3月/6月收益
+                        for days, key in [(22, "ret_1m"), (66, "ret_3m"), (126, "ret_6m")]:
+                            if len(closes) >= days + 1:
+                                h[key] = round((latest - closes[-(days + 1)]) / closes[-(days + 1)] * 100, 2)
+                        # 最大回撤: 近1年(252天)和近2年(504天)
+                        for period_days, key in [(252, "mdd_1y"), (504, "mdd_2y")]:
+                            if len(closes) >= period_days:
+                                period_closes = closes[-period_days:]
+                                peak = period_closes[0]
+                                max_dd = 0
+                                for c in period_closes:
+                                    if c > peak:
+                                        peak = c
+                                    dd = (peak - c) / peak * 100
+                                    if dd > max_dd:
+                                        max_dd = dd
+                                h[key] = round(max_dd, 2)
                     # 从新浪F10公司概况页获取基本面信息
                     for h in holds:
                         stock_code = h.get("c", "")
