@@ -743,6 +743,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if not cached:
                             continue
                         fgl_html = cached[1]
+                        # 从原始HTML提取财报报告日期（"报告日期"行第一列日期）
+                        h["fgl_date"] = ""
+                        _fgl_date_m = _f10_re.search(
+                            r'<strong>\s*报告日期\s*</strong></td>\s*<td[^>]*>(\d{4}-\d{2}-\d{2})',
+                            fgl_html
+                        )
+                        if _fgl_date_m:
+                            h["fgl_date"] = _fgl_date_m.group(1)
                         # 解析财务指标
                         fgl_rows = _f10_re.findall(
                             r'<tr[^>]*>'
