@@ -2705,6 +2705,31 @@ function showHoldings(code, name) {
 
 /** 持仓评分设置弹窗 */
 var _hldDimsData = null;
+/** 持仓评分字段中文名映射 */
+var _HLD_FIELD_NAMES = {
+  p:'占比%', growth:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
+  vol_ratio:'量比', float_mkt_cap:'流通市值(亿)', open:'今开(元)',
+  amplitude:'振幅%', op_margin:'营业利润率%', nav_ps:'每股净资产(元)',
+  weighted_roe:'加权ROE%', retained_ps:'每股未分配利润(元)',
+  total_assets:'总资产(亿)', current_ratio:'流动比率',
+  net_asset_growth:'净资产增长率%', capital_reserve_ps:'每股资本公积(元)',
+  roa:'总资产利润率%', ret_1m:'近1月收益%', ret_3m:'近3月收益%',
+  mdd_2y:'近2年回撤%', gross_margin:'销售毛利率%',
+  main_biz_margin:'主营业务利润率%'
+};
+var _HLD_FIELD_DESC = {
+  p:'该股票占基金净值比例', growth:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
+  turnover:'成交量÷流通股本', vol_ratio:'当前量÷5日均量',
+  float_mkt_cap:'可自由交易市值', open:'今日开盘价',
+  amplitude:'(最高-最低)÷昨收', op_margin:'营业利润÷营业收入',
+  nav_ps:'净资产÷总股本', weighted_roe:'考虑复利的更精准ROE',
+  retained_ps:'累计可分配利润', total_assets:'公司全部资产规模',
+  current_ratio:'流动资产÷流动负债', net_asset_growth:'净资产同比增速',
+  capital_reserve_ps:'资本储备金', roa:'净利润÷总资产',
+  ret_1m:'近22个交易日涨幅', ret_3m:'近66个交易日涨幅',
+  mdd_2y:'近2年最大回撤', gross_margin:'(营收-成本)÷营收',
+  main_biz_margin:'主营业务利润÷营收'
+};
 function showHldDimsEditor() {
   var backdrop = document.getElementById("hldDimBackdrop");
   if (!backdrop) {
@@ -2791,6 +2816,32 @@ function addHldDim() {
                    wk_high:'wk_high',wk_low:'wk_low',ps:'ps',price:'price',mkt_cap:'mkt_cap'};
   var first = data[0];
   var available = [];
+  // 字段中文名映射
+  var FIELD_NAMES = {
+    p:'占比%', growth:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
+    vol_ratio:'量比', float_mkt_cap:'流通市值(亿)', open:'今开(元)',
+    amplitude:'振幅%', op_margin:'营业利润率%', nav_ps:'每股净资产(元)',
+    weighted_roe:'加权ROE%', retained_ps:'每股未分配利润(元)',
+    total_assets:'总资产(亿)', current_ratio:'流动比率',
+    net_asset_growth:'净资产增长率%', capital_reserve_ps:'每股资本公积(元)',
+    roa:'总资产利润率%', ret_1m:'近1月收益%', ret_3m:'近3月收益%',
+    mdd_2y:'近2年回撤%', gross_margin:'销售毛利率%',
+    establish_date:'成立日期', listing_date:'上市日期',
+    main_biz_margin:'主营业务利润率%'
+  };
+  var FIELD_DESC = {
+    p:'该股票占基金净值比例', growth:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
+    turnover:'成交量÷流通股本', vol_ratio:'当前量÷5日均量',
+    float_mkt_cap:'可自由交易市值', open:'今日开盘价',
+    amplitude:'(最高-最低)÷昨收', op_margin:'营业利润÷营业收入',
+    nav_ps:'净资产÷总股本', weighted_roe:'考虑复利的更精准ROE',
+    retained_ps:'累计可分配利润', total_assets:'公司全部资产规模',
+    current_ratio:'流动资产÷流动负债', net_asset_growth:'净资产同比增速',
+    capital_reserve_ps:'资本储备金', roa:'净利润÷总资产',
+    ret_1m:'近22个交易日涨幅', ret_3m:'近66个交易日涨幅',
+    mdd_2y:'近2年最大回撤', gross_margin:'(营收-成本)÷营收',
+    main_biz_margin:'主营业务利润÷营收'
+  };
   for (var key in first) {
     if (skipKeys[key]) continue;
     if (existingKeys.indexOf(key) >= 0) continue;
@@ -2802,8 +2853,9 @@ function addHldDim() {
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">选择要添加的维度</div>'
     + '<select id="hldNewDimSelect" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:6px 8px;font-size:12px;margin-bottom:10px;">'
     + available.map(function(k){
-        var label = k.replace(/_/g,' ');
-        return '<option value="' + k + '">' + label + '</option>';
+        var label = _HLD_FIELD_NAMES[k] || k.replace(/_/g,' ');
+        var desc = _HLD_FIELD_DESC[k] || '';
+        return '<option value="' + k + '">' + label + (desc ? ' — ' + desc : '') + '</option>';
       }).join('')
     + '</select>'
     + '<div style="display:flex;gap:8px;justify-content:flex-end;">'
@@ -2843,7 +2895,7 @@ function confirmAddHldDim() {
   var tbl = document.querySelector('#hldDimModal table tbody');
   if (!tbl) return;
   var idx = tbl.querySelectorAll('tr:not(.hld-curve-row)').length;
-  var label = key.replace(/_/g,' ');
+  var label = _HLD_FIELD_NAMES[key] || key.replace(/_/g,' ');
   var tr = document.createElement('tr');
   tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty()">%</td>'
