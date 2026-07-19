@@ -2504,9 +2504,9 @@ function showHoldings(code, name) {
         }
         var growthStr = '-';
         var growthColor = '#888';
-        if (h.growth !== null && h.growth !== undefined) {
-          growthStr = (h.growth > 0 ? '+' : '') + h.growth.toFixed(2) + '%';
-          growthColor = h.growth > 0 ? '#ef5350' : '#66bb6a';
+        if (h.ret_1w !== null && h.ret_1w !== undefined) {
+          growthStr = (h.ret_1w > 0 ? '+' : '') + h.ret_1w.toFixed(2) + '%';
+          growthColor = h.ret_1w > 0 ? '#ef5350' : '#66bb6a';
         }
         var pegStr = '-';
         var pegColor = '#888';
@@ -2709,7 +2709,7 @@ function showHoldings(code, name) {
 var _hldDimsData = null;
 /** 持仓评分字段中文名映射 */
 var _HLD_FIELD_NAMES = {
-  p:'占比%', growth:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
+  p:'占比%', ret_1w:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
   vol_ratio:'量比', float_mkt_cap:'流通市值(亿)', open:'今开(元)',
   amplitude:'振幅%', op_margin:'营业利润率%', nav_ps:'每股净资产(元)',
   weighted_roe:'加权ROE%', retained_ps:'每股未分配利润(元)',
@@ -2725,7 +2725,7 @@ var _HLD_FIELD_NAMES = {
   cashflow_to_profit:'经营现金流/净利润'
 };
 var _HLD_FIELD_DESC = {
-  p:'该股票占基金净值比例', growth:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
+  p:'该股票占基金净值比例', ret_1w:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
   turnover:'成交量÷流通股本', vol_ratio:'当前量÷5日均量',
   float_mkt_cap:'可自由交易市值', open:'今日开盘价',
   amplitude:'(最高-最低)÷昨收', op_margin:'营业利润÷营业收入',
@@ -2836,7 +2836,7 @@ function addHldDim() {
   var available = [];
   // 字段中文名映射
   var FIELD_NAMES = {
-    p:'占比%', growth:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
+    p:'占比%', ret_1w:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
     vol_ratio:'量比', float_mkt_cap:'流通市值(亿)', open:'今开(元)',
     amplitude:'振幅%', op_margin:'营业利润率%', nav_ps:'每股净资产(元)',
     weighted_roe:'加权ROE%', retained_ps:'每股未分配利润(元)',
@@ -2853,7 +2853,7 @@ function addHldDim() {
     cashflow_to_profit:'经营现金流/净利润'
   };
   var FIELD_DESC = {
-    p:'该股票占基金净值比例', growth:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
+    p:'该股票占基金净值比例', ret_1w:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
     turnover:'成交量÷流通股本', vol_ratio:'当前量÷5日均量',
     float_mkt_cap:'可自由交易市值', open:'今日开盘价',
     amplitude:'(最高-最低)÷昨收', op_margin:'营业利润÷营业收入',

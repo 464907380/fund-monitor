@@ -649,7 +649,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 chg = round((price - prev_close) / prev_close * 100, 2) if prev_close else None
                                 # Tencent 字段说明：39=PE, 63=近1周涨跌幅, 37=成交额(元), 55=涨停价, 56=跌停价
                                 pe = float(parts[39]) if len(parts) > 39 and parts[39] else None
-                                growth = float(parts[63]) if len(parts) > 63 and parts[63] else None  # 近1周涨跌
+                                ret_1w = float(parts[63]) if len(parts) > 63 and parts[63] else None  # 近1周涨跌
                                 mkt_cap = float(parts[45]) if len(parts) > 45 and parts[45] else None  # 总市值(亿)
                                 pb = float(parts[46]) if len(parts) > 46 and parts[46] else None  # 市净率
                                 turnover = float(parts[38]) if len(parts) > 38 and parts[38] else None  # 换手率%
@@ -665,7 +665,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
                                         h["pe"] = pe
-                                        h["growth"] = growth
+                                        h["ret_1w"] = ret_1w
                                         h["price"] = price
                                         h["mkt_cap"] = mkt_cap
                                         h["pb"] = pb
