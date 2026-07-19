@@ -2815,8 +2815,7 @@ function showHldDimsEditor() {
     d.dims.forEach(function(dim, i){
       var pct = dim.w;
       html += '<tr>'
-        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span>'
-        + '<br><span style="color:#666;font-size:10px;display:block;margin-top:2px;max-width:200px;">' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '</span></td>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
         + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + i + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
@@ -2971,8 +2970,7 @@ function confirmAddHldDim() {
   var label = _HLD_FIELD_NAMES[key] || key.replace(/_/g,' ');
   // 创建主行（仅TD）
   var tr = document.createElement('tr');
-  tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span>'
-    + '<br><span style="color:#666;font-size:10px;display:block;margin-top:2px;max-width:200px;">' + htmlEscape(_HLD_DIM_DESC[key] || '') + '</span></td>'
+  tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[key] || '') + '">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + idx + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
