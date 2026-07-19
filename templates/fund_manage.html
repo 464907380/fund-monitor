@@ -2456,10 +2456,12 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="销售净利率=净利润÷营收。衡量每元营收能产生多少净利润，>15%优秀。">销售净利率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="主营业务利润率=主营业务利润÷营收。反映核心业务的盈利水平。">主营利润率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="主营业务收入增长率(%)。与净利润增长率对照看，若营收增长但利润不增，说明增收不增利、利润质量堪忧。">营收增长率</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净利润增长率(%)。净利润同比增速，衡量盈利增长动力。>10%良好，与营收增长率对照判断成长质量。">净利润增长率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="资产负债率=总负债÷总资产。衡量财务杠杆风险，<50%稳健，50-70%正常，>70%偏高需警惕。">资产负债率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="速动比率=(流动资产-存货)÷流动负债。衡量短期偿债能力，>1安全，<1需警惕流动性风险。">速动比率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="流动比率=流动资产÷流动负债。比速动比率更宽松的偿债指标，>2较安全。">流动比率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股经营性现金流(元)。衡量公司真实现金造血能力，比每股收益(EPS)更真实。每股现金流>EPS说明利润质量高。">每股经营现金流</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="经营现金流÷净利润。衡量利润的现金支撑质量。>1说明利润有真实现金流保障，>0.5可接受，<0.5需警惕。">现金流/净利润</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股净资产(元)。每股含多少净资产，是PB(市净率)的估值基础。净资产越高说明家底越厚。">每股净资产</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股未分配利润(元)。公司累积的可分配利润，越高说明分红潜力越大。">每股未分配利润</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="每股资本公积金(元)。公司资本储备，越高说明高送转潜力越大。">每股资本公积</th>'
@@ -2530,10 +2532,12 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.net_profit_margin != null ? (h.net_profit_margin >= 15 ? '#66bb6a' : h.net_profit_margin >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.net_profit_margin != null ? h.net_profit_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.main_biz_margin != null ? (h.main_biz_margin >= 30 ? '#66bb6a' : h.main_biz_margin >= 15 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.main_biz_margin != null ? h.main_biz_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.rev_growth != null ? (h.rev_growth >= 10 ? '#ef5350' : h.rev_growth >= 0 ? '#ffa726' : '#66bb6a') : '#888') + ';">' + (h.rev_growth != null ? (h.rev_growth > 0 ? '+' : '') + h.rev_growth.toFixed(1) + '%' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.net_profit_growth != null ? (h.net_profit_growth >= 10 ? '#ef5350' : h.net_profit_growth >= 0 ? '#ffa726' : '#66bb6a') : '#888') + ';">' + (h.net_profit_growth != null ? (h.net_profit_growth > 0 ? '+' : '') + h.net_profit_growth.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.debt_ratio != null ? (h.debt_ratio < 50 ? '#66bb6a' : h.debt_ratio <= 70 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.debt_ratio != null ? h.debt_ratio.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.quick_ratio != null ? (h.quick_ratio >= 1 ? '#66bb6a' : h.quick_ratio >= 0.5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.quick_ratio != null ? h.quick_ratio.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.current_ratio != null ? (h.current_ratio >= 2 ? '#66bb6a' : h.current_ratio >= 1 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.current_ratio != null ? h.current_ratio.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.cf_ps != null ? '#888' : '#888') + ';">' + (h.cf_ps != null ? h.cf_ps.toFixed(2) : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.cashflow_to_profit != null ? (h.cashflow_to_profit >= 1 ? '#66bb6a' : h.cashflow_to_profit >= 0.5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.cashflow_to_profit != null ? h.cashflow_to_profit.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.nav_ps != null ? h.nav_ps.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.retained_ps != null ? h.retained_ps.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.capital_reserve_ps != null ? h.capital_reserve_ps.toFixed(2) : '-') + '</td>'
@@ -2714,17 +2718,14 @@ var _HLD_DIM_DESC = {
   cf_ps:'每股经营性现金流。经营现金流÷总股本，比EPS更真实的现金造血能力。越高越好。',
   mdd_1y:'【绝对标准】近1年最大回撤。过去1年内从最高到最低的最大跌幅。<15%优秀，>30%需警惕。越低越好。自动校准不改变此曲线。',
   ret_1m:'近1月收益率。过去22个交易日的价格表现，短期动量指标。越高越好。',
-  pb:'市净率PB。股价÷每股净资产。与PE互补，适用于金融/周期股，PB<1可能破净。',
-  roa:'总资产利润率ROA。净利润÷总资产。衡量全部资产的盈利效率，与ROE互补。越高越好。',
-  ret_1m:'近1月收益率。过去22个交易日的价格表现，短期动量指标。越高越好。',
+  ret_3m:'近3月收益率。过去66个交易日的价格表现，中期动量指标。越高越好。',
   ret_1y:'近1年收益率。过去252个交易日的价格表现，长期动量指标。越高越好。',
   pe:'【绝对标准】市盈率PE。股价÷每股收益，最常用的估值指标。同行业对比更有意义。自动校准不改变此曲线。',
   wk_position:'52周相对位置。当前价在52周高低区间内的位置%。>70%偏高位，<30%偏低位。',
-  gross_margin:'销售毛利率。(营收-营业成本)÷营收。衡量产品定价权和护城河。注意：新浪数据源可能无数据。',
   pb:'市净率PB。股价÷每股净资产。与PE互补，适用于金融/周期股，PB<1可能破净。',
+  roa:'总资产利润率ROA。净利润÷总资产。衡量全部资产的盈利效率，与ROE互补。越高越好。',
+  gross_margin:'销售毛利率。(营收-营业成本)÷营收。衡量产品定价权和护城河。注意：新浪数据源可能无数据。',
   net_profit_growth:'净利润增长率。净利润同比增速，衡量盈利增长动力。>10%良好。越高越好。',
-  total_asset_growth:'总资产增长率。总资产同比增速，衡量公司扩张速度。持续高增长说明处于扩张期。',
-  cash_ratio:'现金比率。(现金+交易性金融资产)÷流动负债。最保守的短期偿债指标，>50%安全。越高越好。',
   cost_profit_margin:'成本费用利润率。利润总额÷成本费用总额。每元成本能创造多少利润，>100%优秀。越高越好。',
   cashflow_to_profit:'经营现金流÷净利润。衡量利润的现金支撑质量。>1说明利润有真实现金流保障，<0.5需警惕。越高越好。',
   main_biz_cost_ratio:'主营业务成本率。主营业务成本÷营收，越低说明毛利率越高。越低越好。',
