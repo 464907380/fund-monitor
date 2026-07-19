@@ -621,8 +621,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         (h.get("m", "sz") + h["c"])
                         for h in holds
                     )
-                    try:
+                    # Tencent 实时行情：60秒缓存（盘中股价实时，PE/PB/市值变化慢）
+                    _tencent_cache = globals().setdefault("_tencent_realtime_cache", {})
+                    _tencent_key = f"realtime_{codes_str}"
+                    _tencent_now = time.time()
+                    _tencent_cached = _tencent_cache.get(_tencent_key)
+                    if _tencent_cached and _tencent_now - _tencent_cached[0] < 60:
+                        raw = _tencent_cached[1]
+                    else:
                         raw = _retry_fetch(api_url("tencent_realtime", code=codes_str))
+                        _tencent_cache[_tencent_key] = (_tencent_now, raw)
+                    try:
                         for line in raw.strip().split(";"):
                             if not line:
                                 continue
@@ -849,12 +858,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     if dd > max_dd:
                                         max_dd = dd
                                 h[key] = round(max_dd, 2)
-                    # ── 并行抓取：公司概况 ──
+                    # ── 并行抓取：公司概况（7天缓存，基本信息几乎不变）──
                     _corp_codes = [h.get("c","") for h in holds if h.get("c")]
                     _corp_urls = {}
                     for sc in _corp_codes:
                         ck = f"corp_{sc}"
-                        if ck in _f10_cache and _f10_now - _f10_cache[ck][0] < 86400:
+                        if ck in _f10_cache and _f10_now - _f10_cache[ck][0] < 604800:
                             continue
                         _corp_urls[sc] = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CorpInfo/stockid/{sc}.phtml"
                     if _corp_urls:
