@@ -658,8 +658,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 open_price = float(parts[5]) if len(parts) > 5 and parts[5] else None  # 今开
                                 amplitude = float(parts[43]) if len(parts) > 43 and parts[43] else None  # 振幅%
                                 turnover_amount = float(parts[37]) if len(parts) > 37 and parts[37] else None  # 成交额(万元)
-                                limit_up = float(parts[55]) if len(parts) > 55 and parts[55] else None  # 涨停价
-                                limit_down = float(parts[56]) if len(parts) > 56 and parts[56] else None  # 跌停价
+                                volume = float(parts[6]) if len(parts) > 6 and parts[6] else None  # 成交量(手)
+                                limit_up = float(parts[47]) if len(parts) > 47 and parts[47] else None  # 涨停价
+                                limit_down = float(parts[48]) if len(parts) > 48 and parts[48] else None  # 跌停价
                                 for h in holds:
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
@@ -674,6 +675,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         h["open"] = open_price
                                         h["amplitude"] = amplitude
                                         h["turnover_amount"] = turnover_amount
+                                        h["volume"] = volume
                                         h["limit_up"] = limit_up
                                         h["limit_down"] = limit_down
                                         # 52周最高/最低
