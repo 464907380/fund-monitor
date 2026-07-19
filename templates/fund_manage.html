@@ -2759,7 +2759,7 @@ function showHldDimsEditor() {
       var pct = dim.w;
       html += '<tr>'
         + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
-        + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty()">%</td>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + i + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
         + '</tr>'
@@ -2776,7 +2776,9 @@ function showHldDimsEditor() {
         + '</table></td></tr>';
     });
     html += '</tbody></table></div>'
-      + '<div style="margin-top:6px;"><button onclick="addHldDim()" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:4px;color:#888;padding:4px 14px;font-size:11px;cursor:pointer;">+ 添加维度</button></div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">'
+      + '<div><button onclick="addHldDim()" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:4px;color:#888;padding:4px 14px;font-size:11px;cursor:pointer;">+ 添加维度</button></div>'
+      + '<div id="hldTotalWeight" style="font-size:11px;color:#666;">总权重: <span id="hldTotalWeightVal">0</span></div></div>'
       + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;padding-top:8px;border-top:1px solid #333;">'
       + '<button onclick="calibrateHldDims()" style="background:linear-gradient(135deg,#ffa726,#f57c00);border:none;color:#fff;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">📐 自动校准</button>'
       + '<button onclick="saveHldDims()" style="background:#42a5f5;border:none;color:#fff;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">💾 保存</button>'
@@ -2784,6 +2786,7 @@ function showHldDimsEditor() {
       + '<button onclick="closeHldDimEditor()" style="background:rgba(255,255,255,0.05);border:1px solid #444;color:#888;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">取消</button>'
       + '</div></div>';
     el.innerHTML = html;
+    updateHldTotalWeight();
   });
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:95%;max-width:620px;max-height:80vh;overflow-y:auto;";
   el.onclick = function(e){ e.stopPropagation(); };
@@ -2800,7 +2803,7 @@ function removeHldDim(btn) {
       tr.remove();
       var curveRow = tr.nextElementSibling;
       if (curveRow && curveRow.classList.contains('hld-curve-row')) curveRow.remove();
-      markHldDimsDirty();
+      markHldDimsDirty(); updateHldTotalWeight();
     }
   }
 }
@@ -2901,7 +2904,7 @@ function confirmAddHldDim() {
   // 创建主行（仅TD）
   var tr = document.createElement('tr');
   tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
-    + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty()">%</td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + idx + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
   tbl.appendChild(tr);
@@ -2947,6 +2950,39 @@ function addHldCurvePoint(btn, idx) {
   lastRow.parentNode.insertBefore(newRow, lastRow);
 }
 function markHldDimsDirty() { _hldDimsDirty = true; }
+/** 实时更新总权重显示 */
+function updateHldTotalWeight() {
+  var total = 0;
+  var modal = document.getElementById('hldDimModal');
+  if (modal) {
+    var tbody = modal.querySelector('table > tbody');
+    if (tbody) {
+      // 只取 tbody 的直接子 tr（排除嵌套曲线表内的 tr）
+      Array.prototype.forEach.call(tbody.children, function(tr){
+        if (tr.tagName !== 'TR' || tr.classList.contains('hld-curve-row')) return;
+        var td = tr.querySelector('td:nth-child(2)');
+        if (td) {
+          var inp = td.querySelector('input[type="number"]');
+          if (inp) total += parseInt(inp.value) || 0;
+        }
+      });
+    }
+  }
+  var el = document.getElementById('hldTotalWeightVal');
+  if (el) {
+    el.textContent = total;
+    var container = el.parentElement;
+    if (container) {
+      if (total === 100) {
+        container.style.color = '#66bb6a';
+      } else if (total > 100) {
+        container.style.color = '#ef5350';
+      } else {
+        container.style.color = '#ffa726';
+      }
+    }
+  }
+}
 var _hldDimsDirty = false;
 function _readHldDimsFromUI() {
   var tbl = document.getElementById('hldDimModal').querySelector('table');
