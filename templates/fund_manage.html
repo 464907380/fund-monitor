@@ -2707,6 +2707,17 @@ function showHoldings(code, name) {
 var _hldDimsData = null;
 /** 锁定为绝对标准的维度（自动校准不改变曲线） */
 var _HLD_LOCKED_KEYS = {roe:1, debt_ratio:1, quick_ratio:1, mdd_1y:1, pe:1, net_profit_margin:1};
+/** 维度分类映射 */
+var _HLD_DIM_CAT = {
+  roe:'盈利能力', main_biz_margin:'盈利能力', net_profit_margin:'盈利能力',
+  cost_profit_margin:'盈利能力', roa:'盈利能力',
+  rev_growth:'成长性', net_profit_growth:'成长性',
+  debt_ratio:'偿债/风险', quick_ratio:'偿债/风险', mdd_1y:'偿债/风险',
+  cf_ps:'现金流', cashflow_to_profit:'现金流',
+  pe:'估值', pb:'估值',
+  ret_1m:'市场表现', ret_3m:'市场表现', ret_1y:'市场表现', wk_position:'市场表现'
+};
+var _HLD_CAT_ORDER = ['盈利能力','成长性','偿债/风险','现金流','估值','市场表现'];
 /** 持仓评分维度详细解释 */
 var _HLD_DIM_DESC = {
   roe:'【绝对标准】净资产收益率。净利润÷净资产，巴菲特最看重的指标。>15%优秀，>20%卓越。越高越好。自动校准不改变此曲线。',
@@ -2798,6 +2809,15 @@ function showHldDimsEditor() {
   fetch(API + '/api/holdings-dims').then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok || !d.dims) return;
     _hldDimsData = d.dims;
+    // 按分类排序
+    var sorted = d.dims.slice().sort(function(a, b){
+      var ca = _HLD_DIM_CAT[a.key] || '';
+      var cb = _HLD_DIM_CAT[b.key] || '';
+      var ia = _HLD_CAT_ORDER.indexOf(ca);
+      var ib = _HLD_CAT_ORDER.indexOf(cb);
+      if (ia !== ib) return ia - ib;
+      return (a.name || a.key).localeCompare(b.name || b.key);
+    });
     var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:600px;">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
       + '<span style="font-size:14px;font-weight:600;color:#e0e0e0;">📊 持仓评分设置</span>'
@@ -2808,7 +2828,13 @@ function showHldDimsEditor() {
       + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;">权重</th>'
       + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;">曲线</th>'
       + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;"></th></tr></thead><tbody>';
-    d.dims.forEach(function(dim, i){
+    var lastCat = '';
+    sorted.forEach(function(dim, i){
+      var cat = _HLD_DIM_CAT[dim.key] || '';
+      if (cat && cat !== lastCat) {
+        html += '<tr style="background:rgba(255,255,255,0.03);"><td colspan="4" style="padding:4px 8px;color:#888;font-size:10px;font-weight:600;letter-spacing:1px;border-bottom:1px solid #333;">▸ ' + htmlEscape(cat) + '</td></tr>';
+        lastCat = cat;
+      }
       var pct = dim.w;
       html += '<tr>'
         + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '">' + htmlEscape(dim.name) + (_HLD_LOCKED_KEYS[dim.key] ? ' <span style="color:#888;font-size:9px;">🔒</span>' : '') + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
