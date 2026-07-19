@@ -894,6 +894,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if not cached:
                             continue
                         corp_html = cached[1]
+                        # 解析基本面字段（值单元格可能含有a标签等内嵌HTML）
+                        corp_pairs = _f10_re.findall(
+                            r'<td[^>]*>([^<]*(?:上市日期|机构类型|主营业务|所属行业|成立日期|注册资本)[^<]*)</td>\s*<td[^>]*>(.*?)</td>',
+                            corp_html
+                        )
+                        for label, value_html in corp_pairs:
+                            label_c = label.strip().rstrip("：:")
+                            # 提取纯文本（去掉内嵌的HTML标签）
+                            val_c = _f10_re.sub(r'<[^>]+>', '', value_html).strip()
+                            if "上市日期" in label_c:
+                                h["listing_date"] = val_c
+                            elif "机构类型" in label_c or "所属行业" in label_c:
+                                h["industry"] = val_c
+                            elif "主营业务" in label_c:
+                                h["main_biz"] = val_c[:80]
+                            elif "成立日期" in label_c:
+                                h["establish_date"] = val_c
+                            elif "注册资本" in label_c:
+                                h["reg_capital"] = val_c
                 # ── 持仓股票评分 ──
                 hld_dims = _load_hld_dims()
                 total_w = sum(d["w"] for d in hld_dims)
