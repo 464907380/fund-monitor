@@ -647,10 +647,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 price = float(parts[3]) if parts[3] else 0
                                 prev_close = float(parts[4]) if parts[4] else 0
                                 chg = round((price - prev_close) / prev_close * 100, 2) if prev_close else None
-                                # PE(39) 和 净利润增长率%(63)
+                                # Tencent 字段说明：39=PE, 63=近1周涨跌幅, 37=成交额(元), 55=涨停价, 56=跌停价
                                 pe = float(parts[39]) if len(parts) > 39 and parts[39] else None
-                                growth = float(parts[63]) if len(parts) > 63 and parts[63] else None
-                                peg = round(pe / growth, 2) if (pe and growth and growth > 0) else None
+                                growth = float(parts[63]) if len(parts) > 63 and parts[63] else None  # 近1周涨跌
                                 mkt_cap = float(parts[45]) if len(parts) > 45 and parts[45] else None  # 总市值(亿)
                                 pb = float(parts[46]) if len(parts) > 46 and parts[46] else None  # 市净率
                                 turnover = float(parts[38]) if len(parts) > 38 and parts[38] else None  # 换手率%
@@ -658,12 +657,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 float_mkt_cap = float(parts[44]) if len(parts) > 44 and parts[44] else None  # 流通市值(亿)
                                 open_price = float(parts[5]) if len(parts) > 5 and parts[5] else None  # 今开
                                 amplitude = float(parts[43]) if len(parts) > 43 and parts[43] else None  # 振幅%
+                                turnover_amount = float(parts[37]) if len(parts) > 37 and parts[37] else None  # 成交额(元)
+                                limit_up = float(parts[55]) if len(parts) > 55 and parts[55] else None  # 涨停价
+                                limit_down = float(parts[56]) if len(parts) > 56 and parts[56] else None  # 跌停价
                                 for h in holds:
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
                                         h["pe"] = pe
                                         h["growth"] = growth
-                                        h["peg"] = peg
                                         h["price"] = price
                                         h["mkt_cap"] = mkt_cap
                                         h["pb"] = pb
@@ -672,6 +673,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         h["float_mkt_cap"] = float_mkt_cap
                                         h["open"] = open_price
                                         h["amplitude"] = amplitude
+                                        h["turnover_amount"] = turnover_amount
+                                        h["limit_up"] = limit_up
+                                        h["limit_down"] = limit_down
                                         # 52周最高/最低
                                         wk_high = float(parts[67]) if len(parts) > 67 and parts[67] else None
                                         wk_low = float(parts[68]) if len(parts) > 68 and parts[68] else None
@@ -787,6 +791,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         net_profit_margin = _fget("销售净利率")
                         if net_profit_margin is not None:
                             h["net_profit_margin"] = round(net_profit_margin, 2)
+                        # 净利润增长率（用于正确计算PEG）
+                        net_profit_growth = _fget("净利润增长率")
+                        if net_profit_growth is not None:
+                            h["net_profit_growth"] = round(net_profit_growth, 2)
+                            if h.get("pe") and net_profit_growth > 0:
+                                h["peg"] = round(h["pe"] / net_profit_growth, 2)
                         main_biz_margin = _fget("主营业务利润率")
                         if main_biz_margin is not None:
                             h["main_biz_margin"] = round(main_biz_margin, 2)
