@@ -2707,6 +2707,8 @@ function showHoldings(code, name) {
 
 /** 持仓评分设置弹窗 */
 var _hldDimsData = null;
+/** 锁定为绝对标准的维度（自动校准不改变曲线） */
+var _HLD_LOCKED_KEYS = {roe:1, debt_ratio:1, quick_ratio:1, mdd_1y:1, pe:1, net_profit_margin:1};
 /** 持仓评分维度详细解释 */
 var _HLD_DIM_DESC = {
   roe:'【绝对标准】净资产收益率。净利润÷净资产，巴菲特最看重的指标。>15%优秀，>20%卓越。越高越好。自动校准不改变此曲线。',
@@ -2815,7 +2817,7 @@ function showHldDimsEditor() {
     d.dims.forEach(function(dim, i){
       var pct = dim.w;
       html += '<tr>'
-        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '">' + htmlEscape(dim.name) + (dim.locked ? ' <span style="color:#666;font-size:9px;">🔒</span>' : '') + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '">' + htmlEscape(dim.name) + (_HLD_LOCKED_KEYS[dim.key] ? ' <span style="color:#888;font-size:9px;">🔒</span>' : '') + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
         + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + i + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
@@ -2968,7 +2970,7 @@ function confirmAddHldDim() {
   if (!tbl) return;
   var idx = tbl.querySelectorAll('tr:not(.hld-curve-row)').length;
   var label = _HLD_FIELD_NAMES[key] || key.replace(/_/g,' ');
-  var isLocked = _hldDimsData && _hldDimsData.find(function(d){ return d.key === key && d.locked; });
+  var isLocked = _HLD_LOCKED_KEYS[key];
   // 创建主行（仅TD）
   var tr = document.createElement('tr');
   tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[key] || '') + '">' + htmlEscape(label) + (isLocked ? ' <span style="color:#666;font-size:9px;">🔒</span>' : '') + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
