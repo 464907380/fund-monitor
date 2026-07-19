@@ -671,23 +671,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     import urllib.request as _f10_ur, re as _f10_re
                     _f10_cache = globals().setdefault("_f10_cache", {})
                     _f10_now = time.time()
+
+                    # ── 并行抓取：FGL 财务指标 ──
+                    _fgl_codes = [h.get("c","") for h in holds if h.get("c") and h.get("mkt_cap")]
+                    _fgl_urls = {}
+                    for sc in _fgl_codes:
+                        ck = f"fgl_{sc}"
+                        if ck in _f10_cache and _f10_now - _f10_cache[ck][0] < 86400:
+                            continue
+                        _fgl_urls[sc] = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/{sc}/displaytype/4.phtml"
+                    if _fgl_urls:
+                        def _fetch_fgl(sc):
+                            try:
+                                req = _f10_ur.Request(_fgl_urls[sc], headers={"User-Agent": "Mozilla/5.0"})
+                                with _f10_ur.urlopen(req, timeout=10) as r:
+                                    return sc, r.read().decode("gbk", errors="ignore")
+                            except Exception:
+                                return sc, None
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+                            for sc, html in ex.map(_fetch_fgl, _fgl_urls):
+                                if html:
+                                    _f10_cache[f"fgl_{sc}"] = (_f10_now, html)
+                    # 串行解析（已全部缓存，无网络开销）
                     for h in holds:
                         stock_code = h.get("c", "")
                         if not stock_code or not h.get("mkt_cap"):
                             continue
                         cache_key = f"fgl_{stock_code}"
                         cached = _f10_cache.get(cache_key)
-                        if cached and _f10_now - cached[0] < 86400:
-                            fgl_html = cached[1]
-                        else:
-                            try:
-                                fgl_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/{stock_code}/displaytype/4.phtml"
-                                fgl_req = _f10_ur.Request(fgl_url, headers={"User-Agent": "Mozilla/5.0"})
-                                with _f10_ur.urlopen(fgl_req, timeout=10) as fgl_r:
-                                    fgl_html = fgl_r.read().decode("gbk", errors="ignore")
-                                _f10_cache[cache_key] = (_f10_now, fgl_html)
-                            except Exception:
-                                continue
+                        if not cached:
+                            continue
+                        fgl_html = cached[1]
                         # 解析财务指标
                         fgl_rows = _f10_re.findall(
                             r'<tr[^>]*>'
@@ -773,7 +787,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         roa = _fget("总资产利润率")
                         if roa is not None:
                             h["roa"] = round(roa, 2)
-                    # 获取个股日K线数据计算收益和回撤
+                    # ── 并行抓取：日K线 ──
+                    _kl_codes = [(h.get("c",""), h.get("m","sz")) for h in holds if h.get("c")]
+                    _kl_urls = {}
+                    for sc, mk in _kl_codes:
+                        ck = f"kline_{sc}"
+                        if ck in _f10_cache and _f10_now - _f10_cache[ck][0] < 86400:
+                            continue
+                        _kl_urls[(sc, mk)] = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={mk}{sc}&scale=240&ma=no&datalen=504"
+                    if _kl_urls:
+                        def _fetch_kl(item):
+                            (sc, mk), url = item
+                            try:
+                                req = _f10_ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                                with _f10_ur.urlopen(req, timeout=10) as r:
+                                    return sc, json.loads(r.read().decode())
+                            except Exception:
+                                return sc, None
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+                            for sc, data in ex.map(_fetch_kl, _kl_urls.items()):
+                                if data:
+                                    _f10_cache[f"kline_{sc}"] = (_f10_now, data)
+                    # 串行解析 K 线
                     for h in holds:
                         stock_code = h.get("c", "")
                         market = h.get("m", "sz")
@@ -814,43 +849,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     if dd > max_dd:
                                         max_dd = dd
                                 h[key] = round(max_dd, 2)
-                    # 从新浪F10公司概况页获取基本面信息
+                    # ── 并行抓取：公司概况 ──
+                    _corp_codes = [h.get("c","") for h in holds if h.get("c")]
+                    _corp_urls = {}
+                    for sc in _corp_codes:
+                        ck = f"corp_{sc}"
+                        if ck in _f10_cache and _f10_now - _f10_cache[ck][0] < 86400:
+                            continue
+                        _corp_urls[sc] = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CorpInfo/stockid/{sc}.phtml"
+                    if _corp_urls:
+                        def _fetch_corp(sc):
+                            try:
+                                req = _f10_ur.Request(_corp_urls[sc], headers={"User-Agent": "Mozilla/5.0"})
+                                with _f10_ur.urlopen(req, timeout=10) as r:
+                                    return sc, r.read().decode("gbk", errors="ignore")
+                            except Exception:
+                                return sc, None
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+                            for sc, html in ex.map(_fetch_corp, _corp_urls):
+                                if html:
+                                    _f10_cache[f"corp_{sc}"] = (_f10_now, html)
+                    # 串行解析公司概况
                     for h in holds:
                         stock_code = h.get("c", "")
                         if not stock_code:
                             continue
                         cache_key = f"corp_{stock_code}"
                         cached = _f10_cache.get(cache_key)
-                        if cached and _f10_now - cached[0] < 86400:
-                            corp_html = cached[1]
-                        else:
-                            try:
-                                corp_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CorpInfo/stockid/{stock_code}.phtml"
-                                corp_req = _f10_ur.Request(corp_url, headers={"User-Agent": "Mozilla/5.0"})
-                                with _f10_ur.urlopen(corp_req, timeout=10) as corp_r:
-                                    corp_html = corp_r.read().decode("gbk", errors="ignore")
-                                _f10_cache[cache_key] = (_f10_now, corp_html)
-                            except Exception:
-                                continue
-                        # 解析基本面字段（值单元格可能含有a标签等内嵌HTML）
-                        corp_pairs = _f10_re.findall(
-                            r'<td[^>]*>([^<]*(?:上市日期|机构类型|主营业务|所属行业|成立日期|注册资本)[^<]*)</td>\s*<td[^>]*>(.*?)</td>',
-                            corp_html
-                        )
-                        for label, value_html in corp_pairs:
-                            label_c = label.strip().rstrip("：:")
-                            # 提取纯文本（去掉内嵌的HTML标签）
-                            val_c = _f10_re.sub(r'<[^>]+>', '', value_html).strip()
-                            if "上市日期" in label_c:
-                                h["listing_date"] = val_c
-                            elif "机构类型" in label_c or "所属行业" in label_c:
-                                h["industry"] = val_c
-                            elif "主营业务" in label_c:
-                                h["main_biz"] = val_c[:80]
-                            elif "成立日期" in label_c:
-                                h["establish_date"] = val_c
-                            elif "注册资本" in label_c:
-                                h["reg_capital"] = val_c
+                        if not cached:
+                            continue
+                        corp_html = cached[1]
                 # ── 持仓股票评分 ──
                 hld_dims = _load_hld_dims()
                 total_w = sum(d["w"] for d in hld_dims)
