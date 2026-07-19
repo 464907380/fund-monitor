@@ -2709,17 +2709,17 @@ function showHoldings(code, name) {
 var _hldDimsData = null;
 /** 持仓评分维度详细解释 */
 var _HLD_DIM_DESC = {
-  roe:'净资产收益率。净利润÷净资产，巴菲特最看重的指标。>15%优秀，>20%卓越。越高越好。',
+  roe:'【绝对标准】净资产收益率。净利润÷净资产，巴菲特最看重的指标。>15%优秀，>20%卓越。越高越好。自动校准不改变此曲线。',
   main_biz_margin:'主营业务利润率。主营业务利润÷营收，反映核心业务盈利水平。越高说明主业竞争力越强。',
   net_profit_margin:'销售净利率。净利润÷营收，每元营收能赚多少利润。>15%优秀。越高越好。',
-  debt_ratio:'资产负债率。总负债÷总资产，衡量财务杠杆风险。<50%稳健，50-70%正常，>70%偏高。越低越好。',
+  debt_ratio:'【绝对标准】资产负债率。总负债÷总资产，衡量财务杠杆风险。<50%稳健，50-70%正常，>70%偏高。越低越好。自动校准不改变此曲线。',
   rev_growth:'营收增长率。主营业务收入同比增速，衡量公司成长性。>10%优秀。越高越好。',
-  quick_ratio:'速动比率。(流动资产-存货)÷流动负债，衡量短期偿债能力。>1安全，<0.5警惕。越高越安全。',
+  quick_ratio:'【绝对标准】速动比率。(流动资产-存货)÷流动负债，衡量短期偿债能力。>1安全，<0.5警惕。越高越安全。自动校准不改变此曲线。',
   cf_ps:'每股经营性现金流。经营现金流÷总股本，比EPS更真实的现金造血能力。越高越好。',
-  mdd_1y:'近1年最大回撤。过去1年内从最高到最低的最大跌幅。<15%优秀，>30%需警惕。越低越好。',
+  mdd_1y:'【绝对标准】近1年最大回撤。过去1年内从最高到最低的最大跌幅。<15%优秀，>30%需警惕。越低越好。自动校准不改变此曲线。',
   ret_6m:'近6月收益率。过去126个交易日的价格表现，中期动量指标。越高越好。',
   ret_1y:'近1年收益率。过去252个交易日的价格表现，长期动量指标。越高越好。',
-  pe:'市盈率PE。股价÷每股收益，最常用的估值指标。同行业对比更有意义，过高或过低都需关注。',
+  pe:'【绝对标准】市盈率PE。股价÷每股收益，最常用的估值指标。同行业对比更有意义。自动校准不改变此曲线。',
   wk_position:'52周相对位置。当前价在52周高低区间内的位置%。>70%偏高位，<30%偏低位。',
   weighted_roe:'加权ROE。考虑复利效应的更精准ROE，比普通ROE更反映真实回报率。越高越好。',
   gross_margin:'销售毛利率。(营收-营业成本)÷营收。衡量产品定价权和护城河。注意：新浪数据源可能无数据。',
@@ -2815,7 +2815,7 @@ function showHldDimsEditor() {
     d.dims.forEach(function(dim, i){
       var pct = dim.w;
       html += '<tr>'
-        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '">' + htmlEscape(dim.name) + (dim.locked ? ' <span style="color:#666;font-size:9px;">🔒</span>' : '') + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
         + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + i + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
@@ -2968,9 +2968,10 @@ function confirmAddHldDim() {
   if (!tbl) return;
   var idx = tbl.querySelectorAll('tr:not(.hld-curve-row)').length;
   var label = _HLD_FIELD_NAMES[key] || key.replace(/_/g,' ');
+  var isLocked = _hldDimsData && _hldDimsData.find(function(d){ return d.key === key && d.locked; });
   // 创建主行（仅TD）
   var tr = document.createElement('tr');
-  tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[key] || '') + '">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
+  tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[key] || '') + '">' + htmlEscape(label) + (isLocked ? ' <span style="color:#666;font-size:9px;">🔒</span>' : '') + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + idx + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
