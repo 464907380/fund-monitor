@@ -2417,7 +2417,8 @@ function showHoldings(code, name) {
   el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:1200px;overflow-x:auto;">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
     + '<div><span style="font-size:13px;font-weight:600;color:#e0e0e0;">\ud83d\udcc8 ' + name + '</span> <span style="color:#666;font-size:11px;">' + code + '</span></div>'
-    + '<span onclick="this.closest(\'#holdingsModal\').style.display=\'none\';document.getElementById(\'holdingsBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:16px;">&times;</span></div>'
+    + '<div><span onclick="showHldDimsEditor()" style="cursor:pointer;color:#888;font-size:11px;margin-right:12px;border:1px solid #444;padding:2px 8px;border-radius:4px;">⚙ 评分设置</span>'
+    + '<span onclick="this.closest(\'#holdingsModal\').style.display=\'none\';document.getElementById(\'holdingsBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:16px;">&times;</span></div></div>'
     + '<div id="holdingsContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
     + '</div>';
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:98%;max-width:1200px;overflow-x:auto;";
@@ -2434,6 +2435,7 @@ function showHoldings(code, name) {
       var tbl = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;white-space:nowrap;">'
         + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;position:sticky;left:0;z-index:3;background:#2a2a2a;">股票</th>'
         + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
+        + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;" title="综合评分(0-100)，基于ROE/毛利率/负债率等12个维度加权计算。可点击设置按钮调整维度权重。">评分</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">占比</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实时涨跌</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="当前股价(元)。实时交易价格。">当前价</th>'
@@ -2510,6 +2512,7 @@ function showHoldings(code, name) {
         }
         tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;max-width:120px;overflow:hidden;text-overflow:ellipsis;position:sticky;left:0;z-index:1;background:#1a1a1a;"><span onclick="event.stopPropagation();showStockInfo(\'' + htmlEscape(h.n || '') + '\',\'' + stockFullCode + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.25);" title="上市：' + (h.listing_date || '-') + '\n行业：' + (h.industry || '-') + '\n点击查看详情">' + htmlEscape(h.n || '') + '</span></td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;font-weight:600;color:' + (h.hld_score != null ? (h.hld_score >= 80 ? '#66bb6a' : h.hld_score >= 60 ? '#42a5f5' : h.hld_score >= 40 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.hld_score != null ? h.hld_score.toFixed(1) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.price != null ? h.price.toFixed(2) : '-') + '</td>'
@@ -2695,6 +2698,126 @@ function showHoldings(code, name) {
     .catch(function(){
       var content = document.getElementById('holdingsContent');
       if (content) content.innerHTML = '<span style="color:#ef5350;">加载失败</span>';
+    });
+}
+
+/** 持仓评分设置弹窗 */
+var _hldDimsData = null;
+function showHldDimsEditor() {
+  var backdrop = document.getElementById("hldDimBackdrop");
+  if (!backdrop) {
+    backdrop = document.createElement("div"); backdrop.id = "hldDimBackdrop";
+    document.body.appendChild(backdrop);
+  }
+  backdrop.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:99998;background:rgba(0,0,0,0.5);";
+  backdrop.onclick = function(){ backdrop.style.display='none'; var m=document.getElementById('hldDimModal'); if(m)m.style.display='none'; };
+  var el = document.getElementById("hldDimModal");
+  if (!el) { el = document.createElement("div"); el.id = "hldDimModal"; document.body.appendChild(el); }
+  fetch(API + '/api/holdings-dims').then(function(r){ return r.json(); }).then(function(d){
+    if (!d.ok || !d.dims) return;
+    _hldDimsData = d.dims;
+    var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:600px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+      + '<span style="font-size:14px;font-weight:600;color:#e0e0e0;">📊 持仓评分设置</span>'
+      + '<span onclick="closeHldDimEditor()" style="cursor:pointer;color:#555;font-size:16px;">&times;</span></div>'
+      + '<div style="font-size:11px;color:#666;margin-bottom:8px;">调整各维度权重，分数越高代表该股票在该维度表现越好。</div>'
+      + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#2a2a2a;">'
+      + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">维度</th>'
+      + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;">权重</th>'
+      + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;">曲线</th></tr></thead><tbody>';
+    d.dims.forEach(function(dim, i){
+      var pct = dim.w;
+      html += '<tr>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty()">%</td>'
+        + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + i + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
+        + '</tr>'
+        + '<tr class="hld-curve-row" style="display:none;background:rgba(255,255,255,0.02);" data-idx="' + i + '">'
+        + '<td colspan="3" style="padding:6px 12px;">'
+        + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线（值 → 得分）</div>'
+        + '<table style="border-collapse:collapse;font-size:11px;">'
+        + dim.curve.map(function(p, j){
+          return '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"> →</td>'
+            + '<td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"></td>'
+            + '<td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markHldDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
+        }).join('')
+        + '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addHldCurvePoint(this,' + i + ')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
+        + '</table></td></tr>';
+    });
+    html += '</tbody></table></div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;padding-top:8px;border-top:1px solid #333;">'
+      + '<button onclick="saveHldDims()" style="background:#42a5f5;border:none;color:#fff;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">💾 保存</button>'
+      + '<button onclick="resetHldDims()" style="background:rgba(255,255,255,0.05);border:1px solid #444;color:#888;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">↺ 重置</button>'
+      + '<button onclick="closeHldDimEditor()" style="background:rgba(255,255,255,0.05);border:1px solid #444;color:#888;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">取消</button>'
+      + '</div></div>';
+    el.innerHTML = html;
+  });
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:95%;max-width:620px;";
+  el.onclick = function(e){ e.stopPropagation(); };
+}
+function closeHldDimEditor() {
+  document.getElementById('hldDimModal').style.display = 'none';
+  document.getElementById('hldDimBackdrop').style.display = 'none';
+}
+function toggleHldCurve(btn, idx) {
+  var row = btn.closest('tr').nextElementSibling;
+  if (row && row.classList.contains('hld-curve-row') && parseInt(row.dataset.idx) === idx) {
+    row.style.display = row.style.display === 'none' ? '' : 'none';
+  }
+}
+function addHldCurvePoint(btn, idx) {
+  var tbl = btn.closest('table');
+  var lastRow = tbl.querySelector('tr:last-child');
+  var newRow = document.createElement('tr');
+  newRow.innerHTML = '<td style="padding:2px 4px;"><input type="number" step="any" value="0" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"> →</td>'
+    + '<td style="padding:2px 4px;"><input type="number" step="any" value="0" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"></td>'
+    + '<td style="padding:2px 4px;"><button onclick="this.closest(\'tr\').remove();markHldDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button></td>';
+  lastRow.parentNode.insertBefore(newRow, lastRow);
+}
+function markHldDimsDirty() { _hldDimsDirty = true; }
+var _hldDimsDirty = false;
+function _readHldDimsFromUI() {
+  var tbl = document.getElementById('hldDimModal').querySelector('table');
+  var rows = tbl.querySelectorAll('tbody tr:not(.hld-curve-row)');
+  var dims = [];
+  rows.forEach(function(tr){
+    var nameEl = tr.querySelector('td:first-child');
+    if (!nameEl) return;
+    var key = nameEl.textContent.trim();
+    // Actually key is in the span
+    var keySpan = nameEl.querySelector('span');
+    if (!keySpan) return;
+    var dimKey = keySpan.textContent.trim();
+    var wInput = tr.querySelector('input[type="number"]');
+    var w = wInput ? parseInt(wInput.value) || 1 : 1;
+    // Read curve from the hidden row
+    var curveRow = tr.nextElementSibling;
+    var curve = [];
+    if (curveRow && curveRow.classList.contains('hld-curve-row')) {
+      var inputs = curveRow.querySelectorAll('tr:not(:last-child)');
+      inputs.forEach(function(cr){
+        var ins = cr.querySelectorAll('input');
+        if (ins.length >= 2) curve.push([parseFloat(ins[0].value)||0, parseFloat(ins[1].value)||0]);
+      });
+    }
+    var orig = _hldDimsData.find(function(d){ return d.key === dimKey; });
+    dims.push({key: dimKey, name: orig ? orig.name : dimKey, w: w, curve: curve.length >= 2 ? curve : (orig ? orig.curve : [[0,0],[100,100]])});
+  });
+  return dims;
+}
+function saveHldDims() {
+  var dims = _readHldDimsFromUI();
+  fetch(API + '/api/holdings-dims/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dims:dims})})
+    .then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { closeHldDimEditor(); alert('保存成功，重新打开持仓弹窗后生效'); }
+      else alert('保存失败: ' + (d.error||''));
+    });
+}
+function resetHldDims() {
+  if (!confirm('确定重置为默认设置？')) return;
+  fetch(API + '/api/holdings-dims/reset', {method:'POST'})
+    .then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { closeHldDimEditor(); alert('已重置，重新打开持仓弹窗后生效'); }
     });
 }
 

@@ -558,6 +558,101 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/holdings-dims":
+            """获取持仓股票评分维度配置"""
+            try:
+                raw = CFG.get("holdings_scoring", {}).get("dims")
+                if raw:
+                    self._send(*_json_response({"ok": True, "dims": raw}))
+                    return
+                # 返回默认
+                default_dims = [
+                    {"key":"roe","name":"ROE","w":15,"curve":[[0,0],[5,20],[10,40],[15,60],[20,80],[30,100]]},
+                    {"key":"gross_margin","name":"毛利率","w":10,"curve":[[0,0],[10,10],[20,30],[40,60],[60,80],[80,100]]},
+                    {"key":"net_profit_margin","name":"销售净利率","w":8,"curve":[[0,0],[3,15],[8,40],[15,65],[25,85],[40,100]]},
+                    {"key":"debt_ratio","name":"资产负债率","w":12,"curve":[[0,90],[20,85],[40,70],[60,50],[80,20],[95,0]]},
+                    {"key":"rev_growth","name":"营收增长","w":8,"curve":[[-20,0],[0,30],[10,50],[30,75],[60,90],[100,100]]},
+                    {"key":"quick_ratio","name":"速动比率","w":8,"curve":[[0,0],[0.3,20],[0.6,40],[1,65],[1.5,85],[3,100]]},
+                    {"key":"cf_ps","name":"每股现金流","w":5,"curve":[[-2,0],[0,25],[0.5,50],[1,70],[3,90],[5,100]]},
+                    {"key":"mdd_1y","name":"1年回撤","w":10,"curve":[[0,100],[10,85],[20,65],[30,40],[50,15],[70,0]]},
+                    {"key":"ret_6m","name":"近6月收益","w":8,"curve":[[-50,0],[-20,10],[0,30],[15,60],[30,80],[60,100]]},
+                    {"key":"ret_1y","name":"近1年收益","w":8,"curve":[[-50,0],[-20,15],[0,35],[20,60],[50,85],[100,100]]},
+                    {"key":"pe","name":"PE","w":5,"curve":[[0,90],[10,70],[20,50],[40,30],[60,15],[80,5]]},
+                    {"key":"wk_position","name":"52周位置","w":3,"curve":[[0,90],[20,70],[50,50],[70,30],[90,15],[100,5]]},
+                ]
+                self._send(*_json_response({"ok": True, "dims": default_dims}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if parsed.path == "/api/holdings-dims/save":
+            """保存持仓评分维度配置"""
+            try:
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                data = json.loads(body)
+                dims = data.get("dims")
+                if not dims:
+                    self._send(*_json_response({"ok": False, "error": "缺少dims参数"}, 400))
+                    return
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg.setdefault("holdings_scoring", {})["dims"] = dims
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                globals()["_HLD_DIMS_CACHE"] = None
+                self._send(*_json_response({"ok": True}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if parsed.path == "/api/holdings-dims/reset":
+            """重置持仓评分维度到默认"""
+            try:
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg.setdefault("holdings_scoring", {}).pop("dims", None)
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                globals()["_HLD_DIMS_CACHE"] = None
+                self._send(*_json_response({"ok": True}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if parsed.path == "/api/holdings-dims/calibrate":
+            """自动校准持仓评分曲线"""
+            try:
+                q = urllib.parse.parse_qs(parsed.query)
+                code = q.get("code", [""])[0]
+                if not code:
+                    self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
+                    return
+                from fund_watch import _parse_holdings
+                from fund_utils import fetch, _retry_fetch
+                holds = _parse_holdings(code) or []
+                if not holds:
+                    self._send(*_json_response({"ok": False, "error": "无持仓数据"}, 400))
+                    return
+                # 收集各维度实际值
+                vals = {d["key"]: [] for d in _load_hld_dims()}
+                # 先加载实时数据（简化处理：只取已有的缓存数据或空跑一次）
+                # 这里只返回当前 holdings 中各维度的实际值范围供前端校准参考
+                result = {}
+                for d in _load_hld_dims():
+                    samples = [h.get(d["key"]) for h in holds if h.get(d["key"]) is not None]
+                    if samples:
+                        mn = min(samples); mx = max(samples)
+                        # 自动生成5段曲线
+                        pts = []
+                        for i in range(5):
+                            x = mn + (mx - mn) * i / 4
+                            pts.append([round(x, 2), round(i * 25, 0)])
+                        result[d["key"]] = {"min": mn, "max": mx, "points": pts}
+                self._send(*_json_response({"ok": True, "calibrate": result}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/recommend-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _frc:
@@ -824,6 +919,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 h["establish_date"] = val_c
                             elif "注册资本" in label_c:
                                 h["reg_capital"] = val_c
+                # ── 持仓股票评分 ──
+                # ── 持仓股票评分 ──
+                hld_dims = _load_hld_dims()
+                total_w = sum(d["w"] for d in hld_dims)
+                for h in holds:
+                    dim_scores = {}
+                    for d in hld_dims:
+                        val = h.get(d["key"])
+                        dim_scores[d["key"]] = _hld_score(val, d["curve"])
+                    weighted = sum(dim_scores[d["key"]] * d["w"] for d in hld_dims)
+                    avg = weighted / total_w if total_w else 0
+                    h["hld_score"] = round(avg, 1)
                 self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1825,6 +1932,49 @@ _BUILTIN_PRESETS = {
         ]
     },
 }
+
+
+_HLD_DEFAULT_DIMS = [
+    {"key":"roe","name":"ROE","w":15,"curve":[[0,0],[5,20],[10,40],[15,60],[20,80],[30,100]]},
+    {"key":"gross_margin","name":"毛利率","w":10,"curve":[[0,0],[10,10],[20,30],[40,60],[60,80],[80,100]]},
+    {"key":"net_profit_margin","name":"销售净利率","w":8,"curve":[[0,0],[3,15],[8,40],[15,65],[25,85],[40,100]]},
+    {"key":"debt_ratio","name":"资产负债率","w":12,"curve":[[0,90],[20,85],[40,70],[60,50],[80,20],[95,0]]},
+    {"key":"rev_growth","name":"营收增长","w":8,"curve":[[-20,0],[0,30],[10,50],[30,75],[60,90],[100,100]]},
+    {"key":"quick_ratio","name":"速动比率","w":8,"curve":[[0,0],[0.3,20],[0.6,40],[1,65],[1.5,85],[3,100]]},
+    {"key":"cf_ps","name":"每股现金流","w":5,"curve":[[-2,0],[0,25],[0.5,50],[1,70],[3,90],[5,100]]},
+    {"key":"mdd_1y","name":"1年回撤","w":10,"curve":[[0,100],[10,85],[20,65],[30,40],[50,15],[70,0]]},
+    {"key":"ret_6m","name":"近6月收益","w":8,"curve":[[-50,0],[-20,10],[0,30],[15,60],[30,80],[60,100]]},
+    {"key":"ret_1y","name":"近1年收益","w":8,"curve":[[-50,0],[-20,15],[0,35],[20,60],[50,85],[100,100]]},
+    {"key":"pe","name":"PE","w":5,"curve":[[0,90],[10,70],[20,50],[40,30],[60,15],[80,5]]},
+    {"key":"wk_position","name":"52周位置","w":3,"curve":[[0,90],[20,70],[50,50],[70,30],[90,15],[100,5]]},
+]
+
+_HLD_DIMS_CACHE: list | None = None
+
+def _load_hld_dims() -> list:
+    global _HLD_DIMS_CACHE
+    if _HLD_DIMS_CACHE is not None:
+        return _HLD_DIMS_CACHE
+    raw = CFG.get("holdings_scoring", {}).get("dims")
+    if raw:
+        _HLD_DIMS_CACHE = raw
+        return _HLD_DIMS_CACHE
+    _HLD_DIMS_CACHE = _HLD_DEFAULT_DIMS
+    return _HLD_DIMS_CACHE
+
+
+def _hld_score(val, curve):
+    if val is None or not curve or len(curve) < 2:
+        return 0.0
+    xs = [p[0] for p in curve]; ys = [p[1] for p in curve]
+    if val <= xs[0]: return max(0.0, min(100.0, ys[0]))
+    if val >= xs[-1]: return max(0.0, min(100.0, ys[-1]))
+    for i in range(len(xs)-1):
+        if xs[i] <= val <= xs[i+1]:
+            if xs[i+1]==xs[i]: return float(ys[i])
+            r = (val-xs[i])/(xs[i+1]-xs[i])
+            return max(0.0, min(100.0, ys[i] + (ys[i+1]-ys[i])*r))
+    return 0.0
 
 
 def _init_builtin_presets(cfg: dict) -> None:
