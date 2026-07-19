@@ -2746,6 +2746,7 @@ function showHldDimsEditor() {
     });
     html += '</tbody></table></div>'
       + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;padding-top:8px;border-top:1px solid #333;">'
+      + '<button onclick="calibrateHldDims()" style="background:linear-gradient(135deg,#ffa726,#f57c00);border:none;color:#fff;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">📐 自动校准</button>'
       + '<button onclick="saveHldDims()" style="background:#42a5f5;border:none;color:#fff;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">💾 保存</button>'
       + '<button onclick="resetHldDims()" style="background:rgba(255,255,255,0.05);border:1px solid #444;color:#888;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">↺ 重置</button>'
       + '<button onclick="closeHldDimEditor()" style="background:rgba(255,255,255,0.05);border:1px solid #444;color:#888;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">取消</button>'
@@ -2818,6 +2819,33 @@ function resetHldDims() {
   fetch(API + '/api/holdings-dims/reset', {method:'POST'})
     .then(function(r){ return r.json(); }).then(function(d){
       if (d.ok) { closeHldDimEditor(); alert('已重置，重新打开持仓弹窗后生效'); }
+    });
+}
+function calibrateHldDims() {
+  // 从持仓弹窗中获取当前基金代码
+  var modal = document.getElementById('holdingsModal');
+  var code = '';
+  if (modal) {
+    var m = modal.textContent.match(/\b\d{6}\b/);
+    if (m) code = m[0];
+  }
+  if (!code) { alert('请先打开基金持仓弹窗'); return; }
+  if (!confirm('基于当前基金持仓数据自动校准评分曲线，确定继续？')) return;
+  var btn = document.querySelector('#hldDimModal button:first-child');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 校准中...'; }
+  fetch(API + '/api/holdings-dims/calibrate?code=' + code)
+    .then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
+        alert('✔ ' + (d.message || '校准完成') + '，重新打开持仓弹窗后生效');
+        closeHldDimEditor();
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
+        alert('校准失败: ' + (d.error||''));
+      }
+    }).catch(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
+      alert('校准失败: ' + (e.message||e));
     });
 }
 

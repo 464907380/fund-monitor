@@ -629,26 +629,74 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return
                 from fund_watch import _parse_holdings
                 from fund_utils import fetch, _retry_fetch
+                # 先获取持仓并完成所有数据采集（触发评分计算）
                 holds = _parse_holdings(code) or []
                 if not holds:
                     self._send(*_json_response({"ok": False, "error": "无持仓数据"}, 400))
                     return
-                # 收集各维度实际值
-                vals = {d["key"]: [] for d in _load_hld_dims()}
-                # 先加载实时数据（简化处理：只取已有的缓存数据或空跑一次）
-                # 这里只返回当前 holdings 中各维度的实际值范围供前端校准参考
-                result = {}
-                for d in _load_hld_dims():
-                    samples = [h.get(d["key"]) for h in holds if h.get(d["key"]) is not None]
-                    if samples:
-                        mn = min(samples); mx = max(samples)
-                        # 自动生成5段曲线
-                        pts = []
-                        for i in range(5):
-                            x = mn + (mx - mn) * i / 4
-                            pts.append([round(x, 2), round(i * 25, 0)])
-                        result[d["key"]] = {"min": mn, "max": mx, "points": pts}
-                self._send(*_json_response({"ok": True, "calibrate": result}))
+                # 采集实时行情和FGL数据（同 holdings endpoint 逻辑）
+                codes_str = ",".join((h.get("m","sz")+h["c"]) for h in holds)
+                try:
+                    raw = _retry_fetch(api_url("tencent_realtime", code=codes_str))
+                    for line in raw.strip().split(";"):
+                        if not line: continue
+                        parts = line.split("~")
+                        if len(parts) > 67:
+                            code_r = parts[2]; price = float(parts[3]) if parts[3] else 0
+                            for h in holds:
+                                if h["c"] == code_r:
+                                    h["price"] = price
+                                    h["mkt_cap"] = float(parts[45]) if len(parts)>45 and parts[45] else None
+                                    h["pe"] = float(parts[39]) if len(parts)>39 and parts[39] else None
+                                    h["turnover"] = float(parts[38]) if len(parts)>38 and parts[38] else None
+                                    h["wk_high"] = float(parts[67]) if len(parts)>67 and parts[67] else None
+                                    h["wk_low"] = float(parts[68]) if len(parts)>68 and parts[68] else None
+                                    h["amplitude"] = float(parts[43]) if len(parts)>43 and parts[43] else None
+                                    break
+                except: pass
+                # 应用已有评分曲线计算各股得分（同时获取各维度值）
+                hld_dims = _load_hld_dims()
+                # 收集各维度样本数据
+                sample_map = {d["key"]: [] for d in hld_dims}
+                for d in hld_dims:
+                    for h in holds:
+                        v = h.get(d["key"])
+                        if v is not None:
+                            sample_map[d["key"]].append(v)
+                # 生成校准后的曲线
+                new_dims = []
+                for d in hld_dims:
+                    samples = sample_map.get(d["key"], [])
+                    if len(samples) < 3:
+                        new_dims.append(dict(d))
+                        continue
+                    samples.sort()
+                    n = len(samples)
+                    # 取 0%, 20%, 40%, 60%, 80%, 100% 分位点
+                    pcts = [0, 20, 40, 60, 80, 100]
+                    pts = []
+                    for pi, pc in enumerate(pcts):
+                        idx = int(n * pc / 100)
+                        if idx >= n: idx = n - 1
+                        x = round(samples[idx], 2)
+                        y = round(pi * 20, 0)  # 0,20,40,60,80,100
+                        pts.append([x, y])
+                    # 确保曲线合理：去重相邻相同x
+                    unique = [pts[0]]
+                    for p in pts[1:]:
+                        if p[0] != unique[-1][0]:
+                            unique.append(p)
+                    if len(unique) < 2:
+                        unique = [[0,0],[100,100]]
+                    new_dims.append(dict(d, curve=unique))
+                # 保存到config
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg.setdefault("holdings_scoring", {})["dims"] = new_dims
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                globals()["_HLD_DIMS_CACHE"] = None
+                self._send(*_json_response({"ok": True, "dims": new_dims, "message": f"基于{len(holds)}只持仓数据校准完成"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
