@@ -635,8 +635,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if _tencent_cached and _tencent_now - _tencent_cached[0] < 60:
                         raw = _tencent_cached[1]
                     else:
-                        raw = _retry_fetch(api_url("tencent_realtime", code=codes_str))
+                        # Tencent 返回 GBK 编码，_retry_fetch 用 UTF-8 会导致中文乱码
+                        # 但数字和 ~ 分隔符不受影响。直接使用 urllib 用 GBK 解码
+                        import urllib.request as _tencent_ur
+                        _tencent_url = api_url("tencent_realtime", code=codes_str)
+                        _tencent_req = _tencent_ur.Request(_tencent_url, headers={"User-Agent": "Mozilla/5.0"})
+                        try:
+                            with _tencent_ur.urlopen(_tencent_req, timeout=15) as _tencent_r:
+                                raw = _tencent_r.read().decode("gbk", errors="ignore")
+                        except Exception:
+                            raw = ""
                         _tencent_cache[_tencent_key] = (_tencent_now, raw)
+                    def _sf(v):
+                        """safe float conversion"""
+                        try: return float(v) if v else None
+                        except: return None
                     try:
                         for line in raw.strip().split(";"):
                             if not line:
@@ -644,23 +657,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             parts = line.split("~")
                             if len(parts) > 32:
                                 code_from_resp = parts[2] if len(parts) > 2 else ""
-                                price = float(parts[3]) if parts[3] else 0
-                                prev_close = float(parts[4]) if parts[4] else 0
+                                price = _sf(parts[3]) or 0
+                                prev_close = _sf(parts[4]) or 0
                                 chg = round((price - prev_close) / prev_close * 100, 2) if prev_close else None
-                                # Tencent 字段说明：39=PE, 63=近1周涨跌幅, 37=成交额(元), 55=涨停价, 56=跌停价
-                                pe = float(parts[39]) if len(parts) > 39 and parts[39] else None
-                                ret_1w = float(parts[63]) if len(parts) > 63 and parts[63] else None  # 近1周涨跌
-                                mkt_cap = float(parts[45]) if len(parts) > 45 and parts[45] else None  # 总市值(亿)
-                                pb = float(parts[46]) if len(parts) > 46 and parts[46] else None  # 市净率
-                                turnover = float(parts[38]) if len(parts) > 38 and parts[38] else None  # 换手率%
-                                vol_ratio = float(parts[49]) if len(parts) > 49 and parts[49] else None  # 量比
-                                float_mkt_cap = float(parts[44]) if len(parts) > 44 and parts[44] else None  # 流通市值(亿)
-                                open_price = float(parts[5]) if len(parts) > 5 and parts[5] else None  # 今开
-                                amplitude = float(parts[43]) if len(parts) > 43 and parts[43] else None  # 振幅%
-                                turnover_amount = float(parts[37]) if len(parts) > 37 and parts[37] else None  # 成交额(万元)
-                                volume = float(parts[6]) if len(parts) > 6 and parts[6] else None  # 成交量(手)
-                                limit_up = float(parts[47]) if len(parts) > 47 and parts[47] else None  # 涨停价
-                                limit_down = float(parts[48]) if len(parts) > 48 and parts[48] else None  # 跌停价
+                                pe = _sf(parts[39]) if len(parts) > 39 else None
+                                ret_1w = _sf(parts[63]) if len(parts) > 63 else None
+                                mkt_cap = _sf(parts[45]) if len(parts) > 45 else None
+                                pb = _sf(parts[46]) if len(parts) > 46 else None
+                                turnover = _sf(parts[38]) if len(parts) > 38 else None
+                                vol_ratio = _sf(parts[49]) if len(parts) > 49 else None
+                                float_mkt_cap = _sf(parts[44]) if len(parts) > 44 else None
+                                open_price = _sf(parts[5]) if len(parts) > 5 else None
+                                amplitude = _sf(parts[43]) if len(parts) > 43 else None
+                                turnover_amount = _sf(parts[37]) if len(parts) > 37 else None
+                                volume = _sf(parts[6]) if len(parts) > 6 else None
+                                limit_up = _sf(parts[47]) if len(parts) > 47 else None
+                                limit_down = _sf(parts[48]) if len(parts) > 48 else None
                                 for h in holds:
                                     if h["c"] == code_from_resp:
                                         h["chg"] = chg
@@ -679,14 +691,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         h["limit_up"] = limit_up
                                         h["limit_down"] = limit_down
                                         # 52周最高/最低
-                                        wk_high = float(parts[67]) if len(parts) > 67 and parts[67] else None
-                                        wk_low = float(parts[68]) if len(parts) > 68 and parts[68] else None
+                                        wk_high = _sf(parts[67]) if len(parts) > 67 else None
+                                        wk_low = _sf(parts[68]) if len(parts) > 68 else None
                                         h["wk_high"] = wk_high
                                         h["wk_low"] = wk_low
                                         if wk_high is not None and wk_low is not None and wk_high > wk_low and price:
                                             h["wk_position"] = round((price - wk_low) / (wk_high - wk_low) * 100, 1)
                                         break
                     except Exception:
+                        # 个别字段解析失败不中断整个流程
                         pass
                     # 从新浪F10财务指标页获取股息率和市销率数据
                     import urllib.request as _f10_ur, re as _f10_re
