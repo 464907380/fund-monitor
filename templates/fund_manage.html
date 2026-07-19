@@ -2719,7 +2719,10 @@ var _HLD_FIELD_NAMES = {
   mdd_2y:'近2年回撤%', gross_margin:'销售毛利率%',
   main_biz_margin:'主营业务利润率%',
   net_profit_growth:'净利润增长率%', turnover_amount:'成交额(亿)',
-  limit_up:'涨停价', limit_down:'跌停价'
+  limit_up:'涨停价', limit_down:'跌停价',
+  main_biz_cost_ratio:'主营业务成本率%', total_asset_growth:'总资产增长率%',
+  cash_ratio:'现金比率%', cost_profit_margin:'成本费用利润率%',
+  cashflow_to_profit:'经营现金流/净利润'
 };
 var _HLD_FIELD_DESC = {
   p:'该股票占基金净值比例', growth:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
@@ -2734,7 +2737,12 @@ var _HLD_FIELD_DESC = {
   mdd_2y:'近2年最大回撤', gross_margin:'(营收-成本)÷营收',
   main_biz_margin:'主营业务利润÷营收',
   net_profit_growth:'净利润同比增速，用于PEG计算',
-  turnover_amount:'当日总成交金额', limit_up:'当日涨停价', limit_down:'当日跌停价'
+  turnover_amount:'当日总成交金额', limit_up:'当日涨停价', limit_down:'当日跌停价',
+  main_biz_cost_ratio:'主营业务成本÷营收，越低利润越高',
+  total_asset_growth:'总资产同比增速，衡量扩张速度',
+  cash_ratio:'(现金+等价物)÷流动负债，最保守偿债指标',
+  cost_profit_margin:'利润÷成本费用，衡量成本控制',
+  cashflow_to_profit:'经营现金流÷净利润，>1利润质量高'
 };
 function showHldDimsEditor() {
   var backdrop = document.getElementById("hldDimBackdrop");
@@ -2838,7 +2846,10 @@ function addHldDim() {
     establish_date:'成立日期', listing_date:'上市日期',
     main_biz_margin:'主营业务利润率%',
     net_profit_growth:'净利润增长率%', turnover_amount:'成交额(亿)',
-    limit_up:'涨停价', limit_down:'跌停价'
+    limit_up:'涨停价', limit_down:'跌停价',
+    main_biz_cost_ratio:'主营业务成本率%', total_asset_growth:'总资产增长率%',
+    cash_ratio:'现金比率%', cost_profit_margin:'成本费用利润率%',
+    cashflow_to_profit:'经营现金流/净利润'
   };
   var FIELD_DESC = {
     p:'该股票占基金净值比例', growth:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
@@ -2853,7 +2864,10 @@ function addHldDim() {
     mdd_2y:'近2年最大回撤', gross_margin:'(营收-成本)÷营收',
     main_biz_margin:'主营业务利润÷营收',
     net_profit_growth:'净利润同比增速', turnover_amount:'当日总成交金额',
-    limit_up:'当日涨停价', limit_down:'当日跌停价'
+    limit_up:'当日涨停价', limit_down:'当日跌停价',
+    main_biz_cost_ratio:'主营业务成本÷营收', total_asset_growth:'总资产同比增速',
+    cash_ratio:'(现金+等价物)÷流动负债', cost_profit_margin:'利润÷成本费用',
+    cashflow_to_profit:'经营现金流÷净利润'
   };
   for (var key in first) {
     if (skipKeys[key]) continue;

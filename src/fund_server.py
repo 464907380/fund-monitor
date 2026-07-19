@@ -657,7 +657,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 float_mkt_cap = float(parts[44]) if len(parts) > 44 and parts[44] else None  # 流通市值(亿)
                                 open_price = float(parts[5]) if len(parts) > 5 and parts[5] else None  # 今开
                                 amplitude = float(parts[43]) if len(parts) > 43 and parts[43] else None  # 振幅%
-                                turnover_amount = float(parts[37]) if len(parts) > 37 and parts[37] else None  # 成交额(元)
+                                turnover_amount = float(parts[37]) if len(parts) > 37 and parts[37] else None  # 成交额(万元)
                                 limit_up = float(parts[55]) if len(parts) > 55 and parts[55] else None  # 涨停价
                                 limit_down = float(parts[56]) if len(parts) > 56 and parts[56] else None  # 跌停价
                                 for h in holds:
@@ -812,6 +812,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         roa = _fget("总资产利润率")
                         if roa is not None:
                             h["roa"] = round(roa, 2)
+                        # ── 新增 FGL 字段 ──
+                        # 主营业务成本率(%)：替代销售毛利率（新浪无毛利率数据），越低越好
+                        main_biz_cost = _fget("主营业务成本率")
+                        if main_biz_cost is not None:
+                            h["main_biz_cost_ratio"] = round(main_biz_cost, 2)
+                        # 总资产增长率(%)：衡量资产扩张速度
+                        total_asset_growth = _fget("总资产增长率")
+                        if total_asset_growth is not None:
+                            h["total_asset_growth"] = round(total_asset_growth, 2)
+                        # 现金比率(%)：最保守的短期偿债指标（现金类资产/流动负债）
+                        cash_ratio = _fget("现金比率")
+                        if cash_ratio is not None:
+                            h["cash_ratio"] = round(cash_ratio, 2)
+                        # 成本费用利润率(%)：每元成本费用创造的利润，越高越好
+                        cost_profit = _fget("成本费用利润率")
+                        if cost_profit is not None:
+                            h["cost_profit_margin"] = round(cost_profit, 2)
+                        # 经营现金净流量/净利润：利润质量，>1说明利润有真实现金支撑
+                        cf_to_profit = _fget("经营现金净流量与净利润的比率")
+                        if cf_to_profit is not None:
+                            h["cashflow_to_profit"] = round(cf_to_profit, 2)
                     # ── 并行抓取：日K线 ──
                     _kl_codes = [(h.get("c",""), h.get("m","sz")) for h in holds if h.get("c")]
                     _kl_urls = {}
