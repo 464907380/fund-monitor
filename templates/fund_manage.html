@@ -2424,6 +2424,8 @@ function showHoldings(code, name) {
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:98%;max-width:1200px;overflow-x:auto;";
   el.onclick = function(e){ e.stopPropagation(); };
 
+  window._hldFundCode = code;
+  window._hldFundName = name;
   fetch(API + '/api/holdings?code=' + code)
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -2979,7 +2981,7 @@ function saveHldDims() {
   var dims = _readHldDimsFromUI();
   fetch(API + '/api/holdings-dims/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dims:dims})})
     .then(function(r){ return r.json(); }).then(function(d){
-      if (d.ok) { closeHldDimEditor(); alert('保存成功，重新打开持仓弹窗后生效'); }
+      if (d.ok) { closeHldDimEditor(); _refreshHoldingsContent(); }
       else alert('保存失败: ' + (d.error||''));
     });
 }
@@ -2987,8 +2989,17 @@ function resetHldDims() {
   if (!confirm('确定重置为默认设置？')) return;
   fetch(API + '/api/holdings-dims/reset', {method:'POST'})
     .then(function(r){ return r.json(); }).then(function(d){
-      if (d.ok) { closeHldDimEditor(); alert('已重置，重新打开持仓弹窗后生效'); }
+      if (d.ok) { closeHldDimEditor(); _refreshHoldingsContent(); }
     });
+}
+/** 刷新持仓弹窗评分数据（无需重新打开弹窗） */
+function _refreshHoldingsContent() {
+  var code = window._hldFundCode;
+  var name = window._hldFundName;
+  if (!code || !name) return;
+  var content = document.getElementById('holdingsContent');
+  if (content) content.innerHTML = '<span style="color:#888;">⏳ 刷新评分...</span>';
+  showHoldings(code, name);
 }
 function calibrateHldDims() {
   // 从持仓弹窗中获取当前基金代码
@@ -3006,8 +3017,8 @@ function calibrateHldDims() {
     .then(function(r){ return r.json(); }).then(function(d){
       if (d.ok) {
         if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
-        alert('✔ ' + (d.message || '校准完成') + '，重新打开持仓弹窗后生效');
         closeHldDimEditor();
+        _refreshHoldingsContent();
       } else {
         if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
         alert('校准失败: ' + (d.error||''));
