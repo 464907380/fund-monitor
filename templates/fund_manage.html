@@ -2707,6 +2707,50 @@ function showHoldings(code, name) {
 
 /** 持仓评分设置弹窗 */
 var _hldDimsData = null;
+/** 持仓评分维度详细解释 */
+var _HLD_DIM_DESC = {
+  roe:'净资产收益率。净利润÷净资产，巴菲特最看重的指标。>15%优秀，>20%卓越。越高越好。',
+  main_biz_margin:'主营业务利润率。主营业务利润÷营收，反映核心业务盈利水平。越高说明主业竞争力越强。',
+  net_profit_margin:'销售净利率。净利润÷营收，每元营收能赚多少利润。>15%优秀。越高越好。',
+  debt_ratio:'资产负债率。总负债÷总资产，衡量财务杠杆风险。<50%稳健，50-70%正常，>70%偏高。越低越好。',
+  rev_growth:'营收增长率。主营业务收入同比增速，衡量公司成长性。>10%优秀。越高越好。',
+  quick_ratio:'速动比率。(流动资产-存货)÷流动负债，衡量短期偿债能力。>1安全，<0.5警惕。越高越安全。',
+  cf_ps:'每股经营性现金流。经营现金流÷总股本，比EPS更真实的现金造血能力。越高越好。',
+  mdd_1y:'近1年最大回撤。过去1年内从最高到最低的最大跌幅。<15%优秀，>30%需警惕。越低越好。',
+  ret_6m:'近6月收益率。过去126个交易日的价格表现，中期动量指标。越高越好。',
+  ret_1y:'近1年收益率。过去252个交易日的价格表现，长期动量指标。越高越好。',
+  pe:'市盈率PE。股价÷每股收益，最常用的估值指标。同行业对比更有意义，过高或过低都需关注。',
+  wk_position:'52周相对位置。当前价在52周高低区间内的位置%。>70%偏高位，<30%偏低位。',
+  weighted_roe:'加权ROE。考虑复利效应的更精准ROE，比普通ROE更反映真实回报率。越高越好。',
+  gross_margin:'销售毛利率。(营收-营业成本)÷营收。衡量产品定价权和护城河。注意：新浪数据源可能无数据。',
+  op_margin:'营业利润率。营业利润÷营业收入。>20%说明公司有较强定价权和护城河。越高越好。',
+  roa:'总资产利润率ROA。净利润÷总资产。衡量全部资产的盈利效率，与ROE互补。越高越好。',
+  ret_1m:'近1月收益率。过去22个交易日的价格表现，短期动量指标。越高越好。',
+  pb:'市净率PB。股价÷每股净资产。与PE互补，适用于金融/周期股，PB<1可能破净。',
+  net_profit_growth:'净利润增长率。净利润同比增速，衡量盈利增长动力。>10%良好。越高越好。',
+  total_asset_growth:'总资产增长率。总资产同比增速，衡量公司扩张速度。持续高增长说明处于扩张期。',
+  cash_ratio:'现金比率。(现金+交易性金融资产)÷流动负债。最保守的短期偿债指标，>50%安全。越高越好。',
+  cost_profit_margin:'成本费用利润率。利润总额÷成本费用总额。每元成本能创造多少利润，>100%优秀。越高越好。',
+  cashflow_to_profit:'经营现金流÷净利润。衡量利润的现金支撑质量。>1说明利润有真实现金流保障，<0.5需警惕。越高越好。',
+  main_biz_cost_ratio:'主营业务成本率。主营业务成本÷营收，越低说明毛利率越高。越低越好。',
+  turnover:'换手率。成交量÷流通股本，反映交易活跃度。过高可能见顶，过低可能无人问津。',
+  vol_ratio:'量比。当前成交量÷5日均量。>2明显放量，<0.5明显缩量。',
+  amplitude:'振幅。(最高-最低)÷昨收。反映日内波动程度，过高说明多空分歧大。',
+  float_mkt_cap:'流通市值。可在二级市场自由交易的市值，区分大小盘风格。',
+  p:'持仓占比。该股票占基金净值的比例，越高说明基金经理越看好。',
+  ret_1w:'近1周涨跌幅。过去5个交易日的价格表现，超短期动量。越高越好。',
+  turnover_amount:'成交额。当日总成交金额，衡量流动性。',
+  volume:'成交量。当日总成交手数，衡量交易活跃度。',
+  limit_up:'涨停价。当日最大可成交价(昨收×1.1/1.2)。盘中可能无数据。',
+  limit_down:'跌停价。当日最小可成交价(昨收×0.9/0.8)。',
+  nav_ps:'每股净资产。净资产÷总股本，是PB的估值基础。越高家底越厚。',
+  retained_ps:'每股未分配利润。公司累积可分配利润，越高分红潜力越大。',
+  capital_reserve_ps:'每股资本公积金。公司资本储备，越高转增股本潜力越大。',
+  total_assets:'总资产。公司全部资产规模，体量越大抗风险能力越强。',
+  current_ratio:'流动比率。流动资产÷流动负债，比速动比率更宽松的偿债指标。>2安全。',
+  net_asset_growth:'净资产增长率。净资产同比增速，衡量股东权益增长。越高越好。',
+  mdd_2y:'近2年最大回撤。过去2年内最大跌幅，更长周期的风险衡量。越低越好。'
+};
 /** 持仓评分字段中文名映射 */
 var _HLD_FIELD_NAMES = {
   p:'占比%', ret_1w:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
@@ -2771,7 +2815,8 @@ function showHldDimsEditor() {
     d.dims.forEach(function(dim, i){
       var pct = dim.w;
       html += '<tr>'
-        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span></td>'
+        + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;">' + htmlEscape(dim.key) + '</span>'
+        + '<br><span style="color:#666;font-size:10px;display:block;margin-top:2px;max-width:200px;">' + htmlEscape(_HLD_DIM_DESC[dim.key] || '') + '</span></td>'
         + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + i + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
         + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
@@ -2926,7 +2971,8 @@ function confirmAddHldDim() {
   var label = _HLD_FIELD_NAMES[key] || key.replace(/_/g,' ');
   // 创建主行（仅TD）
   var tr = document.createElement('tr');
-  tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
+  tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span>'
+    + '<br><span style="color:#666;font-size:10px;display:block;margin-top:2px;max-width:200px;">' + htmlEscape(_HLD_DIM_DESC[key] || '') + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + idx + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
