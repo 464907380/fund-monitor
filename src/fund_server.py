@@ -937,11 +937,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 h["reg_capital"] = val_c
                 # ── 数据质量校验：过滤明显异常值 ──
                 for h in holds:
-                    for key in ('roe','weighted_roe','op_margin','main_biz_margin','net_profit_margin',
+                    for key in ('roe','main_biz_margin','net_profit_margin',
                                 'rev_growth','net_profit_growth','net_asset_growth','total_asset_growth',
                                 'quick_ratio','current_ratio','cash_ratio','cost_profit_margin',
                                 'debt_ratio','main_biz_cost_ratio','roa',
-                                'ret_1m','ret_3m','ret_6m','ret_1y','ret_1w',
+                                'ret_1m','ret_3m','ret_1y','ret_1w',
                                 'mdd_1y','mdd_2y','wk_position'):
                         v = h.get(key)
                         if v is not None and (v > 10000 or v < -10000):
@@ -2185,12 +2185,9 @@ _HLD_DEFAULT_DIMS = [
     {"key":"quick_ratio","name":"速动比率","w":6,"curve":[[0,0],[0.3,20],[0.6,40],[1,65],[1.5,85],[3,100]],"locked":True},
     {"key":"cf_ps","name":"每股现金流","w":3,"curve":[[-2,0],[0,25],[0.5,50],[1,70],[3,90],[5,100]]},
     {"key":"mdd_1y","name":"1年回撤","w":8,"curve":[[0,100],[10,85],[20,65],[30,40],[50,15],[70,0]],"locked":True},
-    {"key":"ret_6m","name":"近6月收益","w":6,"curve":[[-50,0],[-20,10],[0,30],[15,60],[30,80],[60,100]]},
     {"key":"ret_1y","name":"近1年收益","w":6,"curve":[[-50,0],[-20,15],[0,35],[20,60],[50,85],[100,100]]},
     {"key":"pe","name":"PE","w":4,"curve":[[0,90],[10,70],[20,50],[40,30],[60,15],[80,5]],"locked":True},
     {"key":"wk_position","name":"52周位置","w":2,"curve":[[0,90],[20,70],[50,50],[70,30],[90,15],[100,5]]},
-    {"key":"weighted_roe","name":"加权ROE","w":8,"curve":[[0,0],[5,15],[10,35],[15,60],[20,80],[30,100]]},
-    {"key":"op_margin","name":"营业利润率","w":6,"curve":[[0,0],[5,10],[10,30],[20,60],[30,80],[50,100]]},
     {"key":"roa","name":"总资产利润率","w":5,"curve":[[0,0],[2,10],[5,30],[10,60],[15,80],[20,100]]},
     {"key":"ret_1m","name":"近1月收益","w":5,"curve":[[-30,0],[-10,15],[0,35],[10,65],[20,85],[30,100]]},
     {"key":"pb","name":"市净率PB","w":4,"curve":[[0,90],[1,70],[3,50],[5,35],[10,20],[20,5]]},

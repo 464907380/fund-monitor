@@ -2452,11 +2452,9 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="股息率=股息发放率×每股收益÷股价。衡量每年现金分红回报，适合长期吃股息的保守投资者。数据来自最新财报，部分股票可能无数据。">股息率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市销率(PS)=总市值÷营业收入。不看利润只看营收规模，适用于亏损/微利/周期底部企业。PS越低说明营收相对市值越便宜，需同行业对比。">PS(市销率)</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净资产收益率(ROE)=净利润÷净资产。巴菲特最看重的指标，衡量公司为股东创造回报的能力。>15%优秀，>20%卓越。">ROE</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="加权净资产收益率(%)。考虑复利效应的更精准ROE，比普通ROE更反映真实回报率。">加权ROE</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="成本费用利润率(%)=利润总额÷成本费用总额。衡量每付出1元成本能创造多少利润，越高说明成本控制越好。>100%优秀。">成本费用利润率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="销售净利率=净利润÷营收。衡量每元营收能产生多少净利润，>15%优秀。">销售净利率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="主营业务利润率=主营业务利润÷营收。反映核心业务的盈利水平。">主营利润率</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="营业利润率=营业利润÷营业收入。反映主营业务的盈利水平，>20%说明公司有较强定价权和护城河。">营业利润率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="主营业务收入增长率(%)。与净利润增长率对照看，若营收增长但利润不增，说明增收不增利、利润质量堪忧。">营收增长率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="资产负债率=总负债÷总资产。衡量财务杠杆风险，<50%稳健，50-70%正常，>70%偏高需警惕。">资产负债率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="速动比率=(流动资产-存货)÷流动负债。衡量短期偿债能力，>1安全，<1需警惕流动性风险。">速动比率</th>'
@@ -2473,7 +2471,6 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="52周相对位置(%)=当前价在52周高低区间内的位置。100%≈最高价，0%≈最低价。>70%偏高位，<30%偏低位。">52周位置</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="近1月收益率(%)。过去约22个交易日的价格表现。">近1月收益</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="近3月收益率(%)。过去约66个交易日的价格表现。">近3月收益</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="近6月收益率(%)。过去约126个交易日的价格表现。">近6月收益</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="近1年收益率(%)。过去约252个交易日的价格表现。">近1年收益</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="近1年最大回撤(%)。过去一年内从最高点到最低点的最大跌幅，衡量下行风险。">近1年回撤</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="近2年最大回撤(%)。过去两年内从最高点到最低点的最大跌幅。">近2年回撤</th>'
@@ -2529,11 +2526,9 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.dividend_yield ? (h.dividend_yield * 100).toFixed(2) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.ps ? h.ps.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.roe != null ? (h.roe >= 15 ? '#66bb6a' : h.roe >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.roe != null ? h.roe.toFixed(1) + '%' : '-') + '</td>'
-          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.weighted_roe != null ? (h.weighted_roe >= 15 ? '#66bb6a' : h.weighted_roe >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.weighted_roe != null ? h.weighted_roe.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.cost_profit_margin != null ? (h.cost_profit_margin >= 100 ? '#66bb6a' : h.cost_profit_margin >= 50 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.cost_profit_margin != null ? h.cost_profit_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.net_profit_margin != null ? (h.net_profit_margin >= 15 ? '#66bb6a' : h.net_profit_margin >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.net_profit_margin != null ? h.net_profit_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.main_biz_margin != null ? (h.main_biz_margin >= 30 ? '#66bb6a' : h.main_biz_margin >= 15 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.main_biz_margin != null ? h.main_biz_margin.toFixed(1) + '%' : '-') + '</td>'
-          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.op_margin != null ? (h.op_margin >= 20 ? '#66bb6a' : h.op_margin >= 10 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.op_margin != null ? h.op_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.rev_growth != null ? (h.rev_growth >= 10 ? '#ef5350' : h.rev_growth >= 0 ? '#ffa726' : '#66bb6a') : '#888') + ';">' + (h.rev_growth != null ? (h.rev_growth > 0 ? '+' : '') + h.rev_growth.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.debt_ratio != null ? (h.debt_ratio < 50 ? '#66bb6a' : h.debt_ratio <= 70 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.debt_ratio != null ? h.debt_ratio.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.quick_ratio != null ? (h.quick_ratio >= 1 ? '#66bb6a' : h.quick_ratio >= 0.5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.quick_ratio != null ? h.quick_ratio.toFixed(2) : '-') + '</td>'
@@ -2550,7 +2545,6 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.wk_position != null ? (h.wk_position >= 70 ? '#ef5350' : h.wk_position >= 30 ? '#ffa726' : '#66bb6a') : '#888') + ';">' + (h.wk_position != null ? h.wk_position.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.ret_1m != null ? (h.ret_1m >= 0 ? '#ef5350' : '#66bb6a') : '#888') + ';">' + (h.ret_1m != null ? (h.ret_1m > 0 ? '+' : '') + h.ret_1m.toFixed(2) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.ret_3m != null ? (h.ret_3m >= 0 ? '#ef5350' : '#66bb6a') : '#888') + ';">' + (h.ret_3m != null ? (h.ret_3m > 0 ? '+' : '') + h.ret_3m.toFixed(2) + '%' : '-') + '</td>'
-          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.ret_6m != null ? (h.ret_6m >= 0 ? '#ef5350' : '#66bb6a') : '#888') + ';">' + (h.ret_6m != null ? (h.ret_6m > 0 ? '+' : '') + h.ret_6m.toFixed(2) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.ret_1y != null ? (h.ret_1y >= 0 ? '#ef5350' : '#66bb6a') : '#888') + ';">' + (h.ret_1y != null ? (h.ret_1y > 0 ? '+' : '') + h.ret_1y.toFixed(2) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.mdd_1y != null ? (h.mdd_1y >= 30 ? '#ef5350' : h.mdd_1y >= 15 ? '#ffa726' : '#66bb6a') : '#888') + ';">' + (h.mdd_1y != null ? '-' + h.mdd_1y.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.mdd_2y != null ? (h.mdd_2y >= 30 ? '#ef5350' : h.mdd_2y >= 15 ? '#ffa726' : '#66bb6a') : '#888') + ';">' + (h.mdd_2y != null ? '-' + h.mdd_2y.toFixed(1) + '%' : '-') + '</td>'
@@ -2719,15 +2713,14 @@ var _HLD_DIM_DESC = {
   quick_ratio:'【绝对标准】速动比率。(流动资产-存货)÷流动负债，衡量短期偿债能力。>1安全，<0.5警惕。越高越安全。自动校准不改变此曲线。',
   cf_ps:'每股经营性现金流。经营现金流÷总股本，比EPS更真实的现金造血能力。越高越好。',
   mdd_1y:'【绝对标准】近1年最大回撤。过去1年内从最高到最低的最大跌幅。<15%优秀，>30%需警惕。越低越好。自动校准不改变此曲线。',
-  ret_6m:'近6月收益率。过去126个交易日的价格表现，中期动量指标。越高越好。',
+  ret_1m:'近1月收益率。过去22个交易日的价格表现，短期动量指标。越高越好。',
+  pb:'市净率PB。股价÷每股净资产。与PE互补，适用于金融/周期股，PB<1可能破净。',
+  roa:'总资产利润率ROA。净利润÷总资产。衡量全部资产的盈利效率，与ROE互补。越高越好。',
+  ret_1m:'近1月收益率。过去22个交易日的价格表现，短期动量指标。越高越好。',
   ret_1y:'近1年收益率。过去252个交易日的价格表现，长期动量指标。越高越好。',
   pe:'【绝对标准】市盈率PE。股价÷每股收益，最常用的估值指标。同行业对比更有意义。自动校准不改变此曲线。',
   wk_position:'52周相对位置。当前价在52周高低区间内的位置%。>70%偏高位，<30%偏低位。',
-  weighted_roe:'加权ROE。考虑复利效应的更精准ROE，比普通ROE更反映真实回报率。越高越好。',
   gross_margin:'销售毛利率。(营收-营业成本)÷营收。衡量产品定价权和护城河。注意：新浪数据源可能无数据。',
-  op_margin:'营业利润率。营业利润÷营业收入。>20%说明公司有较强定价权和护城河。越高越好。',
-  roa:'总资产利润率ROA。净利润÷总资产。衡量全部资产的盈利效率，与ROE互补。越高越好。',
-  ret_1m:'近1月收益率。过去22个交易日的价格表现，短期动量指标。越高越好。',
   pb:'市净率PB。股价÷每股净资产。与PE互补，适用于金融/周期股，PB<1可能破净。',
   net_profit_growth:'净利润增长率。净利润同比增速，衡量盈利增长动力。>10%良好。越高越好。',
   total_asset_growth:'总资产增长率。总资产同比增速，衡量公司扩张速度。持续高增长说明处于扩张期。',
@@ -2757,12 +2750,12 @@ var _HLD_DIM_DESC = {
 var _HLD_FIELD_NAMES = {
   p:'占比%', ret_1w:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
   vol_ratio:'量比', float_mkt_cap:'流通市值(亿)', open:'今开(元)',
-  amplitude:'振幅%', op_margin:'营业利润率%', nav_ps:'每股净资产(元)',
-  weighted_roe:'加权ROE%', retained_ps:'每股未分配利润(元)',
+  amplitude:'振幅%', nav_ps:'每股净资产(元)',
   total_assets:'总资产(亿)', current_ratio:'流动比率',
   net_asset_growth:'净资产增长率%', capital_reserve_ps:'每股资本公积(元)',
   roa:'总资产利润率%', ret_1m:'近1月收益%', ret_3m:'近3月收益%',
   mdd_2y:'近2年回撤%', gross_margin:'销售毛利率%',
+  retained_ps:'每股未分配利润(元)',
   main_biz_margin:'主营业务利润率%',
   net_profit_growth:'净利润增长率%', turnover_amount:'成交额(万元)',
   volume:'成交量(手)', limit_up:'涨停价', limit_down:'跌停价',
@@ -2774,8 +2767,8 @@ var _HLD_FIELD_DESC = {
   p:'该股票占基金净值比例', ret_1w:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
   turnover:'成交量÷流通股本', vol_ratio:'当前量÷5日均量',
   float_mkt_cap:'可自由交易市值', open:'今日开盘价',
-  amplitude:'(最高-最低)÷昨收', op_margin:'营业利润÷营业收入',
-  nav_ps:'净资产÷总股本', weighted_roe:'考虑复利的更精准ROE',
+  amplitude:'(最高-最低)÷昨收',
+  nav_ps:'净资产÷总股本',
   retained_ps:'累计可分配利润', total_assets:'公司全部资产规模',
   current_ratio:'流动资产÷流动负债', net_asset_growth:'净资产同比增速',
   capital_reserve_ps:'资本储备金', roa:'净利润÷总资产',
@@ -2884,12 +2877,12 @@ function addHldDim() {
   var FIELD_NAMES = {
     p:'占比%', ret_1w:'近1周涨跌%', pb:'市净率PB', turnover:'换手率%',
     vol_ratio:'量比', float_mkt_cap:'流通市值(亿)', open:'今开(元)',
-    amplitude:'振幅%', op_margin:'营业利润率%', nav_ps:'每股净资产(元)',
-    weighted_roe:'加权ROE%', retained_ps:'每股未分配利润(元)',
+    amplitude:'振幅%', nav_ps:'每股净资产(元)',
     total_assets:'总资产(亿)', current_ratio:'流动比率',
     net_asset_growth:'净资产增长率%', capital_reserve_ps:'每股资本公积(元)',
     roa:'总资产利润率%', ret_1m:'近1月收益%', ret_3m:'近3月收益%',
     mdd_2y:'近2年回撤%', gross_margin:'销售毛利率%',
+    retained_ps:'每股未分配利润(元)',
     establish_date:'成立日期', listing_date:'上市日期',
     main_biz_margin:'主营业务利润率%',
     net_profit_growth:'净利润增长率%', turnover_amount:'成交额(万元)',
@@ -2902,8 +2895,8 @@ function addHldDim() {
     p:'该股票占基金净值比例', ret_1w:'过去5个交易日涨跌幅', pb:'股价÷每股净资产',
     turnover:'成交量÷流通股本', vol_ratio:'当前量÷5日均量',
     float_mkt_cap:'可自由交易市值', open:'今日开盘价',
-    amplitude:'(最高-最低)÷昨收', op_margin:'营业利润÷营业收入',
-    nav_ps:'净资产÷总股本', weighted_roe:'考虑复利的更精准ROE',
+    amplitude:'(最高-最低)÷昨收',
+    nav_ps:'净资产÷总股本',
     retained_ps:'累计可分配利润', total_assets:'公司全部资产规模',
     current_ratio:'流动资产÷流动负债', net_asset_growth:'净资产同比增速',
     capital_reserve_ps:'资本储备金', roa:'净利润÷总资产',
