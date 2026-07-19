@@ -648,15 +648,97 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     h["price"] = price
                                     h["mkt_cap"] = float(parts[45]) if len(parts)>45 and parts[45] else None
                                     h["pe"] = float(parts[39]) if len(parts)>39 and parts[39] else None
+                                    h["pb"] = float(parts[46]) if len(parts)>46 and parts[46] else None
                                     h["turnover"] = float(parts[38]) if len(parts)>38 and parts[38] else None
+                                    h["vol_ratio"] = float(parts[49]) if len(parts)>49 and parts[49] else None
+                                    h["float_mkt_cap"] = float(parts[44]) if len(parts)>44 and parts[44] else None
                                     h["wk_high"] = float(parts[67]) if len(parts)>67 and parts[67] else None
                                     h["wk_low"] = float(parts[68]) if len(parts)>68 and parts[68] else None
                                     h["amplitude"] = float(parts[43]) if len(parts)>43 and parts[43] else None
+                                    h["open"] = float(parts[5]) if len(parts)>5 and parts[5] else None
+                                    # 计算52周位置
+                                    wk_high = h.get("wk_high"); wk_low = h.get("wk_low")
+                                    if wk_high and wk_low and wk_high > wk_low and price:
+                                        h["wk_position"] = round((price - wk_low) / (wk_high - wk_low) * 100, 1)
                                     break
                 except: pass
-                # 应用已有评分曲线计算各股得分（同时获取各维度值）
-                hld_dims = _load_hld_dims()
+                # 采集新浪FGL数据
+                import urllib.request as _cal_ur, re as _cal_re
+                _cal_cache = globals().setdefault("_f10_cache", {})
+                _cal_now = time.time()
+                for h in holds:
+                    sc = h.get("c", "")
+                    if not sc or not h.get("mkt_cap"): continue
+                    ck = f"fgl_{sc}"; cached = _cal_cache.get(ck)
+                    if cached and _cal_now - cached[0] < 86400:
+                        fgl_html = cached[1]
+                    else:
+                        try:
+                            fgl_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/{sc}/displaytype/4.phtml"
+                            fgl_req = _cal_ur.Request(fgl_url, headers={"User-Agent": "Mozilla/5.0"})
+                            with _cal_ur.urlopen(fgl_req, timeout=10) as fgl_r:
+                                fgl_html = fgl_r.read().decode("gbk", errors="ignore")
+                            _cal_cache[ck] = (_cal_now, fgl_html)
+                        except: continue
+                    fgl_rows = _cal_re.findall(r'<tr[^>]*><td[^>]*>(.*?)</td>\s*<td[^>]*>([^<]*)</td>\s*<td[^>]*>([^<]*)</td>', fgl_html, _cal_re.DOTALL)
+                    fin = {}
+                    for nr, vl, _ in fgl_rows:
+                        nc = _cal_re.sub(r'<[^>]+>', '', nr).strip()
+                        try: fin[nc] = float(vl.strip()) if vl.strip() not in ["","--"] else None
+                        except: pass
+                    def _fg(*ks):
+                        for k in ks:
+                            for fk, fv in fin.items():
+                                if k in fk and fv is not None: return fv
+                        return None
+                    roe = _fg("净资产收益率")
+                    if roe: h["roe"] = round(roe, 2)
+                    opm = _fg("营业利润率")
+                    if opm: h["op_margin"] = round(opm, 2)
+                    rg = _fg("主营业务收入增长率","营业收入增长率")
+                    if rg: h["rev_growth"] = round(rg, 2)
+                    dr = _fg("资产负债率")
+                    if dr: h["debt_ratio"] = round(dr, 2)
+                    cf = _fg("每股经营性现金流")
+                    if cf: h["cf_ps"] = round(cf, 4)
+                    nav = _fg("每股净资产")
+                    if nav: h["nav_ps"] = round(nav, 2)
+                    gm = _fg("销售毛利率")
+                    if gm: h["gross_margin"] = round(gm, 2)
+                    qr = _fg("速动比率")
+                    if qr: h["quick_ratio"] = round(qr, 2)
+                    npm = _fg("销售净利率")
+                    if npm: h["net_profit_margin"] = round(npm, 2)
+                # 采集日K线数据计算收益和回撤
+                for h in holds:
+                    sc = h.get("c",""); mk = h.get("m","sz")
+                    if not sc: continue
+                    ck = f"kline_{sc}"; cached = _cal_cache.get(ck)
+                    if cached and _cal_now - cached[0] < 86400:
+                        kline = cached[1]
+                    else:
+                        try:
+                            kl_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={mk}{sc}&scale=240&ma=no&datalen=504"
+                            kl_req = _cal_ur.Request(kl_url, headers={"User-Agent": "Mozilla/5.0"})
+                            with _cal_ur.urlopen(kl_req, timeout=10) as kl_r:
+                                kline = json.loads(kl_r.read().decode())
+                            _cal_cache[ck] = (_cal_now, kline)
+                        except: continue
+                    if not kline or len(kline) < 2: continue
+                    closes = [float(p["close"]) for p in kline]
+                    lc = closes[-1]
+                    for days, key in [(22,"ret_1m"),(66,"ret_3m"),(126,"ret_6m"),(252,"ret_1y")]:
+                        if len(closes) >= days+1: h[key] = round((lc-closes[-(days+1)])/closes[-(days+1)]*100, 2)
+                    for pdays, key in [(252,"mdd_1y"),(504,"mdd_2y")]:
+                        if len(closes) >= pdays:
+                            pc = closes[-pdays:]; pk = pc[0]; md = 0
+                            for c in pc:
+                                if c > pk: pk = c
+                                dd = (pk-c)/pk*100
+                                if dd > md: md = dd
+                            h[key] = round(md, 2)
                 # 收集各维度样本数据
+                hld_dims = _load_hld_dims()
                 sample_map = {d["key"]: [] for d in hld_dims}
                 for d in hld_dims:
                     for h in holds:
@@ -688,7 +770,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             unique.append(p)
                     if len(unique) < 2:
                         unique = [[0,0],[100,100]]
-                    new_dims.append(dict(d, curve=unique))
+                    # 极值延展：在得分接近0的一端外推一段，让超低/超高值也有区分度
+                    is_lower = d["key"] in ("debt_ratio", "mdd_1y", "wk_position", "pe")
+                    curve = unique
+                    data_range = curve[-1][0] - curve[0][0] if len(curve) >= 2 else 10
+                    extend = max(round(data_range * 0.3, 2), round(abs(curve[0][0]) * 0.15, 2), 3)
+                    if not is_lower and len(curve) >= 2 and curve[0][1] < 10:
+                        # 越高越好：左端延展
+                        bump = min(10, max(5, curve[1][1] / 2))
+                        new_left = round(curve[0][0] - extend, 2)
+                        curve.insert(0, [new_left, 0])
+                        if len(curve) >= 3 and curve[2][1] > bump:
+                            curve[1][1] = round(bump)
+                    elif is_lower and len(curve) >= 2 and curve[-1][1] < 10:
+                        # 越低越好：右端延展
+                        bump = min(10, max(5, curve[-2][1] / 2))
+                        new_right = round(curve[-1][0] + extend, 2)
+                        curve.append([new_right, 0])
+                        if len(curve) >= 3 and curve[-3][1] > bump:
+                            curve[-2][1] = round(bump)
+                    new_dims.append(dict(d, curve=curve))
                 # 保存到config
                 with open(_CONFIG_PATH, encoding="utf-8") as f:
                     cfg = json.load(f)
