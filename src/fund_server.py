@@ -946,6 +946,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 h["establish_date"] = val_c
                             elif "注册资本" in label_c:
                                 h["reg_capital"] = val_c
+                # ── 数据质量校验：过滤明显异常值 ──
+                for h in holds:
+                    for key in ('roe','weighted_roe','op_margin','main_biz_margin','net_profit_margin',
+                                'rev_growth','net_profit_growth','net_asset_growth','total_asset_growth',
+                                'quick_ratio','current_ratio','cash_ratio','cost_profit_margin',
+                                'debt_ratio','main_biz_cost_ratio','roa',
+                                'ret_1m','ret_3m','ret_6m','ret_1y','ret_1w',
+                                'mdd_1y','mdd_2y','wk_position'):
+                        v = h.get(key)
+                        if v is not None and (v > 10000 or v < -10000):
+                            h[key] = None  # 异常值置空
+                    # 比率类不能为负（有明确下界的）
+                    for key in ('quick_ratio','current_ratio','cash_ratio','debt_ratio'):
+                        v = h.get(key)
+                        if v is not None and v < 0:
+                            h[key] = None
                 # ── 持仓股票评分 ──
                 hld_dims = _load_hld_dims()
                 total_w = sum(d["w"] for d in hld_dims)
