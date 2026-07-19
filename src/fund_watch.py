@@ -151,6 +151,24 @@ def _parse_real_time(code: str) -> float | None:
     return None
 
 
+def _parse_holdings_meta(code: str) -> dict:
+    """获取持仓数据的报告期信息（报告期+截止日期）"""
+    import html as _html
+    url = api_url("fund_holdings", code=code)
+    try:
+        jj = fetch(url, headers={"Referer": "https://fundf10.eastmoney.com/"})
+        # 提取截止日期 如 2026-03-31
+        dm = re.search(r'截止至：<font[^>]*>(\d{4}-\d{2}-\d{2})</font>', jj)
+        # 提取报告期 如 2026年1季度
+        qm = re.search(r'(\d{4}年(?:1季|2季|3季|4季|半年|年报)[度]?)', jj)
+        return {
+            "date": dm.group(1) if dm else "",
+            "quarter": qm.group(1) if qm else ""
+        }
+    except Exception:
+        return {"date": "", "quarter": ""}
+
+
 def _parse_holdings(code: str) -> list[dict] | None:
     """获取前10大持仓明细（含股票名称/代码/占比），同时返回实时涨跌幅"""
     import html as _html

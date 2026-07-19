@@ -624,9 +624,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not code:
                     self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
                     return
-                from fund_watch import _parse_holdings
+                from fund_watch import _parse_holdings, _parse_holdings_meta
                 from fund_utils import fetch, _retry_fetch
                 holds = _parse_holdings(code) or []
+                hld_meta = _parse_holdings_meta(code) if holds else {}
                 # 用腾讯财经接口批量获取实时涨跌（速度快，不需要Referer）
                 if holds:
                     codes_str = ",".join(
@@ -999,7 +1000,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                          "v": h.get(d["key"]), "w": d["w"]}
                         for d in hld_dims
                     ]
-                self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
+                self._send(*_json_response({"ok": True, "code": code, "holdings": holds, "report": hld_meta}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return

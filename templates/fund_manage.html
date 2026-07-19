@@ -2422,7 +2422,7 @@ function showHoldings(code, name) {
   }
   el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:1200px;overflow-x:auto;">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-    + '<div><span style="font-size:13px;font-weight:600;color:#e0e0e0;">\ud83d\udcc8 ' + name + '</span> <span style="color:#666;font-size:11px;">' + code + '</span></div>'
+    + '<div><span style="font-size:13px;font-weight:600;color:#e0e0e0;">\ud83d\udcc8 ' + name + '</span> <span style="color:#666;font-size:11px;">' + code + '</span> <span id="hldReportPeriod" style="color:#555;font-size:10px;"></span></div>'
     + '<div><span onclick="showHldDimsEditor()" style="cursor:pointer;color:#888;font-size:11px;margin-right:12px;border:1px solid #444;padding:2px 8px;border-radius:4px;">⚙ 评分设置</span>'
     + '<span onclick="this.closest(\'#holdingsModal\').style.display=\'none\';document.getElementById(\'holdingsBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:16px;">&times;</span></div></div>'
     + '<div id="holdingsContent" style="text-align:center;padding:20px;color:#888;">\u23f3 \u52a0\u8f7d\u4e2d...</div>'
@@ -2436,6 +2436,11 @@ function showHoldings(code, name) {
     .then(function(r){ return r.json(); })
     .then(function(d){
       var content = document.getElementById('holdingsContent');
+      // 显示报告期
+      var rpEl = document.getElementById('hldReportPeriod');
+      if (rpEl && d.report && d.report.quarter) {
+        rpEl.textContent = '📋 ' + d.report.quarter + (d.report.date ? ' · ' + d.report.date : '');
+      }
       if (!d.ok || !d.holdings || d.holdings.length === 0) {
         content.innerHTML = '<span style="color:#666;">暂无持仓数据</span>';
         return;
@@ -3228,7 +3233,10 @@ function showHldScoreDetail(stockName, stockCode, tdEl) {
   var dims = h.hld_dim_scores.sort(function(a,b){ return b.w - a.w; });
   var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;max-height:80vh;overflow-y:auto;">'
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:6px;">📊 ' + htmlEscape(stockName) + ' <span style="color:#666;font-size:11px;">' + stockCode + '</span> 评分明细</div>'
-    + '<div style="font-size:11px;color:#666;margin-bottom:8px;">总分: <span style="font-weight:600;color:' + (h.hld_score >= 80 ? '#66bb6a' : h.hld_score >= 60 ? '#42a5f5' : h.hld_score >= 40 ? '#ffa726' : '#ef5350') + ';">' + h.hld_score + '</span></div>'
+    + '<div style="font-size:11px;color:#666;margin-bottom:4px;">总分: <span style="font-weight:600;color:' + (h.hld_score >= 80 ? '#66bb6a' : h.hld_score >= 60 ? '#42a5f5' : h.hld_score >= 40 ? '#ffa726' : '#ef5350') + ';">' + h.hld_score + '</span></div>'
+    + '<div style="font-size:10px;color:#555;margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:6px;">'
+    + '💡 财务数据来自最新财报，K线/行情为近期数据。各指标可能不同期，仅供参考。'
+    + '</div>'
     + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
     + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">维度</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实际值</th>'
