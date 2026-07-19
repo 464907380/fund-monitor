@@ -2896,25 +2896,31 @@ function confirmAddHldDim() {
   if (!tbl) return;
   var idx = tbl.querySelectorAll('tr:not(.hld-curve-row)').length;
   var label = _HLD_FIELD_NAMES[key] || key.replace(/_/g,' ');
+  // 创建主行（仅TD）
   var tr = document.createElement('tr');
   tr.innerHTML = '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(label) + '<br><span style="color:#555;font-size:10px;">' + key + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty()">%</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + idx + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
-    + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td></tr>'
-    + '<tr class="hld-curve-row" style="display:none;background:rgba(255,255,255,0.02);" data-idx="' + idx + '">'
-    + '<td colspan="4" style="padding:6px 12px;">'
+    + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
+  tbl.appendChild(tr);
+  // 创建曲线行（单独TR）
+  var cr = document.createElement('tr');
+  cr.className = 'hld-curve-row';
+  cr.style.display = 'none';
+  cr.style.background = 'rgba(255,255,255,0.02)';
+  cr.setAttribute('data-idx', idx);
+  var curveHtml = '<td colspan="4" style="padding:6px 12px;">'
     + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线（值 → 得分）</div>'
     + '<table style="border-collapse:collapse;font-size:11px;">';
-  var curveHtml = '';
   curve.forEach(function(p, j){
     curveHtml += '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"> →</td>'
       + '<td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"></td>'
       + '<td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markHldDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
   });
   curveHtml += '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addHldCurvePoint(this,' + idx + ')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
-    + '</table></td></tr>';
-  tr.innerHTML += curveHtml;
-  tbl.appendChild(tr);
+    + '</table></td>';
+  cr.innerHTML = curveHtml;
+  tbl.appendChild(cr);
   _hldDimsData.push({key: key, name: label, w: 5, curve: curve});
   markHldDimsDirty();
   // 关闭选择弹窗
