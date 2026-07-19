@@ -198,9 +198,17 @@ def _load() -> list[dict]:
 
 
 def _save(data: list[dict]) -> None:
+    os.makedirs(os.path.dirname(_FUND_LIST_PATH), exist_ok=True)
     with open(_FUND_LIST_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
+
+
+def _write_config(cfg: dict) -> None:
+    """安全写入 config.json，自动创建 data/ 目录"""
+    os.makedirs(os.path.dirname(_CONFIG_PATH), exist_ok=True)
+    with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
 def _json_response(data, status=200):
@@ -1594,8 +1602,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if "scoring" not in cfg:
                     cfg["scoring"] = {}
                 cfg["scoring"]["dims"] = dims
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwcfg2:
-                    json.dump(cfg, _fwcfg2, indent=2, ensure_ascii=False)
+                _write_config(cfg)
                 # 重新加载评分模块使新配置生效
                 import importlib
                 import fund_scoring
@@ -1706,8 +1713,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             curve[-2][1] = round(bump)
                     dim["curve"] = {"points": curve}
 
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fw:
-                    json.dump(cfg, _fw, indent=2, ensure_ascii=False)
+                _write_config(cfg)
                 import importlib
                 import fund_scoring
                 importlib.reload(fund_scoring)
@@ -1749,8 +1755,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "stock_alert_accum_jump_red": float(body.get("stock_alert_accum_jump_red", 12)),
                     "poll_interval_seconds": int(body.get("poll_interval_seconds", 600)),
                 }
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwmc:
-                    json.dump(cfg, _fwmc, indent=2, ensure_ascii=False)
+                _write_config(cfg)
                 self._send(*_json_response({"ok": True, "message": "监控配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1768,8 +1773,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "skip_limited": bool(body.get("skip_limited", False)),
                     "rank_sort": str(body.get("rank_sort", "1n")),
                 }
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as _fwcfg:
-                    json.dump(cfg, _fwcfg, indent=2, ensure_ascii=False)
+                _write_config(cfg)
                 # 重载 config 再重载 fund_render，让 _show_top 读到新值
                 self._send(*_json_response({"ok": True, "message": "推荐配置已更新"}))
             except Exception as e:
@@ -1872,8 +1876,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return
                 if action in ("save", "save_as"):
                     cfg.setdefault("scoring", {})["current_preset"] = name
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, indent=2, ensure_ascii=False)
+                _write_config(cfg)
                 current = cfg.get("scoring", {}).get("current_preset", "系统默认")
                 self._send(*_json_response({"ok": True, "presets": presets, "current": current}))
             except Exception as e:
@@ -1887,8 +1890,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, encoding="utf-8") as f:
                     cfg = json.load(f)
                 cfg["holdings_col_order"] = order
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                _write_config(cfg)
                 self._send(*_json_response({"ok": True}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1901,8 +1903,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, encoding="utf-8") as f:
                     cfg = json.load(f)
                 cfg["user_prefs"] = prefs
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                _write_config(cfg)
                 self._send(*_json_response({"ok": True}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1918,8 +1919,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, encoding="utf-8") as f:
                     cfg = json.load(f)
                 cfg.setdefault("holdings_scoring", {})["dims"] = dims
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                _write_config(cfg)
                 globals()["_HLD_DIMS_CACHE"] = None
                 self._send(*_json_response({"ok": True}))
             except Exception as e:
@@ -1932,8 +1932,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, encoding="utf-8") as f:
                     cfg = json.load(f)
                 cfg.setdefault("holdings_scoring", {}).pop("dims", None)
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                _write_config(cfg)
                 globals()["_HLD_DIMS_CACHE"] = None
                 self._send(*_json_response({"ok": True}))
             except Exception as e:
@@ -2105,8 +2104,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, encoding="utf-8") as f:
                     cfg = json.load(f)
                 cfg.setdefault("holdings_scoring", {})["dims"] = new_dims
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                _write_config(cfg)
                 globals()["_HLD_DIMS_CACHE"] = None
                 self._send(*_json_response({"ok": True, "dims": new_dims, "message": f"基于{len(holds)}只持仓数据校准完成"}))
             except Exception as e:
@@ -2318,7 +2316,7 @@ def main():
     _spawn_task("fund_monitor")
     # 后台线程刷新推荐表缓存
     threading.Thread(target=_background_refresh_recommend_cache, daemon=True).start()
-    host = "127.0.0.1"
+    host = get_config("server", "host", default="0.0.0.0")
     port = int(sys.argv[1]) if len(sys.argv) > 1 else _PORT
     server = http.server.ThreadingHTTPServer((host, port), Handler)
     print(f"🌐 基金优选页面：http://{host}:{port}")
