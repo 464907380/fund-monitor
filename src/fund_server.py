@@ -1069,7 +1069,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             elif "注册资本" in label_c:
                                 h["reg_capital"] = val_c
                 # ── 持仓股票评分 ──
-                # ── 持仓股票评分 ──
                 hld_dims = _load_hld_dims()
                 total_w = sum(d["w"] for d in hld_dims)
                 for h in holds:
@@ -1080,6 +1079,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     weighted = sum(dim_scores[d["key"]] * d["w"] for d in hld_dims)
                     avg = weighted / total_w if total_w else 0
                     h["hld_score"] = round(avg, 1)
+                    # 各维度明细（用于点击评分查看明细）
+                    h["hld_dim_scores"] = [
+                        {"k": d["key"], "n": d["name"], "s": round(dim_scores[d["key"]], 1),
+                         "v": h.get(d["key"]), "w": d["w"]}
+                        for d in hld_dims
+                    ]
                 self._send(*_json_response({"ok": True, "code": code, "holdings": holds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))

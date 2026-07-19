@@ -2432,6 +2432,8 @@ function showHoldings(code, name) {
         content.innerHTML = '<span style="color:#666;">暂无持仓数据</span>';
         return;
       }
+      // 存储当前持仓数据供评分明细使用
+      window._hldHoldingsData = d.holdings;
       var tbl = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;white-space:nowrap;">'
         + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;position:sticky;left:0;z-index:3;background:#2a2a2a;">股票</th>'
         + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #444;">代码</th>'
@@ -2512,7 +2514,7 @@ function showHoldings(code, name) {
         }
         tbl += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;max-width:120px;overflow:hidden;text-overflow:ellipsis;position:sticky;left:0;z-index:1;background:#1a1a1a;"><span onclick="event.stopPropagation();showStockInfo(\'' + htmlEscape(h.n || '') + '\',\'' + stockFullCode + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.25);" title="上市：' + (h.listing_date || '-') + '\n行业：' + (h.industry || '-') + '\n点击查看详情">' + htmlEscape(h.n || '') + '</span></td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + htmlEscape(h.c || '') + '</td>'
-          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;font-weight:600;color:' + (h.hld_score != null ? (h.hld_score >= 80 ? '#66bb6a' : h.hld_score >= 60 ? '#42a5f5' : h.hld_score >= 40 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.hld_score != null ? h.hld_score.toFixed(1) : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-family:Consolas;font-weight:600;cursor:pointer;color:' + (h.hld_score != null ? (h.hld_score >= 80 ? '#66bb6a' : h.hld_score >= 60 ? '#42a5f5' : h.hld_score >= 40 ? '#ffa726' : '#ef5350') : '#888') + ';" onclick="event.stopPropagation();showHldScoreDetail(\'' + htmlEscape(h.n || '') + '\',\'' + htmlEscape(h.c || '') + '\',this)">' + (h.hld_score != null ? h.hld_score.toFixed(1) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#66bb6a;">' + (h.p || 0).toFixed(2) + '%</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + chgColor + ';">' + chgStr + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.price != null ? h.price.toFixed(2) : '-') + '</td>'
@@ -2847,6 +2849,58 @@ function calibrateHldDims() {
       if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
       alert('校准失败: ' + (e.message||e));
     });
+}
+
+/** 持仓评分明细弹窗 */
+function showHldScoreDetail(stockName, stockCode, tdEl) {
+  var data = window._hldHoldingsData;
+  if (!data) return;
+  var h = null;
+  for (var i = 0; i < data.length; i++) {
+    if (data[i].c === stockCode) { h = data[i]; break; }
+  }
+  if (!h || !h.hld_dim_scores) return;
+  var dims = h.hld_dim_scores.sort(function(a,b){ return b.w - a.w; });
+  var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;max-height:80vh;overflow-y:auto;">'
+    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:6px;">📊 ' + htmlEscape(stockName) + ' <span style="color:#666;font-size:11px;">' + stockCode + '</span> 评分明细</div>'
+    + '<div style="font-size:11px;color:#666;margin-bottom:8px;">总分: <span style="font-weight:600;color:' + (h.hld_score >= 80 ? '#66bb6a' : h.hld_score >= 60 ? '#42a5f5' : h.hld_score >= 40 ? '#ffa726' : '#ef5350') + ';">' + h.hld_score + '</span></div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+    + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">维度</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">实际值</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">得分</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">权重</th>'
+    + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">贡献</th></tr></thead><tbody>';
+  var totalContrib = 0, totalW = 0;
+  dims.forEach(function(d){
+    var val = d.v;
+    var score = d.s;
+    var isNull = (val === null || val === undefined);
+    var contrib = isNull ? 50 * d.w / 100 : score * d.w / 100;
+    totalContrib += contrib; totalW += d.w;
+    var valStr = isNull ? '-' : (typeof val === 'number' ? (Math.abs(val) >= 100 ? val.toFixed(1) : val.toFixed(2)) : val);
+    var scoreColor = isNull ? '#ffa726' : (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350');
+    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(d.n) + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + valStr + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + scoreColor + ';">' + (isNull ? '50.0' : score.toFixed(1)) + '</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + d.w + '%</td>'
+      + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib.toFixed(1) + '</td></tr>';
+  });
+  var avgScore = totalW > 0 ? (totalContrib / totalW * 100).toFixed(1) : '0.0';
+  html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;" colspan="2">合计</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + avgScore + '</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + totalW + '%</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + totalContrib.toFixed(1) + '</td></tr>'
+    + '</tbody></table>'
+    + '<button onclick="this.closest(\'#hldScoreModal\').style.display=\'none\';document.getElementById(\'hldScoreBackdrop\').style.display=\'none\'" style="margin-top:10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 12px;cursor:pointer;">关闭</button></div>';
+  var backdrop = document.getElementById("hldScoreBackdrop");
+  if (!backdrop) { backdrop = document.createElement("div"); backdrop.id = "hldScoreBackdrop"; document.body.appendChild(backdrop); }
+  backdrop.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:99998;background:rgba(0,0,0,0.5);";
+  backdrop.onclick = function(){ backdrop.style.display='none'; var m=document.getElementById('hldScoreModal'); if(m)m.style.display='none'; };
+  var el = document.getElementById("hldScoreModal");
+  if (!el) { el = document.createElement("div"); el.id = "hldScoreModal"; document.body.appendChild(el); }
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:95%;max-width:500px;";
+  el.onclick = function(e){ e.stopPropagation(); };
+  el.innerHTML = html;
 }
 
 function showStockInfo(name, fullCode) {
