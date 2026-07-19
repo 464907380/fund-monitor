@@ -585,223 +585,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
-        if parsed.path == "/api/holdings-dims/save":
-            """保存持仓评分维度配置"""
-            try:
-                body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-                data = json.loads(body)
-                dims = data.get("dims")
-                if not dims:
-                    self._send(*_json_response({"ok": False, "error": "缺少dims参数"}, 400))
-                    return
-                with open(_CONFIG_PATH, encoding="utf-8") as f:
-                    cfg = json.load(f)
-                cfg.setdefault("holdings_scoring", {})["dims"] = dims
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
-                globals()["_HLD_DIMS_CACHE"] = None
-                self._send(*_json_response({"ok": True}))
-            except Exception as e:
-                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
-            return
-
-        if parsed.path == "/api/holdings-dims/reset":
-            """重置持仓评分维度到默认"""
-            try:
-                with open(_CONFIG_PATH, encoding="utf-8") as f:
-                    cfg = json.load(f)
-                cfg.setdefault("holdings_scoring", {}).pop("dims", None)
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
-                globals()["_HLD_DIMS_CACHE"] = None
-                self._send(*_json_response({"ok": True}))
-            except Exception as e:
-                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
-            return
-
-        if parsed.path == "/api/holdings-dims/calibrate":
-            """自动校准持仓评分曲线"""
-            try:
-                q = urllib.parse.parse_qs(parsed.query)
-                code = q.get("code", [""])[0]
-                if not code:
-                    self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
-                    return
-                from fund_watch import _parse_holdings
-                from fund_utils import fetch, _retry_fetch
-                # 先获取持仓并完成所有数据采集（触发评分计算）
-                holds = _parse_holdings(code) or []
-                if not holds:
-                    self._send(*_json_response({"ok": False, "error": "无持仓数据"}, 400))
-                    return
-                # 采集实时行情和FGL数据（同 holdings endpoint 逻辑）
-                codes_str = ",".join((h.get("m","sz")+h["c"]) for h in holds)
-                try:
-                    raw = _retry_fetch(api_url("tencent_realtime", code=codes_str))
-                    for line in raw.strip().split(";"):
-                        if not line: continue
-                        parts = line.split("~")
-                        if len(parts) > 67:
-                            code_r = parts[2]; price = float(parts[3]) if parts[3] else 0
-                            for h in holds:
-                                if h["c"] == code_r:
-                                    h["price"] = price
-                                    h["mkt_cap"] = float(parts[45]) if len(parts)>45 and parts[45] else None
-                                    h["pe"] = float(parts[39]) if len(parts)>39 and parts[39] else None
-                                    h["pb"] = float(parts[46]) if len(parts)>46 and parts[46] else None
-                                    h["turnover"] = float(parts[38]) if len(parts)>38 and parts[38] else None
-                                    h["vol_ratio"] = float(parts[49]) if len(parts)>49 and parts[49] else None
-                                    h["float_mkt_cap"] = float(parts[44]) if len(parts)>44 and parts[44] else None
-                                    h["wk_high"] = float(parts[67]) if len(parts)>67 and parts[67] else None
-                                    h["wk_low"] = float(parts[68]) if len(parts)>68 and parts[68] else None
-                                    h["amplitude"] = float(parts[43]) if len(parts)>43 and parts[43] else None
-                                    h["open"] = float(parts[5]) if len(parts)>5 and parts[5] else None
-                                    # 计算52周位置
-                                    wk_high = h.get("wk_high"); wk_low = h.get("wk_low")
-                                    if wk_high and wk_low and wk_high > wk_low and price:
-                                        h["wk_position"] = round((price - wk_low) / (wk_high - wk_low) * 100, 1)
-                                    break
-                except: pass
-                # 采集新浪FGL数据
-                import urllib.request as _cal_ur, re as _cal_re
-                _cal_cache = globals().setdefault("_f10_cache", {})
-                _cal_now = time.time()
-                for h in holds:
-                    sc = h.get("c", "")
-                    if not sc or not h.get("mkt_cap"): continue
-                    ck = f"fgl_{sc}"; cached = _cal_cache.get(ck)
-                    if cached and _cal_now - cached[0] < 86400:
-                        fgl_html = cached[1]
-                    else:
-                        try:
-                            fgl_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/{sc}/displaytype/4.phtml"
-                            fgl_req = _cal_ur.Request(fgl_url, headers={"User-Agent": "Mozilla/5.0"})
-                            with _cal_ur.urlopen(fgl_req, timeout=10) as fgl_r:
-                                fgl_html = fgl_r.read().decode("gbk", errors="ignore")
-                            _cal_cache[ck] = (_cal_now, fgl_html)
-                        except: continue
-                    fgl_rows = _cal_re.findall(r'<tr[^>]*><td[^>]*>(.*?)</td>\s*<td[^>]*>([^<]*)</td>\s*<td[^>]*>([^<]*)</td>', fgl_html, _cal_re.DOTALL)
-                    fin = {}
-                    for nr, vl, _ in fgl_rows:
-                        nc = _cal_re.sub(r'<[^>]+>', '', nr).strip()
-                        try: fin[nc] = float(vl.strip()) if vl.strip() not in ["","--"] else None
-                        except: pass
-                    def _fg(*ks):
-                        for k in ks:
-                            for fk, fv in fin.items():
-                                if k in fk and fv is not None: return fv
-                        return None
-                    roe = _fg("净资产收益率")
-                    if roe: h["roe"] = round(roe, 2)
-                    opm = _fg("营业利润率")
-                    if opm: h["op_margin"] = round(opm, 2)
-                    rg = _fg("主营业务收入增长率","营业收入增长率")
-                    if rg: h["rev_growth"] = round(rg, 2)
-                    dr = _fg("资产负债率")
-                    if dr: h["debt_ratio"] = round(dr, 2)
-                    cf = _fg("每股经营性现金流")
-                    if cf: h["cf_ps"] = round(cf, 4)
-                    nav = _fg("每股净资产")
-                    if nav: h["nav_ps"] = round(nav, 2)
-                    gm = _fg("销售毛利率")
-                    if gm: h["gross_margin"] = round(gm, 2)
-                    qr = _fg("速动比率")
-                    if qr: h["quick_ratio"] = round(qr, 2)
-                    npm = _fg("销售净利率")
-                    if npm: h["net_profit_margin"] = round(npm, 2)
-                # 采集日K线数据计算收益和回撤
-                for h in holds:
-                    sc = h.get("c",""); mk = h.get("m","sz")
-                    if not sc: continue
-                    ck = f"kline_{sc}"; cached = _cal_cache.get(ck)
-                    if cached and _cal_now - cached[0] < 86400:
-                        kline = cached[1]
-                    else:
-                        try:
-                            kl_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={mk}{sc}&scale=240&ma=no&datalen=504"
-                            kl_req = _cal_ur.Request(kl_url, headers={"User-Agent": "Mozilla/5.0"})
-                            with _cal_ur.urlopen(kl_req, timeout=10) as kl_r:
-                                kline = json.loads(kl_r.read().decode())
-                            _cal_cache[ck] = (_cal_now, kline)
-                        except: continue
-                    if not kline or len(kline) < 2: continue
-                    closes = [float(p["close"]) for p in kline]
-                    lc = closes[-1]
-                    for days, key in [(22,"ret_1m"),(66,"ret_3m"),(126,"ret_6m"),(252,"ret_1y")]:
-                        if len(closes) >= days+1: h[key] = round((lc-closes[-(days+1)])/closes[-(days+1)]*100, 2)
-                    for pdays, key in [(252,"mdd_1y"),(504,"mdd_2y")]:
-                        if len(closes) >= pdays:
-                            pc = closes[-pdays:]; pk = pc[0]; md = 0
-                            for c in pc:
-                                if c > pk: pk = c
-                                dd = (pk-c)/pk*100
-                                if dd > md: md = dd
-                            h[key] = round(md, 2)
-                # 收集各维度样本数据
-                hld_dims = _load_hld_dims()
-                sample_map = {d["key"]: [] for d in hld_dims}
-                for d in hld_dims:
-                    for h in holds:
-                        v = h.get(d["key"])
-                        if v is not None:
-                            sample_map[d["key"]].append(v)
-                # 生成校准后的曲线
-                new_dims = []
-                for d in hld_dims:
-                    samples = sample_map.get(d["key"], [])
-                    if len(samples) < 3:
-                        new_dims.append(dict(d))
-                        continue
-                    samples.sort()
-                    n = len(samples)
-                    # 取 0%, 20%, 40%, 60%, 80%, 100% 分位点
-                    pcts = [0, 20, 40, 60, 80, 100]
-                    pts = []
-                    for pi, pc in enumerate(pcts):
-                        idx = int(n * pc / 100)
-                        if idx >= n: idx = n - 1
-                        x = round(samples[idx], 2)
-                        y = round(pi * 20, 0)  # 0,20,40,60,80,100
-                        pts.append([x, y])
-                    # 确保曲线合理：去重相邻相同x
-                    unique = [pts[0]]
-                    for p in pts[1:]:
-                        if p[0] != unique[-1][0]:
-                            unique.append(p)
-                    if len(unique) < 2:
-                        unique = [[0,0],[100,100]]
-                    # 极值延展：在得分接近0的一端外推一段，让超低/超高值也有区分度
-                    is_lower = d["key"] in ("debt_ratio", "mdd_1y", "wk_position", "pe")
-                    curve = unique
-                    data_range = curve[-1][0] - curve[0][0] if len(curve) >= 2 else 10
-                    extend = max(round(data_range * 0.3, 2), round(abs(curve[0][0]) * 0.15, 2), 3)
-                    if not is_lower and len(curve) >= 2 and curve[0][1] < 10:
-                        # 越高越好：左端延展
-                        bump = min(10, max(5, curve[1][1] / 2))
-                        new_left = round(curve[0][0] - extend, 2)
-                        curve.insert(0, [new_left, 0])
-                        if len(curve) >= 3 and curve[2][1] > bump:
-                            curve[1][1] = round(bump)
-                    elif is_lower and len(curve) >= 2 and curve[-1][1] < 10:
-                        # 越低越好：右端延展
-                        bump = min(10, max(5, curve[-2][1] / 2))
-                        new_right = round(curve[-1][0] + extend, 2)
-                        curve.append([new_right, 0])
-                        if len(curve) >= 3 and curve[-3][1] > bump:
-                            curve[-2][1] = round(bump)
-                    new_dims.append(dict(d, curve=curve))
-                # 保存到config
-                with open(_CONFIG_PATH, encoding="utf-8") as f:
-                    cfg = json.load(f)
-                cfg.setdefault("holdings_scoring", {})["dims"] = new_dims
-                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-                    json.dump(cfg, f, ensure_ascii=False, indent=2)
-                globals()["_HLD_DIMS_CACHE"] = None
-                self._send(*_json_response({"ok": True, "dims": new_dims, "message": f"基于{len(holds)}只持仓数据校准完成"}))
-            except Exception as e:
-                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
-            return
-
         if parsed.path == "/api/recommend-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _frc:
@@ -1974,6 +1757,207 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if self.path == "/api/holdings-dims/save":
+            """保存持仓评分维度配置"""
+            try:
+                dims = body.get("dims")
+                if not dims:
+                    self._send(*_json_response({"ok": False, "error": "缺少dims参数"}, 400))
+                    return
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg.setdefault("holdings_scoring", {})["dims"] = dims
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                globals()["_HLD_DIMS_CACHE"] = None
+                self._send(*_json_response({"ok": True}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/holdings-dims/reset":
+            """重置持仓评分维度到默认"""
+            try:
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg.setdefault("holdings_scoring", {}).pop("dims", None)
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                globals()["_HLD_DIMS_CACHE"] = None
+                self._send(*_json_response({"ok": True}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/holdings-dims/calibrate":
+            """自动校准持仓评分曲线"""
+            try:
+                code = body.get("code")
+                if not code:
+                    self._send(*_json_response({"ok": False, "error": "缺少code参数"}, 400))
+                    return
+                from fund_watch import _parse_holdings
+                from fund_utils import fetch, _retry_fetch
+                holds = _parse_holdings(code) or []
+                if not holds:
+                    self._send(*_json_response({"ok": False, "error": "无持仓数据"}, 400))
+                    return
+                codes_str = ",".join((h.get("m","sz")+h["c"]) for h in holds)
+                try:
+                    raw = _retry_fetch(api_url("tencent_realtime", code=codes_str))
+                    for line in raw.strip().split(";"):
+                        if not line: continue
+                        parts = line.split("~")
+                        if len(parts) > 67:
+                            code_r = parts[2]; price = float(parts[3]) if parts[3] else 0
+                            for h in holds:
+                                if h["c"] == code_r:
+                                    h["price"] = price
+                                    h["mkt_cap"] = float(parts[45]) if len(parts)>45 and parts[45] else None
+                                    h["pe"] = float(parts[39]) if len(parts)>39 and parts[39] else None
+                                    h["pb"] = float(parts[46]) if len(parts)>46 and parts[46] else None
+                                    h["turnover"] = float(parts[38]) if len(parts)>38 and parts[38] else None
+                                    h["vol_ratio"] = float(parts[49]) if len(parts)>49 and parts[49] else None
+                                    h["float_mkt_cap"] = float(parts[44]) if len(parts)>44 and parts[44] else None
+                                    h["wk_high"] = float(parts[67]) if len(parts)>67 and parts[67] else None
+                                    h["wk_low"] = float(parts[68]) if len(parts)>68 and parts[68] else None
+                                    h["amplitude"] = float(parts[43]) if len(parts)>43 and parts[43] else None
+                                    h["open"] = float(parts[5]) if len(parts)>5 and parts[5] else None
+                                    wk_high = h.get("wk_high"); wk_low = h.get("wk_low")
+                                    if wk_high and wk_low and wk_high > wk_low and price:
+                                        h["wk_position"] = round((price - wk_low) / (wk_high - wk_low) * 100, 1)
+                                    break
+                except: pass
+                import urllib.request as _cal_ur, re as _cal_re
+                _cal_cache = globals().setdefault("_f10_cache", {})
+                _cal_now = time.time()
+                for h in holds:
+                    sc = h.get("c", "")
+                    if not sc or not h.get("mkt_cap"): continue
+                    ck = f"fgl_{sc}"; cached = _cal_cache.get(ck)
+                    if cached and _cal_now - cached[0] < 86400:
+                        fgl_html = cached[1]
+                    else:
+                        try:
+                            fgl_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/{sc}/displaytype/4.phtml"
+                            fgl_req = _cal_ur.Request(fgl_url, headers={"User-Agent": "Mozilla/5.0"})
+                            with _cal_ur.urlopen(fgl_req, timeout=10) as fgl_r:
+                                fgl_html = fgl_r.read().decode("gbk", errors="ignore")
+                            _cal_cache[ck] = (_cal_now, fgl_html)
+                        except: continue
+                    fgl_rows = _cal_re.findall(r'<tr[^>]*><td[^>]*>(.*?)</td>\s*<td[^>]*>([^<]*)</td>\s*<td[^>]*>([^<]*)</td>', fgl_html, _cal_re.DOTALL)
+                    fin = {}
+                    for nr, vl, _ in fgl_rows:
+                        nc = _cal_re.sub(r'<[^>]+>', '', nr).strip()
+                        try: fin[nc] = float(vl.strip()) if vl.strip() not in ["","--"] else None
+                        except: pass
+                    def _fg(*ks):
+                        for k in ks:
+                            for fk, fv in fin.items():
+                                if k in fk and fv is not None: return fv
+                        return None
+                    roe = _fg("净资产收益率")
+                    if roe: h["roe"] = round(roe, 2)
+                    opm = _fg("营业利润率")
+                    if opm: h["op_margin"] = round(opm, 2)
+                    rg = _fg("主营业务收入增长率","营业收入增长率")
+                    if rg: h["rev_growth"] = round(rg, 2)
+                    dr = _fg("资产负债率")
+                    if dr: h["debt_ratio"] = round(dr, 2)
+                    cf = _fg("每股经营性现金流")
+                    if cf: h["cf_ps"] = round(cf, 4)
+                    nav = _fg("每股净资产")
+                    if nav: h["nav_ps"] = round(nav, 2)
+                    gm = _fg("销售毛利率")
+                    if gm: h["gross_margin"] = round(gm, 2)
+                    qr = _fg("速动比率")
+                    if qr: h["quick_ratio"] = round(qr, 2)
+                    npm = _fg("销售净利率")
+                    if npm: h["net_profit_margin"] = round(npm, 2)
+                for h in holds:
+                    sc = h.get("c",""); mk = h.get("m","sz")
+                    if not sc: continue
+                    ck = f"kline_{sc}"; cached = _cal_cache.get(ck)
+                    if cached and _cal_now - cached[0] < 86400:
+                        kline = cached[1]
+                    else:
+                        try:
+                            kl_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={mk}{sc}&scale=240&ma=no&datalen=504"
+                            kl_req = _cal_ur.Request(kl_url, headers={"User-Agent": "Mozilla/5.0"})
+                            with _cal_ur.urlopen(kl_req, timeout=10) as kl_r:
+                                kline = json.loads(kl_r.read().decode())
+                            _cal_cache[ck] = (_cal_now, kline)
+                        except: continue
+                    if not kline or len(kline) < 2: continue
+                    closes = [float(p["close"]) for p in kline]
+                    lc = closes[-1]
+                    for days, key in [(22,"ret_1m"),(66,"ret_3m"),(126,"ret_6m"),(252,"ret_1y")]:
+                        if len(closes) >= days+1: h[key] = round((lc-closes[-(days+1)])/closes[-(days+1)]*100, 2)
+                    for pdays, key in [(252,"mdd_1y"),(504,"mdd_2y")]:
+                        if len(closes) >= pdays:
+                            pc = closes[-pdays:]; pk = pc[0]; md = 0
+                            for c in pc:
+                                if c > pk: pk = c
+                                dd = (pk-c)/pk*100
+                                if dd > md: md = dd
+                            h[key] = round(md, 2)
+                hld_dims = _load_hld_dims()
+                sample_map = {d["key"]: [] for d in hld_dims}
+                for d in hld_dims:
+                    for h in holds:
+                        v = h.get(d["key"])
+                        if v is not None:
+                            sample_map[d["key"]].append(v)
+                new_dims = []
+                for d in hld_dims:
+                    samples = sample_map.get(d["key"], [])
+                    if len(samples) < 3:
+                        new_dims.append(dict(d))
+                        continue
+                    samples.sort()
+                    n = len(samples)
+                    pcts = [0, 20, 40, 60, 80, 100]
+                    pts = []
+                    for pi, pc in enumerate(pcts):
+                        idx = int(n * pc / 100)
+                        if idx >= n: idx = n - 1
+                        x = round(samples[idx], 2)
+                        y = round(pi * 20, 0)
+                        pts.append([x, y])
+                    unique = [pts[0]]
+                    for p in pts[1:]:
+                        if p[0] != unique[-1][0]:
+                            unique.append(p)
+                    if len(unique) < 2:
+                        unique = [[0,0],[100,100]]
+                    is_lower = d["key"] in ("debt_ratio", "mdd_1y", "wk_position", "pe")
+                    curve = unique
+                    data_range = curve[-1][0] - curve[0][0] if len(curve) >= 2 else 10
+                    extend = max(round(data_range * 0.3, 2), round(abs(curve[0][0]) * 0.15, 2), 3)
+                    if not is_lower and len(curve) >= 2 and curve[0][1] < 10:
+                        bump = min(10, max(5, curve[1][1] / 2))
+                        new_left = round(curve[0][0] - extend, 2)
+                        curve.insert(0, [new_left, 0])
+                        if len(curve) >= 3 and curve[2][1] > bump:
+                            curve[1][1] = round(bump)
+                    elif is_lower and len(curve) >= 2 and curve[-1][1] < 10:
+                        bump = min(10, max(5, curve[-2][1] / 2))
+                        new_right = round(curve[-1][0] + extend, 2)
+                        curve.append([new_right, 0])
+                        if len(curve) >= 3 and curve[-3][1] > bump:
+                            curve[-2][1] = round(bump)
+                    new_dims.append(dict(d, curve=curve))
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg.setdefault("holdings_scoring", {})["dims"] = new_dims
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                globals()["_HLD_DIMS_CACHE"] = None
+                self._send(*_json_response({"ok": True, "dims": new_dims, "message": f"基于{len(holds)}只持仓数据校准完成"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         self._send(*_json_response({"ok": False, "error": "未知接口"}, 404))
 
 
@@ -2109,10 +2093,16 @@ def _load_hld_dims() -> list:
     global _HLD_DIMS_CACHE
     if _HLD_DIMS_CACHE is not None:
         return _HLD_DIMS_CACHE
-    raw = CFG.get("holdings_scoring", {}).get("dims")
-    if raw:
-        _HLD_DIMS_CACHE = raw
-        return _HLD_DIMS_CACHE
+    # 直接从文件读取（绕过可能过时的 CFG 缓存）
+    try:
+        with open(_CONFIG_PATH, encoding="utf-8") as _f:
+            _cfg = json.load(_f)
+        raw = _cfg.get("holdings_scoring", {}).get("dims")
+        if raw:
+            _HLD_DIMS_CACHE = raw
+            return _HLD_DIMS_CACHE
+    except Exception:
+        pass
     _HLD_DIMS_CACHE = _HLD_DEFAULT_DIMS
     return _HLD_DIMS_CACHE
 

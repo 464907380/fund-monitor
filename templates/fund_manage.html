@@ -3002,7 +3002,7 @@ function calibrateHldDims() {
   if (!confirm('基于当前基金持仓数据自动校准评分曲线，确定继续？')) return;
   var btn = document.querySelector('#hldDimModal button:first-child');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 校准中...'; }
-  fetch(API + '/api/holdings-dims/calibrate?code=' + code)
+  fetch(API + '/api/holdings-dims/calibrate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code:code})})
     .then(function(r){ return r.json(); }).then(function(d){
       if (d.ok) {
         if (btn) { btn.disabled = false; btn.textContent = '📐 自动校准'; }
