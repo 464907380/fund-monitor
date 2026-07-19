@@ -2783,7 +2783,7 @@ function showHldDimsEditor() {
       + '</div></div>';
     el.innerHTML = html;
   });
-  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:95%;max-width:620px;";
+  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;width:95%;max-width:620px;max-height:80vh;overflow-y:auto;";
   el.onclick = function(e){ e.stopPropagation(); };
 }
 function closeHldDimEditor() {
@@ -2905,14 +2905,15 @@ function confirmAddHldDim() {
     + '<td colspan="4" style="padding:6px 12px;">'
     + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线（值 → 得分）</div>'
     + '<table style="border-collapse:collapse;font-size:11px;">';
+  var curveHtml = '';
   curve.forEach(function(p, j){
-    tr.innerHTML += '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"> →</td>'
+    curveHtml += '<tr><td style="padding:2px 4px;"><input type="number" step="any" value="' + p[0] + '" style="width:70px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"> →</td>'
       + '<td style="padding:2px 4px;"><input type="number" step="any" value="' + p[1] + '" style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e0e0e0;padding:2px 4px;font-family:Consolas;font-size:11px;" onchange="markHldDimsDirty()"></td>'
       + '<td style="padding:2px 4px;">' + (j > 0 ? '<button onclick="this.closest(\'tr\').remove();markHldDimsDirty()" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:12px;">✖</button>' : '') + '</td></tr>';
   });
-  tr.innerHTML += '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addHldCurvePoint(this,' + idx + ')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
+  curveHtml += '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addHldCurvePoint(this,' + idx + ')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
     + '</table></td></tr>';
-  tbl.appendChild(tr);
+  tr.innerHTML += curveHtml;
   _hldDimsData.push({key: key, name: label, w: 5, curve: curve});
   markHldDimsDirty();
   // 关闭选择弹窗
