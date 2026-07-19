@@ -567,6 +567,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/holdings-col-order":
+            """获取持仓表格列顺序"""
+            try:
+                with open(_CONFIG_PATH, encoding="utf-8") as _f:
+                    _cfg = json.load(_f)
+                order = _cfg.get("holdings_col_order", [])
+                self._send(*_json_response({"ok": True, "order": order}))
+            except Exception:
+                self._send(*_json_response({"ok": True, "order": []}))
+            return
+
         if parsed.path == "/api/recommend-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _frc:
@@ -1854,6 +1865,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     json.dump(cfg, f, indent=2, ensure_ascii=False)
                 current = cfg.get("scoring", {}).get("current_preset", "系统默认")
                 self._send(*_json_response({"ok": True, "presets": presets, "current": current}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/holdings-col-order":
+            """保存持仓表格列顺序"""
+            try:
+                order = body.get("order", [])
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg["holdings_col_order"] = order
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                self._send(*_json_response({"ok": True}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return

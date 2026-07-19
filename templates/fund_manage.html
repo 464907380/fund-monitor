@@ -2570,54 +2570,50 @@ function showHoldings(code, name) {
         if (!tblEl) return;
         var thead = tblEl.querySelector('thead');
         var tbody = tblEl.querySelector('tbody');
-        var STORAGE_KEY = 'fund_holdings_col_order';
         // 获取当前列名列表
         function _getColNames() {
           return Array.from(thead.querySelectorAll('tr:first-child th')).map(function(t){ return t.textContent; });
         }
         // 按保存的顺序重排列
-        function _applySavedOrder() {
-          try {
-            var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-            if (!saved || !saved.length) return;
-            var cur = _getColNames();
-            // 找出交集顺序
-            var order = saved.filter(function(n){ return cur.indexOf(n) >= 0; });
-            if (order.length < 2) return;
-            var headerRow = thead.querySelector('tr:first-child');
-            order.forEach(function(name, pos){
-              var allThs = headerRow.querySelectorAll('th');
-              for (var i = 0; i < allThs.length; i++) {
-                if (allThs[i].textContent === name && i !== pos) {
-                  // 移到pos位置
-                  var ref = allThs[pos];
-                  if (pos === 0) {
-                    headerRow.insertBefore(allThs[i], headerRow.firstChild);
-                  } else if (i > pos) {
-                    headerRow.insertBefore(allThs[i], ref.nextSibling);
-                  } else {
-                    headerRow.insertBefore(allThs[i], ref);
-                  }
-                  // 同步移动数据格
-                  Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
-                    var tds = tr.querySelectorAll('td');
-                    if (tds.length <= Math.max(i, pos)) return;
-                    var refTd = tds[pos];
-                    if (pos === 0) {
-                      tr.insertBefore(tds[i], tr.firstChild);
-                    } else if (i > pos) {
-                      tr.insertBefore(tds[i], refTd.nextSibling);
-                    } else {
-                      tr.insertBefore(tds[i], refTd);
-                    }
-                  });
-                  break;
+        function _applySavedOrder(saved) {
+          if (!saved || !saved.length) return;
+          var cur = _getColNames();
+          var order = saved.filter(function(n){ return cur.indexOf(n) >= 0; });
+          if (order.length < 2) return;
+          var headerRow = thead.querySelector('tr:first-child');
+          order.forEach(function(name, pos){
+            var allThs = headerRow.querySelectorAll('th');
+            for (var i = 0; i < allThs.length; i++) {
+              if (allThs[i].textContent === name && i !== pos) {
+                var ref = allThs[pos];
+                if (pos === 0) {
+                  headerRow.insertBefore(allThs[i], headerRow.firstChild);
+                } else if (i > pos) {
+                  headerRow.insertBefore(allThs[i], ref.nextSibling);
+                } else {
+                  headerRow.insertBefore(allThs[i], ref);
                 }
+                Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
+                  var tds = tr.querySelectorAll('td');
+                  if (tds.length <= Math.max(i, pos)) return;
+                  var refTd = tds[pos];
+                  if (pos === 0) {
+                    tr.insertBefore(tds[i], tr.firstChild);
+                  } else if (i > pos) {
+                    tr.insertBefore(tds[i], refTd.nextSibling);
+                  } else {
+                    tr.insertBefore(tds[i], refTd);
+                  }
+                });
+                break;
               }
-            });
-          } catch(e) {}
+            }
+          });
         }
-        _applySavedOrder();
+        // 从服务端加载顺序
+        fetch(API + '/api/holdings-col-order').then(function(r){ return r.json(); }).then(function(d){
+          if (d.ok && d.order) _applySavedOrder(d.order);
+        }).catch(function(){});
         var ths = thead.querySelectorAll('tr:first-child th');
         // 获取th的当前索引
         function _thIdx(t) {
@@ -2625,9 +2621,10 @@ function showHoldings(code, name) {
           for (var i = 0; i < all.length; i++) { if (all[i] === t) return i; }
           return -1;
         }
-        // 保存当前顺序
+        // 保存当前顺序到服务端
         function _saveOrder() {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(_getColNames()));
+          var names = _getColNames();
+          fetch(API + '/api/holdings-col-order', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({order:names})});
         }
         var dragSrcEl = null;
         Array.from(ths).forEach(function(th){
