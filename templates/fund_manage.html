@@ -2453,7 +2453,7 @@ function showHoldings(code, name) {
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="市销率(PS)=总市值÷营业收入。不看利润只看营收规模，适用于亏损/微利/周期底部企业。PS越低说明营收相对市值越便宜，需同行业对比。">PS(市销率)</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="净资产收益率(ROE)=净利润÷净资产。巴菲特最看重的指标，衡量公司为股东创造回报的能力。>15%优秀，>20%卓越。">ROE</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="加权净资产收益率(%)。考虑复利效应的更精准ROE，比普通ROE更反映真实回报率。">加权ROE</th>'
-        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="销售毛利率=(营收-营业成本)÷营收。越高说明产品定价权越强、护城河越深，>40%为优秀。">销售毛利率</th>'
+        + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="成本费用利润率(%)=利润总额÷成本费用总额。衡量每付出1元成本能创造多少利润，越高说明成本控制越好。>100%优秀。">成本费用利润率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="销售净利率=净利润÷营收。衡量每元营收能产生多少净利润，>15%优秀。">销售净利率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="主营业务利润率=主营业务利润÷营收。反映核心业务的盈利水平。">主营利润率</th>'
         + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;" title="营业利润率=营业利润÷营业收入。反映主营业务的盈利水平，>20%说明公司有较强定价权和护城河。">营业利润率</th>'
@@ -2530,7 +2530,7 @@ function showHoldings(code, name) {
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (h.ps ? h.ps.toFixed(2) : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.roe != null ? (h.roe >= 15 ? '#66bb6a' : h.roe >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.roe != null ? h.roe.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.weighted_roe != null ? (h.weighted_roe >= 15 ? '#66bb6a' : h.weighted_roe >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.weighted_roe != null ? h.weighted_roe.toFixed(1) + '%' : '-') + '</td>'
-          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.gross_margin != null ? (h.gross_margin >= 40 ? '#66bb6a' : h.gross_margin >= 20 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.gross_margin != null ? h.gross_margin.toFixed(1) + '%' : '-') + '</td>'
+          + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.cost_profit_margin != null ? (h.cost_profit_margin >= 100 ? '#66bb6a' : h.cost_profit_margin >= 50 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.cost_profit_margin != null ? h.cost_profit_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.net_profit_margin != null ? (h.net_profit_margin >= 15 ? '#66bb6a' : h.net_profit_margin >= 5 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.net_profit_margin != null ? h.net_profit_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.main_biz_margin != null ? (h.main_biz_margin >= 30 ? '#66bb6a' : h.main_biz_margin >= 15 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.main_biz_margin != null ? h.main_biz_margin.toFixed(1) + '%' : '-') + '</td>'
           + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (h.op_margin != null ? (h.op_margin >= 20 ? '#66bb6a' : h.op_margin >= 10 ? '#ffa726' : '#ef5350') : '#888') + ';">' + (h.op_margin != null ? h.op_margin.toFixed(1) + '%' : '-') + '</td>'
@@ -2718,7 +2718,7 @@ var _HLD_FIELD_NAMES = {
   roa:'总资产利润率%', ret_1m:'近1月收益%', ret_3m:'近3月收益%',
   mdd_2y:'近2年回撤%', gross_margin:'销售毛利率%',
   main_biz_margin:'主营业务利润率%',
-  net_profit_growth:'净利润增长率%', turnover_amount:'成交额(万)',
+  net_profit_growth:'净利润增长率%', turnover_amount:'成交额(万元)',
   volume:'成交量(手)', limit_up:'涨停价', limit_down:'跌停价',
   main_biz_cost_ratio:'主营业务成本率%', total_asset_growth:'总资产增长率%',
   cash_ratio:'现金比率%', cost_profit_margin:'成本费用利润率%',
@@ -2846,7 +2846,7 @@ function addHldDim() {
     mdd_2y:'近2年回撤%', gross_margin:'销售毛利率%',
     establish_date:'成立日期', listing_date:'上市日期',
     main_biz_margin:'主营业务利润率%',
-    net_profit_growth:'净利润增长率%', turnover_amount:'成交额(万)',
+    net_profit_growth:'净利润增长率%', turnover_amount:'成交额(万元)',
     volume:'成交量(手)', limit_up:'涨停价', limit_down:'跌停价',
     main_biz_cost_ratio:'主营业务成本率%', total_asset_growth:'总资产增长率%',
     cash_ratio:'现金比率%', cost_profit_margin:'成本费用利润率%',
