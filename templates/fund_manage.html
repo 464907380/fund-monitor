@@ -2733,6 +2733,19 @@ var _HLD_DIM_CAT = {
   ret_1m:'市场表现', ret_3m:'市场表现', ret_1y:'市场表现', wk_position:'市场表现'
 };
 var _HLD_CAT_ORDER = ['盈利能力','成长性','偿债/风险','现金流','估值','市场表现'];
+/** 维度数据源分类：财报(季报) vs 行情(日频) vs K线(日频) */
+var _HLD_DATA_SRC = {
+  roe:'财报', main_biz_margin:'财报', net_profit_margin:'财报',
+  cost_profit_margin:'财报', roa:'财报',
+  rev_growth:'财报', net_profit_growth:'财报',
+  debt_ratio:'财报', quick_ratio:'财报',
+  cf_ps:'财报', cashflow_to_profit:'财报',
+  mdd_1y:'K线', wk_position:'K线',
+  ret_1m:'K线', ret_3m:'K线', ret_1y:'K线',
+  pe:'行情', pb:'行情'
+};
+var _HLD_SRC_COLORS = { '财报':'#42a5f5', 'K线':'#ffa726', '行情':'#66bb6a' };
+var _HLD_SRC_TIPS = { '财报':'基于最新季度财报数据，滞后1-3个月', 'K线':'基于近252个交易日K线数据，最新交易日', '行情':'基于当日实时行情数据' };
 /** 持仓评分维度详细解释 */
 var _HLD_DIM_DESC = {
   roe:'【绝对标准】净资产收益率。净利润÷净资产，巴菲特最看重的指标。>15%优秀，>20%卓越。越高越好。自动校准不改变此曲线。',
@@ -3241,8 +3254,9 @@ function showHldScoreDetail(stockName, stockCode, tdEl) {
   var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;max-height:80vh;overflow-y:auto;">'
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:6px;">📊 ' + htmlEscape(stockName) + ' <span style="color:#666;font-size:11px;">' + stockCode + '</span> 评分明细</div>'
     + '<div style="font-size:11px;color:#666;margin-bottom:4px;">总分: <span style="font-weight:600;color:' + (h.hld_score >= 80 ? '#66bb6a' : h.hld_score >= 60 ? '#42a5f5' : h.hld_score >= 40 ? '#ffa726' : '#ef5350') + ';">' + h.hld_score + '</span></div>'
-    + '<div style="font-size:10px;color:#555;margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:6px;">'
-    + '💡 财务数据来自最新财报，K线/行情为近期数据。各指标可能不同期，仅供参考。'
+    + '<div style="font-size:10px;color:#555;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:6px;">'
+    + '📅 <span style="color:#42a5f5;">■</span>财报(季报) <span style="color:#ffa726;">■</span>K线(近交易日) <span style="color:#66bb6a;">■</span>行情(今日)'
+    + ' — 数据不同期，仅供参考。'
     + '</div>'
     + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
     + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">维度</th>'
@@ -3264,7 +3278,10 @@ function showHldScoreDetail(stockName, stockCode, tdEl) {
     totalContrib += contrib;
     var valStr = isNull ? '-' : (typeof val === 'number' ? (Math.abs(val) >= 100 ? val.toFixed(1) : val.toFixed(2)) : val);
     var scoreColor = isNull ? '#ffa726' : (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350');
-    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[d.k] || '') + '">' + htmlEscape(d.n) + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
+    var src = _HLD_DATA_SRC[d.k] || '';
+    var srcColor = _HLD_SRC_COLORS[src] || '#888';
+    var srcTip = _HLD_SRC_TIPS[src] || '';
+    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[d.k] || '') + '">' + htmlEscape(d.n) + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + (src ? ' <span style="color:' + srcColor + ';font-size:8px;border:1px solid ' + srcColor + ';border-radius:2px;padding:0 3px;cursor:help;" title="' + htmlEscape(srcTip) + '">' + src + '</span>' : '') + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + valStr + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + scoreColor + ';">' + (isNull ? '50.0' : score.toFixed(1)) + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + d.w + '%</td>'
