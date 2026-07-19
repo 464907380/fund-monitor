@@ -2945,13 +2945,16 @@ function addHldDim() {
   // 显示选择框
   var selectHtml = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;font-size:12px;color:#ccc;max-width:400px;">'
     + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">选择要添加的维度</div>'
-    + '<select id="hldNewDimSelect" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:6px 8px;font-size:12px;margin-bottom:10px;">'
+    + '<select id="hldNewDimSelect" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:6px 8px;font-size:12px;margin-bottom:6px;">'
     + available.map(function(k){
         var label = _HLD_FIELD_NAMES[k] || k.replace(/_/g,' ');
         var desc = _HLD_FIELD_DESC[k] || '';
         return '<option value="' + k + '">' + label + (desc ? ' — ' + desc : '') + '</option>';
       }).join('')
     + '</select>'
+    + '<select id="hldNewDimCat" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:6px 8px;font-size:12px;margin-bottom:10px;">'
+    + _HLD_CAT_ORDER.map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join('')
+    + '<option value="">其他</option></select>'
     + '<div style="display:flex;gap:8px;justify-content:flex-end;">'
     + '<button onclick="confirmAddHldDim()" style="background:#42a5f5;border:none;color:#fff;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">确认添加</button>'
     + '<button onclick="this.closest(\'[id]\').style.display=\'none\'" style="background:rgba(255,255,255,0.05);border:1px solid #444;color:#888;padding:4px 16px;border-radius:4px;cursor:pointer;font-size:12px;">取消</button>'
@@ -2988,7 +2991,39 @@ function confirmAddHldDim() {
   // 添加到编辑器
   var tbl = document.querySelector('#hldDimModal table tbody');
   if (!tbl) return;
-  var idx = tbl.querySelectorAll('tr:not(.hld-curve-row)').length;
+  // 读取分类并更新映射
+  var catSel = document.getElementById('hldNewDimCat');
+  var cat = catSel ? catSel.value : '';
+  if (cat) _HLD_DIM_CAT[key] = cat;
+  // 找到分类插入位置
+  var insertBefore = null;
+  if (cat) {
+    var rows = tbl.querySelectorAll('tr:not(.hld-curve-row)');
+    var foundCat = false;
+    for (var ri = 0; ri < rows.length; ri++) {
+      var td = rows[ri].querySelector('td[colspan]');
+      if (td) {
+        var txt = td.textContent.trim();
+        if (txt === '▸ ' + cat) { foundCat = true; continue; }
+        if (foundCat && txt.startsWith('▸ ')) { insertBefore = rows[ri]; break; }
+      }
+    }
+    if (!foundCat) {
+      // 当前分类没有分类行，找到正确位置插入
+      var catIdx = _HLD_CAT_ORDER.indexOf(cat);
+      for (var ri2 = 0; ri2 < rows.length; ri2++) {
+        var td2 = rows[ri2].querySelector('td[colspan]');
+        if (td2) {
+          var txt2 = td2.textContent.trim();
+          if (txt2.startsWith('▸ ')) {
+            var existingCatIdx = _HLD_CAT_ORDER.indexOf(txt2.replace('▸ ',''));
+            if (existingCatIdx > catIdx) { insertBefore = rows[ri2]; break; }
+          }
+        }
+      }
+    }
+  }
+  var idx = Date.now(); // 唯一ID
   var label = _HLD_FIELD_NAMES[key] || key.replace(/_/g,' ');
   var isLocked = _HLD_LOCKED_KEYS[key];
   // 创建主行（仅TD）
@@ -2997,8 +3032,7 @@ function confirmAddHldDim() {
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markHldDimsDirty();updateHldTotalWeight()">%</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleHldCurve(this,' + idx + ')" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;">📐</button></td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeHldDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
-  tbl.appendChild(tr);
-  // 创建曲线行（单独TR）
+  // 创建曲线行
   var cr = document.createElement('tr');
   cr.className = 'hld-curve-row';
   cr.style.display = 'none';
@@ -3015,14 +3049,38 @@ function confirmAddHldDim() {
   curveHtml += '<tr><td colspan="3" style="padding:2px 4px;"><button onclick="addHldCurvePoint(this,' + idx + ')" style="background:none;border:1px dashed rgba(255,255,255,0.2);border-radius:3px;color:#888;padding:2px 10px;font-size:10px;cursor:pointer;">+ 添加断点</button></td></tr>'
     + '</table></td>';
   cr.innerHTML = curveHtml;
-  tbl.appendChild(cr);
+  // 如果分类行不存在且选定了分类，创建分类行并插入
+  if (cat && !foundCat) {
+    var catTr = document.createElement('tr');
+    catTr.style.background = 'rgba(255,255,255,0.03)';
+    catTr.innerHTML = '<td colspan="4" style="padding:4px 8px;color:#888;font-size:10px;font-weight:600;letter-spacing:1px;border-bottom:1px solid #333;">▸ ' + cat + '</td>';
+    if (insertBefore) {
+      tbl.insertBefore(catTr, insertBefore);
+    } else {
+      tbl.appendChild(catTr);
+    }
+  }
+  // 重新查找插入位置（因刚可能插入了分类行）
+  if (cat && !insertBefore) {
+    var insertAfter = tbl.querySelector('tr:last-child');
+    tbl.appendChild(tr);
+    tbl.appendChild(cr);
+  } else if (insertBefore) {
+    tbl.insertBefore(tr, insertBefore);
+    tbl.insertBefore(cr, insertBefore);
+  } else {
+    tbl.appendChild(tr);
+    tbl.appendChild(cr);
+  }
+  // 关闭添加弹窗
+  var backdrop = document.getElementById('hldAddDimBackdrop');
+  if (backdrop) backdrop.style.display = 'none';
+  var modal = document.getElementById('hldAddDimModal');
+  if (modal) modal.style.display = 'none';
+  // 更新数据
   _hldDimsData.push({key: key, name: label, w: 5, curve: curve});
   markHldDimsDirty();
-  // 关闭选择弹窗
-  var picker = document.getElementById('hldAddDimModal');
-  if (picker) picker.style.display = 'none';
-  var bd = document.getElementById('hldAddDimBackdrop');
-  if (bd) bd.style.display = 'none';
+  updateHldTotalWeight();
 }
 function toggleHldCurve(btn, idx) {
   var row = btn.closest('tr').nextElementSibling;
