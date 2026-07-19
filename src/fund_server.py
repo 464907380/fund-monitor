@@ -578,6 +578,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": True, "order": []}))
             return
 
+        if parsed.path == "/api/prefs":
+            """获取用户偏好设置"""
+            try:
+                with open(_CONFIG_PATH, encoding="utf-8") as _f:
+                    _cfg = json.load(_f)
+                prefs = _cfg.get("user_prefs", {})
+                self._send(*_json_response({"ok": True, "prefs": prefs}))
+            except Exception:
+                self._send(*_json_response({"ok": True, "prefs": {}}))
+            return
+
         if parsed.path == "/api/recommend-config":
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _frc:
@@ -1876,6 +1887,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, encoding="utf-8") as f:
                     cfg = json.load(f)
                 cfg["holdings_col_order"] = order
+                with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                self._send(*_json_response({"ok": True}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/prefs":
+            """保存用户偏好设置"""
+            try:
+                prefs = body.get("prefs", {})
+                with open(_CONFIG_PATH, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg["user_prefs"] = prefs
                 with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
                     json.dump(cfg, f, ensure_ascii=False, indent=2)
                 self._send(*_json_response({"ok": True}))

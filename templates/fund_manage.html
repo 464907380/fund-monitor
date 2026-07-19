@@ -975,7 +975,7 @@ function toggleAutoRefresh() {
     if (_autoRefreshCountdown) { clearInterval(_autoRefreshCountdown); _autoRefreshCountdown = null; }
     if (btn) { btn.style.borderColor = 'rgba(255,255,255,0.1)'; btn.style.color = '#888'; btn.textContent = '🔄 自动刷新'; }
     if (statusEl) statusEl.textContent = '';
-    try { localStorage.setItem('fundAutoRefresh', '0'); } catch(e) {}
+    _savePref('fundAutoRefresh', '0');
   } else {
     // 检查时间
     if (!_isTradingTime) {
@@ -994,17 +994,25 @@ function toggleAutoRefresh() {
       _updateCountdownDisplay();
     }, 1000);
     _doAutoRefresh();
-    try { localStorage.setItem('fundAutoRefresh', '1'); } catch(e) {}
+    _savePref('fundAutoRefresh', '1');
     _autoRefreshTimer = setInterval(_doAutoRefresh, _autoRefreshInterval * 1000);
   }
 }
 
-/** 保存刷新间隔选择到localStorage */
+/** 保存偏好设置到服务端 */
+function _savePref(key, val) {
+  fetch(API + '/api/prefs').then(function(r){ return r.json(); }).then(function(d){
+    var prefs = (d.ok && d.prefs) || {};
+    prefs[key] = val;
+    fetch(API + '/api/prefs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prefs:prefs})});
+  }).catch(function(){});
+}
+/** 保存刷新间隔选择 */
 function _saveRefreshInterval() {
   var sel = document.getElementById('fundRefreshInterval');
   if (!sel) return;
   _autoRefreshInterval = parseInt(sel.value, 10) || 600;
-  try { localStorage.setItem('fundRefreshInterval', _autoRefreshInterval); } catch(e) {}
+  _savePref('fundRefreshInterval', String(_autoRefreshInterval));
   // 如果正在刷新中，重置倒计时和定时器
   if (_autoRefreshEnabled) {
     _autoRefreshTicks = _autoRefreshInterval;
@@ -1230,19 +1238,17 @@ loadMarketIndices();
   fetch(API + '/api/check-trade-time?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
     if (!d.ok) return;
     _isTradingTime = d.is_trading === true;
-    // 恢复刷新间隔和自动刷新状态
-    try {
-      var savedInterval = parseInt(localStorage.getItem('fundRefreshInterval'), 10);
+    // 从服务端恢复偏好设置
+    fetch(API + '/api/prefs').then(function(r){ return r.json(); }).then(function(pd){
+      if (!pd.ok || !pd.prefs) return;
+      var savedInterval = parseInt(pd.prefs.fundRefreshInterval, 10);
       if (savedInterval && [60,120,300,600,1800].indexOf(savedInterval) >= 0) {
         _autoRefreshInterval = savedInterval;
         var sel = document.getElementById('fundRefreshInterval');
         if (sel) sel.value = savedInterval;
       }
-    } catch(e) {}
-    if (_isTradingTime) {
-      try { if (localStorage.getItem('fundAutoRefresh') === '1') toggleAutoRefresh(); } catch(e) {}
-      _marketTimer = setInterval(loadMarketIndices, 60000);
-    } else if (d.next_check_seconds > 0) {
+      if (_isTradingTime && pd.prefs.fundAutoRefresh === '1') toggleAutoRefresh();
+    }).catch(function(){});
       setTimeout(function(){
         _isTradingTime = true;
         loadMarketIndices();
