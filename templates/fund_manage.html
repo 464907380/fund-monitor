@@ -3084,13 +3084,18 @@ function showHldScoreDetail(stockName, stockCode, tdEl) {
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">得分</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">权重</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">贡献</th></tr></thead><tbody>';
-  var totalContrib = 0, totalW = 0;
+  // 先算总权重
+  var totalW = 0;
+  dims.forEach(function(d){ totalW += d.w; });
+  var totalContrib = 0;
   dims.forEach(function(d){
     var val = d.v;
     var score = d.s;
     var isNull = (val === null || val === undefined);
-    var contrib = isNull ? 50 * d.w / 100 : score * d.w / 100;
-    totalContrib += contrib; totalW += d.w;
+    // 贡献 = 得分 × 权重 ÷ 总权重，使贡献之和 = 总分
+    var rawScore = isNull ? 50 : score;
+    var contrib = totalW > 0 ? rawScore * d.w / totalW : 0;
+    totalContrib += contrib;
     var valStr = isNull ? '-' : (typeof val === 'number' ? (Math.abs(val) >= 100 ? val.toFixed(1) : val.toFixed(2)) : val);
     var scoreColor = isNull ? '#ffa726' : (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350');
     html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(d.n) + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
@@ -3099,10 +3104,11 @@ function showHldScoreDetail(stockName, stockCode, tdEl) {
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + d.w + '%</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + contrib.toFixed(1) + '</td></tr>';
   });
-  var avgScore = totalW > 0 ? (totalContrib / totalW * 100).toFixed(1) : '0.0';
+  var avgScore = totalW > 0 ? totalContrib.toFixed(1) : '0.0';
   html += '<tr><td style="padding:4px 6px;border-top:1px solid #555;color:#888;" colspan="2">合计</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;font-weight:600;color:#66bb6a;">' + avgScore + '</td>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + totalW + '%</td>'
+    + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + totalContrib.toFixed(1) + '</td></tr>'
     + '<td style="padding:4px 6px;text-align:right;border-top:1px solid #555;font-family:Consolas;color:#888;">' + totalContrib.toFixed(1) + '</td></tr>'
     + '</tbody></table>'
     + '<button onclick="this.closest(\'#hldScoreModal\').style.display=\'none\';document.getElementById(\'hldScoreBackdrop\').style.display=\'none\'" style="margin-top:10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 12px;cursor:pointer;">关闭</button></div>';
