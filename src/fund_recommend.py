@@ -628,6 +628,7 @@ def _supplement_self_selected() -> None:
 
 def main() -> None:
     _t0 = time.time()  # 全局计时起点
+    _has_error = False  # 标记是否发生异常
     # 进入 main 后重新加载配置，保证使用最新筛选条件
     _reload_config()
 
@@ -849,19 +850,32 @@ def main() -> None:
             print(f"   ├─ 限购检查: {_t4-_t3:.1f}s (如有此阶段)")
         print(f"   ├─ 评分阶段: {_t5-_t4:.1f}s")
         print(f"   └─ 保存结果: {time.time()-_t5:.1f}s")
+    except Exception as _main_exc:
+        _has_error = True
+        import traceback
+        _tb = traceback.format_exc()
+        print(f"\n❌ 推荐过程异常: {_main_exc}", file=sys.stderr)
+        print(_tb, file=sys.stderr)
+        update_heartbeat("fund_recommend", progress=0, total=0, overall_pct=100,
+                         phase="失败", detail=str(_main_exc)[:200], error=str(_main_exc)[:200])
+        raise
     finally:
-        update_heartbeat("fund_recommend", progress=0, total=0,
-                         overall_pct=97, phase="检查自选基金",
-                         detail="补充自选基金数据", elapsed=_elapsed())
-        _supplement_self_selected()
-        update_heartbeat("fund_recommend", progress=1, total=1,
-                         overall_pct=100, phase="完成",
-                         detail="推荐完成", elapsed=_elapsed())
+        if _has_error:
+            # 异常已在 except 中写入错误心跳，这里不再覆盖
+            pass
+        else:
+            update_heartbeat("fund_recommend", progress=0, total=0,
+                             overall_pct=97, phase="检查自选基金",
+                             detail="补充自选基金数据", elapsed=_elapsed())
+            _supplement_self_selected()
+            update_heartbeat("fund_recommend", progress=1, total=1,
+                             overall_pct=100, phase="完成",
+                             detail="推荐完成", elapsed=_elapsed())
         if _timeout_count > 0:
             print(f"\n⚠️ 超时警告: {_timeout_count} 次请求超时")
             for _td in _timeout_details[:10]:
                 print(f"   ⏱  {_td}")
-        print(f"\n✅ 推荐任务完成 ({_elapsed()}s)")
+        print(f"\n{'❌' if _has_error else '✅'} 推荐任务{'失败' if _has_error else '完成'} ({_elapsed()}s)")
 
 
 if __name__ == "__main__":

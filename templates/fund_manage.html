@@ -2249,6 +2249,19 @@ async function runRecommendFromFilter() {
         var recAlive = hb.alive && hb.alive.fund_recommend;
         // 如果心跳显示已完成，即使 alive 也视为结束
         var recDone = recData && (recData.overall_pct >= 100 || recData.phase === '完成' || recData.phase === '刷新完成');
+        // 检测错误
+        var recFailed = recData && (recData.phase === '失败' || recData.error);
+        if (recFailed) {
+          clearInterval(poll);
+          var errMsg = recData.error || '推荐过程出错';
+          if (prog) prog.style.width = '0%';
+          if (statusEl) { statusEl.textContent = '✖ ' + errMsg; statusEl.style.color = '#ef5350'; }
+          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+          if (cancelBtn) cancelBtn.style.display = 'none';
+          showMsg('✖ ' + errMsg, 'fail');
+          setTimeout(function(){ if(statusEl) statusEl.style.color = ''; }, 8000);
+          return;
+        }
         if (recAlive && recData && !recDone) {
           var pct = recData.total > 0 ? Math.round(recData.progress / recData.total * 100) : 0;
           // 优先使用全局进度 overall_pct，避免阶段切换时进度回退
@@ -2266,7 +2279,18 @@ async function runRecommendFromFilter() {
           if (btn) btn.textContent = '⏳ ' + displayPct + '%';
         } else if (!recAlive || recDone) {
           clearInterval(poll);
-          // 子进程结束，开始刷新实时涨跌（用 fund_recommend 心跳看进度）
+          // 如果进程结束但没到完成阶段且没有错误标记，可能是异常退出
+          if (!recDone && recData && recData.overall_pct != null && recData.overall_pct < 100) {
+            var errMsg = recData.error || '推荐进程意外退出（阶段：' + (recData.phase || '?') + '）';
+            if (prog) prog.style.width = '0%';
+            if (statusEl) { statusEl.textContent = '✖ ' + errMsg; statusEl.style.color = '#ef5350'; }
+            if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+            if (cancelBtn) cancelBtn.style.display = 'none';
+            showMsg('✖ ' + errMsg, 'fail');
+            setTimeout(function(){ if(statusEl) statusEl.style.color = ''; }, 8000);
+            return;
+          }
+          // 正常完成：开始刷新实时涨跌
           if (cancelBtn) cancelBtn.style.display = 'none';
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '⏳ 刷新实时涨跌...';
@@ -2329,7 +2353,12 @@ async function runRecommendFromFilter() {
             }
           }, 800);
         }
-      } catch(e) {}
+      } catch(e) {
+        // 轮询异常：不立即放弃，继续下一次轮询
+        if (Date.now() - startTime > 60000 && statusEl) {
+          statusEl.textContent = '⚠ 连接异常，后台任务可能仍在运行...';
+        }
+      }
       if (Date.now() - startTime > MAX_WAIT) {
         clearInterval(poll);
         if (prog) prog.style.width = '0%';
