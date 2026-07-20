@@ -440,10 +440,29 @@ def read_all_heartbeats() -> dict[str, dict]:
 
 
 def is_heartbeat_alive(name: str, timeout: int = 1800) -> bool:
-    """判断心跳是否存活（未超时），timeout=30分钟"""
+    """判断心跳是否存活：先检查进程是否还在运行，再检查超时"""
     hb = read_heartbeat(name)
     if hb is None:
         return False
+    # 检查进程是否还活着（比纯超时检查更可靠）
+    pid = hb.get("pid")
+    if pid:
+        try:
+            import os as _os
+            if hasattr(_os, "kill"):
+                _os.kill(pid, 0)
+            else:
+                import subprocess as _sp
+                _r = _sp.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True, timeout=5)
+                if str(pid) not in _r.stdout:
+                    _clear_hb = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".heartbeats", f"{name}.json")
+                    try:
+                        os.remove(_clear_hb)
+                    except OSError:
+                        pass
+                    return False
+        except Exception:
+            pass  # 无法检查时回退到超时判断
     start = hb.get("start")
     if not start:
         return False
