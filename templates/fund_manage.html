@@ -2614,33 +2614,22 @@ function showHoldings(code, name) {
           var order = saved.filter(function(n){ return cur.indexOf(n) >= 0; });
           if (order.length < 2) return;
           var headerRow = thead.querySelector('tr:first-child');
-          order.forEach(function(name, pos){
-            var allThs = headerRow.querySelectorAll('th');
-            for (var i = 0; i < allThs.length; i++) {
-              if (allThs[i].textContent === name && i !== pos) {
-                var ref = allThs[pos];
-                if (pos === 0) {
-                  headerRow.insertBefore(allThs[i], headerRow.firstChild);
-                } else if (i > pos) {
-                  headerRow.insertBefore(allThs[i], ref.nextSibling);
-                } else {
-                  headerRow.insertBefore(allThs[i], ref);
-                }
-                Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
-                  var tds = tr.querySelectorAll('td');
-                  if (tds.length <= Math.max(i, pos)) return;
-                  var refTd = tds[pos];
-                  if (pos === 0) {
-                    tr.insertBefore(tds[i], tr.firstChild);
-                  } else if (i > pos) {
-                    tr.insertBefore(tds[i], refTd.nextSibling);
-                  } else {
-                    tr.insertBefore(tds[i], refTd);
-                  }
-                });
-                break;
-              }
-            }
+          // 收集所有 th 按保存顺序排序后重新追加
+          var allThs = Array.from(headerRow.querySelectorAll('th'));
+          allThs.sort(function(a, b){
+            return order.indexOf(a.textContent) - order.indexOf(b.textContent);
+          });
+          allThs.forEach(function(th){ headerRow.appendChild(th); });
+          // 数据行按新表头顺序重排
+          Array.from(tbody.querySelectorAll('tr')).forEach(function(tr){
+            var tds = tr.querySelectorAll('td');
+            if (tds.length < order.length) return;
+            var sortedTds = [];
+            Array.from(headerRow.querySelectorAll('th')).forEach(function(th){
+              var origIdx = cur.indexOf(th.textContent);
+              if (origIdx >= 0 && origIdx < tds.length) sortedTds.push(tds[origIdx]);
+            });
+            sortedTds.forEach(function(td){ tr.appendChild(td); });
           });
         }
         // 从服务端加载顺序
