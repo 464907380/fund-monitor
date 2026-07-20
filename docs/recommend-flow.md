@@ -173,3 +173,68 @@ _CONFIG_VERSION + str(top_n) + str(skip_missing_perf)
 - 前端每 2 秒轮询 `/api/heartbeat`
 - 子进程通过 `update_heartbeat("fund_recommend", ...)` 写入心跳
 - 子进程退出后 `_wait_and_cleanup` 会清除心跳（异常退出保留30秒）
+
+---
+
+# 大盘看板与分时折线图更新
+
+## 数据源
+
+| 接口 | 数据源 | 内容 |
+|------|--------|------|
+| `/api/market-indices` | 新浪行情 `hq.sinajs.cn` | 三大指数实时价、涨跌点、涨跌幅 |
+| `/api/market-trends` | 新浪 K 线 `money.finance.sina.com.cn` | 当日 5 分钟 K 线（用于画分时折线） |
+| `/api/check-trade-time` | 本地计算（交易日历 + 时钟） | 是否交易时间，下次刷新倒计时 |
+
+## 更新流程
+
+```
+页面加载
+  │
+  ├─ loadMarketIndices()
+  │   GET /api/market-indices?_t=now
+  │   → 新浪返回GBK数据: 今开/昨收/现价/最高/最低
+  │   → 计算涨跌点、涨跌幅
+  │   → 渲染三大指数卡片
+  │   → 调用 _renderMarketSparklines()
+  │
+  └─ _initMarketTimer()
+      GET /api/check-trade-time
+      → is_trading / next_check_seconds
+      │
+      ├─ 交易时间(9:30-15:00):
+      │   setInterval(loadMarketIndices, 60000)
+      │   每分钟自动刷新大盘数据
+      │
+      ├─ 非交易时间但今天还有交易:
+      │   setTimeout(..., next_check_seconds)
+      │   到开盘时间再启动定时器
+      │
+      └─ 非交易日/已收盘:
+       不启动定时器，大盘数据保持静态
+```
+
+## 折线图渲染
+
+`_renderMarketSparklines()` 流程：
+
+```
+GET /api/market-trends
+  → 新浪5分钟K线API,每次48条
+  → 解析交易偏移量 offset:
+     09:30→0, 11:30→120, 13:00→120, 15:00→240
+  → 过滤出当日数据点
+  → 获取昨收 pre_close（从日K线API获取）
+  → 前端 SVG 绘制:
+     横轴=时间偏移(0-240分钟)
+     纵轴=价格(自动缩放)
+     红=涨 绿=跌
+```
+
+点击折线图弹出 `showMarketTrend()` 大图弹窗。
+
+## 收盘后行为
+
+- `loadMarketIndices()` 检测 `hour >= 15` → 停止定时器
+- 大盘数据停留在最后更新的值，不再变化
+- `check-trade-time` 返回盘后 → 不启动定时器
