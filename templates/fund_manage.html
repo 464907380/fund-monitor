@@ -3295,7 +3295,7 @@ function showHldScoreDetail(stockName, stockCode, tdEl) {
       srcLabel = src;
       srcTip = _HLD_SRC_TIPS[src] || '';
     }
-    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[d.k] || '') + '">' + htmlEscape(d.n) + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + (src ? ' <span style="color:' + srcColor + ';font-size:8px;border:1px solid ' + srcColor + ';border-radius:2px;padding:0 3px;cursor:help;" title="' + htmlEscape(srcTip) + '">' + srcLabel + '</span>' : '') + '</td>'
+    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;cursor:help;" title="' + htmlEscape(_HLD_DIM_DESC[d.k] || '') + '">' + htmlEscape(d.n) + (_HLD_LOCKED_KEYS[d.k] ? ' <span style="color:#888;font-size:9px;">🔒</span>' : '') + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + (src ? ' <span style="color:' + srcColor + ';font-size:8px;border:1px solid ' + srcColor + ';border-radius:2px;padding:0 3px;cursor:help;" title="' + htmlEscape(srcTip) + '">' + srcLabel + '</span>' : '') + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + valStr + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + scoreColor + ';">' + (isNull ? '50.0' : score.toFixed(1)) + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + d.w + '%</td>'
