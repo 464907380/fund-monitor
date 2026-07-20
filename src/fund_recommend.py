@@ -156,6 +156,25 @@ _RANK_SORT = CFG.get("recommend", {}).get("rank_sort", "1n")
 # 筛选条件（多条件组合）
 _FILTER_CONDITIONS = CFG.get("recommend", {}).get("filter_conditions", [])
 """筛选条件列表：[{field, op, value}, ...]  field: y1/sy6/m3/m1/sy2/sy3"""
+
+# 运行时重载配置（由 _reload_config 调用时更新）
+def _reload_config() -> None:
+    """从文件重新加载 config.json，更新筛选条件等运行时变量"""
+    global _TOP, SHOW_TOP, _SKIP_MISSING_PERF, _SKIP_LIMITED, _RANK_SORT, _FILTER_CONDITIONS
+    try:
+        import json as _json
+        _path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "config.json")
+        with open(_path, encoding="utf-8") as _f:
+            _cfg = _json.load(_f)
+        _rec = _cfg.get("recommend", {})
+        _TOP = int(_rec.get("top_n", 200))
+        SHOW_TOP = int(_rec.get("show_top", 20))
+        _SKIP_MISSING_PERF = bool(_rec.get("skip_missing_perf", False))
+        _SKIP_LIMITED = bool(_rec.get("skip_limited", False))
+        _RANK_SORT = str(_rec.get("rank_sort", "1n"))
+        _FILTER_CONDITIONS = _rec.get("filter_conditions", [])
+    except Exception:
+        pass
 # 排行API字段映射
 _RANK_FIELD_MAP = {
     "y1":  {"idx": 11, "name": "近1年收益"},
@@ -604,6 +623,8 @@ def _supplement_self_selected() -> None:
 
 def main() -> None:
     _t0 = time.time()  # 全局计时起点
+    # 进入 main 后重新加载配置，保证使用最新筛选条件
+    _reload_config()
 
     def _elapsed() -> float:
         return round(time.time() - _t0, 1)

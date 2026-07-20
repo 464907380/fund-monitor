@@ -1783,16 +1783,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _fcfg:
                     cfg = json.load(_fcfg)
-                cfg["recommend"] = {
-                    "top_n": int(body.get("top_n", 200)),
-                    "filter_conditions": body.get("filter_conditions", []),
-                    "show_top": int(body.get("show_top", 20)),
-                    "skip_missing_perf": bool(body.get("skip_missing_perf", False)),
-                    "skip_limited": bool(body.get("skip_limited", False)),
-                    "rank_sort": str(body.get("rank_sort", "1n")),
-                }
+                rec = cfg.setdefault("recommend", {})
+                rec.update({
+                    "top_n": int(body.get("top_n", rec.get("top_n", 200))),
+                    "filter_conditions": body.get("filter_conditions", rec.get("filter_conditions", [])),
+                    "show_top": int(body.get("show_top", rec.get("show_top", 20))),
+                    "skip_missing_perf": bool(body.get("skip_missing_perf", rec.get("skip_missing_perf", False))),
+                    "skip_limited": bool(body.get("skip_limited", rec.get("skip_limited", False))),
+                    "rank_sort": str(body.get("rank_sort", rec.get("rank_sort", "1n"))),
+                })
                 _write_config(cfg)
-                # 重载 config 再重载 fund_render，让 _show_top 读到新值
                 self._send(*_json_response({"ok": True, "message": "推荐配置已更新"}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
