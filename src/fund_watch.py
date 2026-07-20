@@ -371,8 +371,9 @@ def _required_nav_pages() -> int:
 
 
 def _fetch_fund_name_light(code: str) -> str:
-    """从 fundgz 实时估值 API 获取基金名（160B 请求）"""
+    """获取基金名，优先 fundgz，降级到新浪财经"""
     import urllib.request, re, json as _json
+    # 1. fundgz（原主力，近期可能返回404）
     try:
         url = f"https://fundgz.1234567.com.cn/js/{code}.js"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -381,7 +382,22 @@ def _fetch_fund_name_light(code: str) -> str:
         m = re.search(r"jsonpgz\((.+)\)", text)
         if m:
             data = _json.loads(m.group(1))
-            return data.get("name", "")
+            name = data.get("name", "")
+            if name:
+                return name
+    except Exception:
+        pass
+    # 2. 降级：新浪财经
+    try:
+        url = f"https://hq.sinajs.cn/list=of{code}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn"})
+        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
+            text = r.read().decode("gbk")
+        m = re.search(r'"(.*?)"', text)
+        if m:
+            parts = m.group(1).split(",")
+            if parts[0]:
+                return parts[0]
     except Exception:
         pass
     return ""

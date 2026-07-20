@@ -44,11 +44,16 @@ def _spawn_task(task_id: str) -> bool:
     script = os.path.join(_SCRIPT_DIR, script_name)
     hb_name = _task_heartbeats.get(task_id, task_id)
     try:
+        _si = subprocess.STARTUPINFO()
+        _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        _si.wShowWindow = subprocess.SW_HIDE
         proc = subprocess.Popen(
             [sys.executable, script],
             cwd=_SCRIPT_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            startupinfo=_si,
         )
         # 立即写心跳，不等待
         write_heartbeat(hb_name)
@@ -81,11 +86,16 @@ def _spawn_recommend() -> bool:
     """启动推荐任务，返回是否成功"""
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
     try:
+        _si = subprocess.STARTUPINFO()
+        _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        _si.wShowWindow = subprocess.SW_HIDE
         proc = subprocess.Popen(
             [sys.executable, script],
             cwd=_SCRIPT_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            startupinfo=_si,
         )
         # 立即写心跳，前端立刻就能看到进度
         write_heartbeat("fund_recommend", progress=0, total=0, status="启动中")
@@ -349,7 +359,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     _quiet_paths = {"/api/heartbeat", "/api/tasks", "/api/fund-table", "/api/recommend-table"}
 
     def log_request(self, code: int | str = ..., size: int | str = ...) -> None:
-        if hasattr(self, "path") and self.path in self._quiet_paths:
+        # 去掉查询参数再匹配静默路径
+        _p = self.path.split("?")[0] if hasattr(self, "path") else ""
+        if _p in self._quiet_paths:
             return
         super().log_request(code, size)
 
@@ -1321,7 +1333,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     except Exception:
                         pass
 
-                def _process_one(code: str) -> dict | None:
+                def _process_one(code: str, fallback_name: str = "") -> dict | None:
                     """拉取一只基金数据并计算评分（优先从推荐缓存复用）"""
                     import datetime
                     try:
@@ -1385,7 +1397,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
                         # ── 推荐缓存未命中：全量拉取 pingzhongdata ──
                         d = get_scoring_data(code)
-                        if not d.get("n"):
+                        _name = d.get("n") or fallback_name
+                        if not _name:
                             return None
                         _td = _parse_real_time(code)
                         d["td"] = _td
@@ -1396,8 +1409,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
                             d["f5"] = f"{pct:+.1f}%"
                         row = {
-                            "code": code, "name": d.get("n", ""),
-                            "name_short": (d.get("n", "") or "")[:12],
+                            "code": code, "name": _name,
+                            "name_short": (_name or "")[:12],
                             "day": day_s, "f5": d.get("f5", ""),
                             "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
                             "_day": day_s, "_f5": d.get("f5", ""),
@@ -1449,7 +1462,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _last_hb_pct = -1
                 _fund_td_done = 0
                 with concurrent.futures.ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "server_fund_table", default=20)) as executor:
-                    fut_map = {executor.submit(_process_one, f["code"]): f["code"] for f in _fund_list_for_progress}
+                    fut_map = {executor.submit(_process_one, f["code"], f.get("name", "")): f["code"] for f in _fund_list_for_progress}
                     try:
                         for fut in concurrent.futures.as_completed(fut_map, timeout=120):
                             try:
@@ -2363,6 +2376,8 @@ def main():
     threading.Thread(target=_background_refresh_recommend_cache, daemon=True).start()
     host = get_config("server", "host", default="0.0.0.0")
     port = int(sys.argv[1]) if len(sys.argv) > 1 else _PORT
+    # 启动前检查端口是否已被占用，有则杀掉旧进程
+    _check_port_and_kill(host, port)
     server = http.server.ThreadingHTTPServer((host, port), Handler)
     print(f"🌐 基金优选页面：http://{host}:{port}")
     print("   按 Ctrl+C 停止服务")
@@ -2371,6 +2386,30 @@ def main():
     except KeyboardInterrupt:
         print("\n服务已停止")
         server.server_close()
+
+
+def _check_port_and_kill(host: str, port: int) -> None:
+    """检查端口是否已被占用，有则杀掉占用进程（仅Windows）"""
+    import subprocess as _sp, socket as _socket
+    # 试连接端口，通则说明被占
+    try:
+        with _socket.create_connection((host, port), timeout=1):
+            pass
+    except (ConnectionRefusedError, OSError):
+        return  # 端口空闲
+    # 端口被占，查找PID
+    try:
+        _r = _sp.run(["netstat", "-ano"], capture_output=True, text=True, timeout=10)
+        for _line in _r.stdout.splitlines():
+            if f":{port}" in _line and "LISTENING" in _line:
+                _parts = _line.strip().split()
+                _pid = _parts[-1]
+                if _pid.isdigit():
+                    print(f"[startup] 端口 {port} 被进程(PID={_pid})占用，正在清理...", flush=True)
+                    _sp.run(["taskkill", "/F", "/PID", _pid], capture_output=True, timeout=10)
+                    return
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
