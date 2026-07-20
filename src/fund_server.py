@@ -627,6 +627,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 from fund_watch import _parse_holdings, _parse_holdings_meta
                 from fund_utils import fetch, _retry_fetch
                 holds = _parse_holdings(code) or []
+                # 去重：同一股票代码只保留第一次出现
+                _seen = set()
+                _deduped = []
+                for h in holds:
+                    c = h.get("c", "")
+                    if c and c not in _seen:
+                        _seen.add(c)
+                        _deduped.append(h)
+                holds = _deduped
                 hld_meta = _parse_holdings_meta(code) if holds else {}
                 # 用腾讯财经接口批量获取实时涨跌（速度快，不需要Referer）
                 if holds:
@@ -1958,6 +1967,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 from fund_watch import _parse_holdings
                 from fund_utils import fetch, _retry_fetch
                 holds = _parse_holdings(code) or []
+                # 去重
+                _seen = set()
+                _deduped = []
+                for h in holds:
+                    c = h.get("c", "")
+                    if c and c not in _seen:
+                        _seen.add(c)
+                        _deduped.append(h)
+                holds = _deduped
                 if not holds:
                     self._send(*_json_response({"ok": False, "error": "无持仓数据"}, 400))
                     return
