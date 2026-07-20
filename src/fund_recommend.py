@@ -432,7 +432,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
         # 筛掉缺失收益数据
         if _SKIP_MISSING_PERF:
             perf_keys = ["m1", "m3", "y1", "f5", "sy6", "sy2", "sy3", "annual_return"]
-            if any(d.get(k) is None or d.get(k) == "" or (k in ("sy3", "sy2") and d.get(k) == 0) for k in perf_keys):
+            if any(d.get(k) is None or d.get(k) == "" for k in perf_keys):
                 log.debug("跳过 %s(%s): 缺失收益维度", name, code)
                 return None
         score = _calc_score(d)
