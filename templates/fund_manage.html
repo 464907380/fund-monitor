@@ -2310,6 +2310,7 @@ async function runRecommendFromFilter() {
           if (prog) prog.style.width = '0%';
           setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
           return;
+        }
       } catch(e) {
         // 轮询异常：不立即放弃，继续下一次轮询
         if (Date.now() - startTime > 60000 && statusEl) {
