@@ -719,13 +719,14 @@ def main() -> None:
                     cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
                 print(f"\n💾 保存缓存结果...")
-                update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates,
-                                 overall_pct=97, phase="保存",
-                                 detail=f"保存 {total_candidates} 只结果", elapsed=_elapsed())
                 # 先补充自选基金再保存，确保最终数量与评分阶段一致
                 _supplement_self_selected(cached_results)
+                _final_count = len(cached_results)
+                update_heartbeat("fund_recommend", progress=_final_count, total=_final_count,
+                                 overall_pct=97, phase="保存",
+                                 detail=f"保存 {_final_count} 只结果", elapsed=_elapsed())
                 _save_result(cached_results)
-                update_heartbeat("fund_recommend", progress=len(cached_results), total=len(cached_results),
+                update_heartbeat("fund_recommend", progress=_final_count, total=_final_count,
                                  overall_pct=100, phase="完成",
                                  detail="推荐完成", elapsed=_elapsed())
                 print(f"🏆 基金推荐 TOP {SHOW_TOP}")
@@ -844,13 +845,20 @@ def main() -> None:
 
         # ── 排序保存 ──
         _t5 = time.time()
+        print(f"\n🧮 评分完成: {len(scored)}/{total} 只成功 ({total - len(scored)} 只无数据跳过) ({time.time()-_t4:.1f}s)")
+        # 用实际评分成功数更新心跳，使前端显示与缓存一致
+        update_heartbeat("fund_recommend", progress=len(scored), total=len(scored),
+                         overall_pct=97, phase="评分",
+                         detail=f"评分完成: {len(scored)} 只成功 ({total - len(scored)} 只无数据跳过)",
+                         elapsed=_elapsed())
         print(f"\n💾 阶段5/5: 排序保存...")
         scored.sort(key=lambda x: x.get("score", 0), reverse=True)
-        update_heartbeat("fund_recommend", progress=total, total=total,
-                         overall_pct=97, phase="保存",
-                         detail=f"保存 {len(scored)} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
         # 先补充自选基金再保存，确保最终数量与评分阶段一致
         _supplement_self_selected(scored)
+        _final_count = len(scored)
+        update_heartbeat("fund_recommend", progress=_final_count, total=_final_count,
+                         overall_pct=97, phase="保存",
+                         detail=f"保存 {_final_count} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
         _save_result(scored)
 
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
