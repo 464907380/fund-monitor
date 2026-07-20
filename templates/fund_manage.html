@@ -2644,8 +2644,14 @@ function showHoldings(code, name) {
           });
         }
         // 从服务端加载顺序
+        if (window._hldColOrder && window._hldColOrder.length) {
+          _applySavedOrder(window._hldColOrder);
+        }
         fetch(API + '/api/holdings-col-order').then(function(r){ return r.json(); }).then(function(d){
-          if (d.ok && d.order) _applySavedOrder(d.order);
+          if (d.ok && d.order && d.order.length) {
+            window._hldColOrder = d.order;
+            _applySavedOrder(d.order);
+          }
         }).catch(function(){});
         var ths = thead.querySelectorAll('tr:first-child th');
         // 获取th的当前索引
@@ -2657,6 +2663,7 @@ function showHoldings(code, name) {
         // 保存当前顺序到服务端
         function _saveOrder() {
           var names = _getColNames();
+          window._hldColOrder = names;
           fetch(API + '/api/holdings-col-order', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({order:names})});
         }
         var dragSrcEl = null;
