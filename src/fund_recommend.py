@@ -281,6 +281,16 @@ def _filter_candidates(rows: list) -> list[dict]:
             code = r[0]
             name = r[1]
             y1 = float(r[11]) if len(r) > 11 and r[11] else 0
+            # 筛掉缺失收益数据（在初筛阶段就执行，避免进入评分后失败）
+            if _SKIP_MISSING_PERF:
+                _perf_idxs = {"m1": 8, "m3": 9, "sy6": 10, "y1": 11, "sy2": 12, "sy3": 13}
+                _missing = False
+                for _key, _idx in _perf_idxs.items():
+                    if len(r) <= _idx or not r[_idx]:
+                        _missing = True
+                        break
+                if _missing:
+                    continue
             # 多条件组合筛选
             passed = True
             for cond in _FILTER_CONDITIONS:
