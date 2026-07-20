@@ -205,10 +205,20 @@ def _save(data: list[dict]) -> None:
 
 
 def _write_config(cfg: dict) -> None:
-    """安全写入 config.json，自动创建 data/ 目录"""
+    """安全写入 config.json（原子写入：先写临时文件再 rename）"""
+    import tempfile
     os.makedirs(os.path.dirname(_CONFIG_PATH), exist_ok=True)
-    with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    _tmp = _CONFIG_PATH + ".tmp"
+    try:
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(_tmp, _CONFIG_PATH)
+    except Exception:
+        # 回退：直接写入
+        with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
 def _json_response(data, status=200):

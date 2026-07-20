@@ -161,11 +161,16 @@ _FILTER_CONDITIONS = CFG.get("recommend", {}).get("filter_conditions", [])
 def _reload_config() -> None:
     """从文件重新加载 config.json，更新筛选条件等运行时变量"""
     global _TOP, SHOW_TOP, _SKIP_MISSING_PERF, _SKIP_LIMITED, _RANK_SORT, _FILTER_CONDITIONS
+    import json as _json
+    import logging
+    _path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "config.json")
     try:
-        import json as _json
-        _path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "config.json")
         with open(_path, encoding="utf-8") as _f:
-            _cfg = _json.load(_f)
+            raw = _f.read()
+        if not raw.strip():
+            logging.warning("config.json 为空文件，跳过重载")
+            return
+        _cfg = _json.loads(raw)
         _rec = _cfg.get("recommend", {})
         _TOP = int(_rec.get("top_n", 200))
         SHOW_TOP = int(_rec.get("show_top", 20))
@@ -173,8 +178,8 @@ def _reload_config() -> None:
         _SKIP_LIMITED = bool(_rec.get("skip_limited", False))
         _RANK_SORT = str(_rec.get("rank_sort", "1n"))
         _FILTER_CONDITIONS = _rec.get("filter_conditions", [])
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning("_reload_config 失败: %s，使用模块级默认值", e)
 # 排行API字段映射
 _RANK_FIELD_MAP = {
     "y1":  {"idx": 11, "name": "近1年收益"},
