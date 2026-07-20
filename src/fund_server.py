@@ -85,7 +85,7 @@ def _spawn_recommend() -> bool:
             [sys.executable, script],
             cwd=_SCRIPT_DIR,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
         # 立即写心跳，前端立刻就能看到进度
         write_heartbeat("fund_recommend", progress=0, total=0, status="启动中")
@@ -95,18 +95,7 @@ def _spawn_recommend() -> bool:
         def _wait_and_cleanup(p=proc) -> None:
             p.wait()
             if p.returncode != 0:
-                # 进程异常退出，读取 stderr 错误信息写入心跳
-                _stderr_text = ""
-                try:
-                    _stderr_text = p.stderr.read().decode("utf-8", errors="replace")[-500:]
-                except Exception:
-                    pass
-                _err_msg = f"推荐进程异常退出(code={p.returncode})"
-                if _stderr_text:
-                    # 提取关键错误行
-                    _lines = [l for l in _stderr_text.split("\n") if l.strip() and "Traceback" not in l and "  File" not in l]
-                    if _lines:
-                        _err_msg += " | " + _lines[-1].strip()[:120]
+                _err_msg = f"推荐进程异常退出(code={p.returncode})，请查看 recommend.log"
                 write_heartbeat("fund_recommend", progress=0, total=0, overall_pct=100,
                                 phase="失败", detail=_err_msg, error=_err_msg)
                 print(f"[recommend] {_err_msg}", flush=True)

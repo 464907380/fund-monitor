@@ -337,22 +337,17 @@ def _config_hash() -> str:
 
 def _save_result(results: list[dict]) -> bool:
     """保存评分结果到文件"""
+    if not results:
+        print("\n⚠️ 未找到匹配基金，保留上次结果")
+        return False
+    # 清理残留锁文件（超过5分钟）
     lock_file = _RESULT_FILE + ".lock"
     try:
-        for _ in range(get_config("recommend", "lock_retry_count", default=30)):
-            try:
-                with open(lock_file, "x") as _:
-                    break
-            except FileExistsError:
-                time.sleep(get_config("recommend", "lock_retry_interval", default=1.0))
-        else:
-            print("⚠️ 无法获取文件锁，跳过保存")
-            return False
-
-        if not results:
-            print("\n⚠️ 未找到匹配基金，保留上次结果")
-            return False
-
+        if os.path.exists(lock_file) and time.time() - os.path.getmtime(lock_file) > 300:
+            os.remove(lock_file)
+    except OSError:
+        pass
+    try:
         data = {
             "date": datetime.date.today().isoformat(),
             "config_hash": _config_hash(),
@@ -360,15 +355,18 @@ def _save_result(results: list[dict]) -> bool:
             "results": results,
             "timeout_count": _timeout_count,
         }
-        with open(_RESULT_FILE, "w", encoding="utf-8") as f:
+        # 原子写入
+        _tmp = _RESULT_FILE + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(_tmp, _RESULT_FILE)
         print(f"\n📁 已保存 {len(results)} 只基金评分结果到 {_RESULT_FILE}")
         return True
-    finally:
-        try:
-            os.remove(lock_file)
-        except OSError:
-            pass
+    except Exception as e:
+        print(f"\n⚠️ 保存结果失败: {e}")
+        return False
 
 
 def _load_result() -> list[dict] | None:
