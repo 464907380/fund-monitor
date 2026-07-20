@@ -549,8 +549,11 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
     _print_results(cached_results)
 
 
-def _supplement_self_selected() -> None:
-    """补拉自选基金数据到推荐结果文件"""
+def _supplement_self_selected(base_results: list | None = None) -> None:
+    """补拉自选基金数据到推荐结果
+    如果提供 base_results，则在其基础上追加（不保存文件）；
+    否则加载现有结果文件追加。
+    """
     try:
         _fund_list_file = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
         if not os.path.exists(_fund_list_file):
@@ -559,8 +562,11 @@ def _supplement_self_selected() -> None:
             _fl_data = json.load(_fl)
         if not _fl_data:
             return
-        _old = _load_result()
-        _existing = {r["code"] for r in _old} if _old else set()
+        if base_results is not None:
+            _existing = {r["code"] for r in base_results}
+        else:
+            _old = _load_result()
+            _existing = {r["code"] for r in _old} if _old else set()
         _missing = [f for f in _fl_data if f["code"] not in _existing]
         if not _missing:
             update_heartbeat("fund_recommend", progress=1, total=1,
@@ -615,11 +621,17 @@ def _supplement_self_selected() -> None:
                                      detail=f"补充自选基金 {_done_supp}/{_total}")
         if not _extra:
             return
-        _old_list = _old or []
-        _old_list.extend(_extra)
-        _old_list.sort(key=lambda x: x.get("score", 0), reverse=True)
-        _save_result(_old_list)
-        print(f"  已补入 {len(_extra)} 只自选基金，重新保存")
+        if base_results is not None:
+            # 追加到调用者提供的列表，由调用者统一保存
+            base_results.extend(_extra)
+            base_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            print(f"  已补入 {len(_extra)} 只自选基金，追加到待保存列表")
+        else:
+            _old_list = _old or []
+            _old_list.extend(_extra)
+            _old_list.sort(key=lambda x: x.get("score", 0), reverse=True)
+            _save_result(_old_list)
+            print(f"  已补入 {len(_extra)} 只自选基金，重新保存")
     except Exception as _e:
         print(f"⚠️ 补拉自选基金数据失败: {_e}")
 
@@ -710,8 +722,10 @@ def main() -> None:
                 update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates,
                                  overall_pct=97, phase="保存",
                                  detail=f"保存 {total_candidates} 只结果", elapsed=_elapsed())
+                # 先补充自选基金再保存，确保最终数量与评分阶段一致
+                _supplement_self_selected(cached_results)
                 _save_result(cached_results)
-                update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates,
+                update_heartbeat("fund_recommend", progress=len(cached_results), total=len(cached_results),
                                  overall_pct=100, phase="完成",
                                  detail="推荐完成", elapsed=_elapsed())
                 print(f"🏆 基金推荐 TOP {SHOW_TOP}")
@@ -835,6 +849,8 @@ def main() -> None:
         update_heartbeat("fund_recommend", progress=total, total=total,
                          overall_pct=97, phase="保存",
                          detail=f"保存 {len(scored)} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
+        # 先补充自选基金再保存，确保最终数量与评分阶段一致
+        _supplement_self_selected(scored)
         _save_result(scored)
 
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
@@ -862,10 +878,6 @@ def main() -> None:
             # 异常已在 except 中写入错误心跳，这里不再覆盖
             pass
         else:
-            update_heartbeat("fund_recommend", progress=0, total=0,
-                             overall_pct=97, phase="检查自选基金",
-                             detail="补充自选基金数据", elapsed=_elapsed())
-            _supplement_self_selected()
             update_heartbeat("fund_recommend", progress=1, total=1,
                              overall_pct=100, phase="完成",
                              detail="推荐完成", elapsed=_elapsed())
