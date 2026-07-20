@@ -256,39 +256,28 @@ def _calc_score(d: dict) -> float:
     return round(total / weight_sum, 1) if weight_sum > 0 else 0.0
 
 
-def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float | None, float, object, str, bool]], float]:
+def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float | None, float, object, str]], float]:
     """
     计算基金综合评分并返回各维度明细
-    返回: (总分, [(维度名, 单项得分或None, 权重, 原始值, 说明, 是否锁定), ...], 中性分处理的权重和)
+    返回: (总分, [(维度名, 单项得分或None, 权重, 原始值, 说明), ...], 中性分处理的权重和)
     无数据的维度得中性分 50，不跳过。
     """
-    # 构建 locked 查询表（从 config.json 读取）
-    import json as _j, os as _o
-    _locked_map: dict[str, bool] = {}
-    try:
-        _p = _o.path.join(_o.path.dirname(_o.path.dirname(_o.path.abspath(__file__))), "data", "config.json")
-        for _dim in _j.load(open(_p, encoding="utf-8")).get("scoring", {}).get("dims", []):
-            if _dim.get("locked"):
-                _locked_map[_dim.get("name", "")] = True
-    except Exception:
-        pass
     total = 0.0
     weight_sum = 0.0
     neutral_weight = 0.0
-    details: list[tuple[str, float | None, float, object, str, bool]] = []
+    details: list[tuple[str, float | None, float, object, str]] = []
     for name, fn, weight, desc in SCORE_DIMS:
         if weight <= 0:
             continue
         key = _DIM_VALUE_KEYS.get(name)
         raw = d.get(key) if key else None
-        _locked = _locked_map.get(name, False)
         if raw is None:
-            details.append((name, 50.0, weight, None, desc + "（无原始数据，取中性分50）", _locked))
+            details.append((name, 50.0, weight, None, desc + "（无原始数据，取中性分50）"))
             total += 50.0 * weight
             neutral_weight += weight
         else:
             s = fn(d)
-            details.append((name, round(s, 1), weight, raw, desc, _locked))
+            details.append((name, round(s, 1), weight, raw, desc))
             total += s * weight
         weight_sum += weight
     score = round(total / weight_sum, 1) if weight_sum > 0 else 0.0

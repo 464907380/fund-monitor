@@ -2350,7 +2350,7 @@ function showScoreDetail(items) {
     var barColor = score >= 80 ? 'rgba(102,187,106,0.4)' : score >= 40 ? 'rgba(255,167,38,0.4)' : 'rgba(239,83,80,0.4)';
     var valStr = value !== null && value !== undefined ? (typeof value === 'number' ? value.toFixed(2) : value) : '-';
     var barHtml = '<div style="display:flex;align-items:center;gap:6px;margin:2px 0;">'
-      + '<div style="flex:0 0 80px;text-align:right;color:#888;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;" title="' + (item[4] || name) + '">' + name + (item[5] ? ' <span style="color:#888;font-size:9px;">🔒</span>' : '') + '</div>'
+      + '<div style="flex:0 0 80px;text-align:right;color:#888;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;" title="' + (item[4] || name) + '">' + name + '</div>'
       + '<div style="flex:1;height:14px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;position:relative;">'
       + '<div style="width:' + barPct.toFixed(0) + '%;height:100%;background:' + barColor + ';border-radius:3px;"></div>'
       + '</div>'
@@ -2374,7 +2374,7 @@ function showScoreDetail(items) {
     var contrib = isNull ? 50 * weight : score * weight;
     var valStr = isNull ? '-' : (typeof value === 'number' ? value.toFixed(2) : value);
     var scoreColor = isNull ? '#ffa726' : (score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350');
-    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:' + (isNull ? '#888' : '#e0e0e0') + ';cursor:help;" title="' + (item[4] || name) + '">' + name + (item[5] ? ' <span style="color:#888;font-size:9px;">🔒</span>' : '') + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
+    html += '<tr><td style="padding:3px 6px;border-bottom:1px solid #333;color:' + (isNull ? '#888' : '#e0e0e0') + ';cursor:help;" title="' + (item[4] || name) + '">' + name + (isNull ? ' <span style="color:#555;">(中性)</span>' : '') + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + (isNull ? '#555' : '#888') + ';">' + valStr + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:' + scoreColor + ';">' + (isNull ? '50.0' : score.toFixed(1)) + '</td>'
       + '<td style="padding:3px 6px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#888;">' + (weight * 100).toFixed(0) + '%</td>'
