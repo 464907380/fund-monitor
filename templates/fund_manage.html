@@ -2290,69 +2290,26 @@ async function runRecommendFromFilter() {
             setTimeout(function(){ if(statusEl) statusEl.style.color = ''; }, 8000);
             return;
           }
-          // 正常完成：开始刷新实时涨跌
+          // 正常完成：渲染表格（td刷新已在推荐进程内部完成）
           if (cancelBtn) cancelBtn.style.display = 'none';
           if (prog) prog.style.width = '100%';
-          if (statusEl) statusEl.textContent = '⏳ 刷新实时涨跌...';
-          if (btn) btn.textContent = '⏳ 刷新涨跌';
-          // 继续轮询 td 刷新心跳
-          var _tdStart = Date.now();
-          poll = setInterval(async function() {
-            if (_recCancelled) { clearInterval(poll); return; }
-            try {
-              var hb2 = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
-              var rec2 = hb2.heartbeats && hb2.heartbeats['recommend-td-refresh'];
-              var tdAlive = hb2.alive && hb2.alive['recommend-td-refresh'];
-              if (tdAlive && rec2) {
-                var pct = rec2.total > 0 ? Math.round(rec2.progress / rec2.total * 100) : 0;
-                if (prog) prog.style.width = Math.min(pct, 99) + '%';
-                if (statusEl) statusEl.textContent = '📋 刷新td ' + (rec2.detail || '') + ' | ' + pct + '%';
-                if (btn) btn.textContent = '⏳ ' + pct + '%';
-              } else if (!tdAlive) {
-                // td 刷新完成或无心跳，取表格
-                clearInterval(poll);
-                if (prog) prog.style.width = '100%';
-                if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
-                if (btn) btn.textContent = '⏳ 渲染表格';
-                var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-                var ftPromise = fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-                var _tableOk = true;
-                try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
-                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
-                // 获取超时统计
-                var _timeoutInfo = '';
-                try { var _r = await fetch(API + '/api/recommend?_t=' + Date.now()).then(function(r){ return r.json(); }); if (_r && _r.timeout_count > 0) { _timeoutInfo = ' ⚠' + _r.timeout_count + '次超时'; } } catch(e) {}
-                if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-                if (statusEl) statusEl.textContent = (_tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）') + _timeoutInfo;
-                if (prog) prog.style.width = '0%';
-                setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
-              } else {
-                // 没有 fund_recommend 心跳，可能是 td 刷新已完成且心跳被清除
-                clearInterval(poll);
-                if (prog) prog.style.width = '100%';
-                if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
-                if (btn) btn.textContent = '⏳ 渲染表格';
-                var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-                var ftPromise = fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
-                var _tableOk = true;
-                try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
-                try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
-                // 获取超时统计
-                var _timeoutInfo = '';
-                try { var _r = await fetch(API + '/api/recommend?_t=' + Date.now()).then(function(r){ return r.json(); }); if (_r && _r.timeout_count > 0) { _timeoutInfo = ' ⚠' + _r.timeout_count + '次超时'; } } catch(e) {}
-                if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-                if (statusEl) statusEl.textContent = (_tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）') + _timeoutInfo;
-                if (prog) prog.style.width = '0%';
-                setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
-              }
-            } catch(e) {
-              clearInterval(poll);
-              if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-              if (prog) prog.style.width = '0%';
-              if (statusEl) statusEl.textContent = '';
-            }
-          }, 800);
-        }
+          if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
+          if (btn) btn.textContent = '⏳ 渲染表格';
+          // 等一小会儿让 _supplement_self_selected 完成
+          await new Promise(function(r){ setTimeout(r, 1500); });
+          var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+          var ftPromise = fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
+          var _tableOk = true;
+          try { var _rt = await rtPromise; if (_rt && _rt.indexOf('<tbody>') > 0) { var _re = document.getElementById('recommendFullTable'); if (_re) { _re.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (_rt) { var _re2 = document.getElementById('recommendFullTable'); if (_re2) { _re2.innerHTML = _rt; document.getElementById('recommendFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+          try { var _ft = await ftPromise; if (_ft && _ft.indexOf('<tbody>') > 0) { var _fe = document.getElementById('fundFullTable'); if (_fe) { _fe.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (_ft) { var _fe2 = document.getElementById('fundFullTable'); if (_fe2) { _fe2.innerHTML = _ft; document.getElementById('fundFullTableCard').style.display = ''; } } } catch(e) { _tableOk = false; }
+          // 获取超时统计
+          var _timeoutInfo = '';
+          try { var _r = await fetch(API + '/api/recommend?_t=' + Date.now()).then(function(r){ return r.json(); }); if (_r && _r.timeout_count > 0) { _timeoutInfo = ' ⚠' + _r.timeout_count + '次超时'; } } catch(e) {}
+          if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
+          if (statusEl) statusEl.textContent = (_tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）') + _timeoutInfo;
+          if (prog) prog.style.width = '0%';
+          setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
+          return;
       } catch(e) {
         // 轮询异常：不立即放弃，继续下一次轮询
         if (Date.now() - startTime > 60000 && statusEl) {
