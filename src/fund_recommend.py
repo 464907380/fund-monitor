@@ -38,10 +38,60 @@ except ImportError:
 
 # ── 批量实时估值（新浪行情接口，支持多只基金一次查询）───────
 
+def _estimate_td_from_holdings(code: str) -> float | None:
+    """从持仓股票实时涨跌估算基金当日净值变化
+    
+    基金实时估值 API（fundgz）已下线，此方法用最新季报持仓的
+    股票实时行情做加权估算，仅供盘中参考。
+    """
+    try:
+        from fund_watch import _parse_holdings
+        import urllib.request, re as _re
+        holds = _parse_holdings(code)
+        if not holds:
+            return None
+        total_w = 0.0
+        weighted_chg = 0.0
+        for h in holds:
+            if not h.get("c") or not h.get("p"):
+                continue
+            sc = h["c"]
+            # 确定市场前缀
+            prefix = "sh" if h.get("m") == "sh" else "sz"
+            try:
+                url = f"https://hq.sinajs.cn/list={prefix}{sc}"
+                req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://finance.sina.com.cn"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    raw = resp.read().decode("gbk")
+                m = _re.search(r'"[^"]*"', raw)
+                if not m:
+                    continue
+                parts = m.group(0).strip('"').split(",")
+                if len(parts) < 4:
+                    continue
+                prev_close = float(parts[2]) if parts[2] else 0
+                current = float(parts[3]) if parts[3] else 0
+                if prev_close and prev_close > 0:
+                    chg_pct = (current - prev_close) / prev_close * 100
+                    w = h["p"]
+                    total_w += w
+                    weighted_chg += chg_pct * w
+            except Exception:
+                continue
+        if total_w > 0:
+            # 总仓位不足5%时不可靠
+            if total_w < 5:
+                return None
+            return round(weighted_chg / total_w, 2)
+    except Exception:
+        pass
+    return None
+
+
 def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     """批量获取基金当日涨跌幅，返回 {code: 涨跌幅%, ...}
     
-    先用天天基金 fundgz 接口拉实时估值，取失败的逐个重试。
+    盘中（<15:00）优先用持仓股票实时行情估算，因为 fundgz 已下线。
     收盘后（≥15:00）用天天基金实际净值替换，保证数据准确。
     """
     result: dict[str, float] = {}
@@ -51,6 +101,24 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
 
     # 用多层降级方式拉取所有基金（fundgz已失效，优先用新浪/净值API）
+    # 盘中优先用持仓股票实时行情估算（唯一能拿到今日实时数据的方法）
+    if not is_after_market:
+        _estimated = 0
+        for _c in codes:
+            _est = _estimate_td_from_holdings(_c)
+            if _est is not None:
+                result[_c] = _est
+                _estimated += 1
+        if _estimated:
+            log.info("持仓估算实时涨跌: %d/%d 只基金", _estimated, len(codes))
+        # 持仓覆盖率高的基金直接用估算值，剩余用接口补充
+        if len(result) >= len(codes) * 0.5:
+            _remaining = [c for c in codes if c not in result]
+            if _remaining:
+                codes = _remaining
+            else:
+                return result
+
     def _fetch_one_td(code: str) -> tuple[str, float | None]:
         try:
             # 1. 新浪财经（轻量，速度快）
@@ -61,7 +129,6 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
             _m = re.search(r'"[^"]*"', _text)
             if _m:
                 _parts = _m.group(0).strip('"').split(",")
-                # 新浪返回格式: 基金名,净值,累计净值,估算净值,涨跌幅%,日期
                 if len(_parts) >= 5 and _parts[4]:
                     return (code, float(_parts[4]))
         except Exception:
@@ -120,6 +187,15 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                                  overall_pct=int(_done2 / _total_gz * 100), phase="刷新td",
                                  detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
                                  elapsed=round(time.time() - _start_gz, 1))
+
+    # 仍无实时td的基金，用持仓股票实时涨跌估算（fundgz下线后的降级方案）
+    _missing_td = [c for c in codes if c not in result]
+    if _missing_td:
+        log.info("尝试用持仓数据估算 %d 只基金的实时涨跌", len(_missing_td))
+        for _code in _missing_td:
+            _est = _estimate_td_from_holdings(_code)
+            if _est is not None:
+                result[_code] = _est
 
     # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
