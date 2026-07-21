@@ -153,12 +153,25 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
     is_market_hours = (now.hour > 9 or (now.hour == 9 and now.minute >= 15)) and (now.hour < 15 or (now.hour == 15 and now.minute == 0))
     is_nav_window = now.hour >= 15 and now.hour < 20  # 收盘后~20:00 净值可能还没发布
 
-    # 收盘后且过了净值发布窗口（>=20:00）：直接返回实际净值
+    # 收盘后且过了净值发布窗口（>=20:00）：优先查 LSJZ 今日实际净值
     if now.hour >= 20:
+        try:
+            url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+            req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                gz_data = r.read().decode("utf-8")
+            m_date = _re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
+            m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
+            if m_date and m_val and m_date.group(1) == today_str:
+                return (float(m_val.group(1)), "lsjz")
+        except Exception:
+            pass
+        # LSJZ 无今日净值 → 降级
         result = _fetch_fund_estimate(code)
         if result:
             _, gszzl = result
-            return (gszzl, "lsjz")
+            return (gszzl, "fallback")
+        return (None, "fallback")
 
     # 交易时间 or 收盘后空窗期（15:00~20:00，净值可能未发布）
     # 先快速检查 LSJZ 是否有今日实际净值
