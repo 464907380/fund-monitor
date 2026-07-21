@@ -1848,8 +1848,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 with _proc_lock:
                     if _recommend_state["proc"] and _recommend_state["proc"].poll() is None:
-                        self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
-                        return
+                        # 二次检查：心跳是否长时间未更新（说明进程可能已挂死）
+                        _hb = read_heartbeat("fund_recommend")
+                        if _hb:
+                            _elapsed = time.time() - _hb.get("start", 0)
+                            _hb_elapsed = _hb.get("elapsed", 0) or 0
+                            # 进程启动超过10分钟、心跳elapsed超过5分钟未变、进度已满 → 挂死
+                            if _elapsed > 600 and _hb_elapsed > 300 and _hb.get("progress", 0) == _hb.get("total", 0):
+                                print(f"[recommend] 检测到进程挂死(PID={_recommend_state['proc'].pid})，强制清理", flush=True)
+                                try: _recommend_state["proc"].kill()
+                                except Exception: pass
+                                _recommend_state["proc"] = None
+                                clear_heartbeat("fund_recommend")
+                            else:
+                                self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
+                                return
+                        else:
+                            self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
+                            return
                 if _spawn_recommend():
                     self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
                 else:

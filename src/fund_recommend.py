@@ -92,6 +92,12 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     if _failed_codes:
         # 失败的逐个重试（_fetch_fund_estimate 有多层降级）
         from fund_utils import _fetch_fund_estimate
+        _retry_max_dur = get_config("recommend", "td_retry_timeout", default=120)
+        _retry_start = time.time()
+        for _i, _code in enumerate(_failed_codes):
+            if time.time() - _retry_start > _retry_max_dur:
+                log.warning("刷新td重试阶段超时(%ds)，跳过剩余 %d 只", _retry_max_dur, len(_failed_codes) - _i)
+                break
         for _i, _code in enumerate(_failed_codes):
             _td = _fetch_fund_estimate(_code)
             if _td and _td[1] is not None:
@@ -130,8 +136,9 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
         # 限制实际净值替换总时间不超过10秒，超时后保留剩余基金的新浪估算值
         _start = time.time()
         _max_dur = get_config("recommend", "net_value_timeout", default=10)
-        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ae:
-            _afuts = {_ae.submit(_fetch_actual, c): c for c in codes_list}
+        _ae = ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50))
+        _afuts = {_ae.submit(_fetch_actual, c): c for c in codes_list}
+        try:
             for _af in as_completed(_afuts):
                 code, actual_val = _af.result()
                 if actual_val is not None:
@@ -139,6 +146,8 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                     replaced += 1
                 if time.time() - _start > _max_dur:
                     break
+        finally:
+            _ae.shutdown(wait=False)
         if replaced:
             log.info("收盘后实际净值替换: %d/%d 只基金(%.1fs)", replaced, len(codes_list), time.time()-_start)
 
