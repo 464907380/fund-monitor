@@ -1340,8 +1340,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     try:
                         cached = _rec_cache.get(code)
                         if cached:
-                            # ── 推荐缓存命中：直接用缓存数据，不另行拉取 ──
-                            _td = _parse_real_time(code) if _skip_cache else cached.get("td")
+                            # ── 推荐缓存命中：td值始终实时刷新，其他数据复用缓存 ──
+                            _td = _parse_real_time(code)
+                            if _td is None:
+                                _td = cached.get("td")
+                            else:
+                                cached["td"] = _td
                             day_s = f"{_td:+.2f}%" if _td is not None else ""
                             name = cached.get("name", "")
                             row = {

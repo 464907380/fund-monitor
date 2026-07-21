@@ -119,7 +119,22 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
             else:
                 return result
 
+    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+
     def _fetch_one_td(code: str) -> tuple[str, float | None]:
+        # 收盘后先查 LSJZ 实际净值（优先，避免用新浪的昨日数据）
+        if is_after_market:
+            try:
+                _url_lsjz = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+                _req_lsjz = urllib.request.Request(_url_lsjz, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(_req_lsjz, timeout=get_timeout("default", 6)) as _r:
+                    _lsjz_data = _r.read().decode("utf-8")
+                _m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', _lsjz_data)
+                _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
+                if _m_date and _m_val and _m_date.group(1) == today_str:
+                    return (code, float(_m_val.group(1)))
+            except Exception:
+                pass
         try:
             # 1. 新浪财经（轻量，速度快）
             _url = f"https://hq.sinajs.cn/list=of{code}"
@@ -586,14 +601,16 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
     _t = time.time()
     total = total_candidates
     print(f"📋 重新评分 {total} 只基金（新权重）...")
-    update_heartbeat("fund_recommend", progress=0, total=total, phase="重新评分",
+    update_heartbeat("fund_recommend", progress=0, total=total, overall_pct=50,
+                     phase="重新评分",
                      detail=f"重新评分 {total} 只", elapsed=0)
 
     for i, r in enumerate(cached_results):
         r["score"] = _calc_score2(r)
         if (i + 1) % 200 == 0:
             pct = (i + 1) / total * 100
-            update_heartbeat("fund_recommend", progress=i + 1, total=total, phase="重新评分",
+            update_heartbeat("fund_recommend", progress=i + 1, total=total,
+                             overall_pct=min(50 + int(pct * 0.35), 85), phase="重新评分",
                              detail=f"重评 {i+1}/{total} ({pct:.0f}%)", elapsed=round(time.time() - _t, 1))
 
     print(f"  重评完成 ({time.time()-_t:.1f}s)")
@@ -602,7 +619,8 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
     if _HAS_TD:
         _t2 = time.time()
         print(f"📋 当日涨跌维度开启，刷新 {total} 只基金td值...")
-        update_heartbeat("fund_recommend", progress=0, total=total, phase="刷新td",
+        update_heartbeat("fund_recommend", progress=0, total=total, overall_pct=85,
+                         phase="刷新td",
                          detail=f"批量获取 {total} 只基金实时涨跌", elapsed=round(time.time() - _t, 1))
         all_codes = [r.get("code", "") for r in cached_results]
         td_map = _batch_fetch_estimates([c for c in all_codes if c])
@@ -618,7 +636,8 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
     else:
         _t2 = time.time()
         print(f"📋 刷新前 {SHOW_TOP} 只显示涨跌...")
-        update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP, phase="更新涨跌",
+        update_heartbeat("fund_recommend", progress=0, total=SHOW_TOP, overall_pct=50,
+                         phase="更新涨跌",
                          detail=f"刷新前 {SHOW_TOP} 只涨跌", elapsed=round(time.time() - _t, 1))
 
         def _update_day(code: str) -> tuple[str, str]:
@@ -814,7 +833,7 @@ def main() -> None:
                         if td_val is not None:
                             r["score"] = _calc_score2(r)
                         if (idx + 1) % 200 == 0:
-                            opct = (idx + 1) / total_candidates * 95
+                            opct = 95 + (idx + 1) / total_candidates * 4
                             update_heartbeat("fund_recommend", progress=idx + 1, total=total_candidates,
                                              overall_pct=opct, phase="评分",
                                              detail=f"重算评分 {idx+1}/{total_candidates}",

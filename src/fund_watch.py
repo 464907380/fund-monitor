@@ -143,11 +143,90 @@ def _parse_full_nav(data: str) -> list[dict] | None:
 
 
 def _parse_real_time(code: str) -> float | None:
-    """获取实时估算涨跌幅"""
+    """获取实时估算涨跌幅（盘中用持仓估算，收盘后优先实际净值）"""
+    import urllib.request, re as _re, datetime
+
+    now = datetime.datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    is_market_hours = (now.hour > 9 or (now.hour == 9 and now.minute >= 15)) and (now.hour < 15 or (now.hour == 15 and now.minute == 0))
+    is_nav_window = now.hour >= 15 and now.hour < 20  # 收盘后~20:00 净值可能还没发布
+
+    # 收盘后且过了净值发布窗口（>=20:00）：直接返回实际净值
+    if now.hour >= 20:
+        result = _fetch_fund_estimate(code)
+        if result:
+            _, gszzl = result
+            return gszzl
+
+    # 交易时间 or 收盘后空窗期（15:00~20:00，净值可能未发布）
+    # 先快速检查 LSJZ 是否有今日实际净值
+    if is_nav_window or is_market_hours:
+        try:
+            url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+            req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                gz_data = r.read().decode("utf-8")
+            m_date = _re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
+            m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
+            if m_date and m_val and m_date.group(1) == today_str:
+                return float(m_val.group(1))
+        except Exception:
+            pass
+
+        # 交易时间且没有今日净值 → 用持仓估算（盘中实时数据）
+        if is_market_hours:
+            return _estimate_from_holdings(code)
+
+    # 收盘后空窗期（15:00~20:00）且今日净值未发布 → 用持仓估算
+    if is_nav_window:
+        td = _estimate_from_holdings(code)
+        if td is not None:
+            return td
+
+    # 全兜底
     result = _fetch_fund_estimate(code)
     if result:
         _, gszzl = result
         return gszzl
+    return None
+
+
+def _estimate_from_holdings(code: str) -> float | None:
+    """根据持仓股票实时行情估算基金涨跌幅"""
+    import urllib.request, re as _re
+    try:
+        holds = _parse_holdings(code)
+        if holds:
+            total_w = 0.0
+            weighted_chg = 0.0
+            for h in holds:
+                if not h.get("c") or not h.get("p"):
+                    continue
+                sc = h["c"]
+                prefix = "sh" if h.get("m") == "sh" else "sz"
+                try:
+                    url = f"https://hq.sinajs.cn/list={prefix}{sc}"
+                    req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://finance.sina.com.cn"})
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        raw = resp.read().decode("gbk")
+                    m = _re.search(r'"[^"]*"', raw)
+                    if not m:
+                        continue
+                    parts = m.group(0).strip('"').split(",")
+                    if len(parts) < 4:
+                        continue
+                    prev_close = float(parts[2]) if parts[2] else 0
+                    current = float(parts[3]) if parts[3] else 0
+                    if prev_close and prev_close > 0:
+                        chg_pct = (current - prev_close) / prev_close * 100
+                        total_w += h["p"]
+                        weighted_chg += chg_pct * h["p"]
+                except Exception:
+                    continue
+            if total_w >= 5:
+                return round(weighted_chg / total_w, 2)
+    except Exception:
+        pass
     return None
 
 
