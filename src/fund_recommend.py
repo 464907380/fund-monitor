@@ -210,7 +210,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
         for _code in _missing_td:
             _est = _estimate_td_from_holdings(_code)
             if _est is not None:
-                result[_code] = _est
+                result[_code] = (_est, "holdings")
 
     # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
@@ -244,7 +244,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
             for _af in as_completed(_afuts):
                 code, actual_val = _af.result()
                 if actual_val is not None:
-                    result[code] = actual_val
+                    result[code] = (actual_val, "lsjz")
                     replaced += 1
                 if time.time() - _start > _max_dur:
                     break
