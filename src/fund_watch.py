@@ -142,8 +142,10 @@ def _parse_full_nav(data: str) -> list[dict] | None:
         return None
 
 
-def _parse_real_time(code: str) -> float | None:
-    """获取实时估算涨跌幅（盘中用持仓估算，收盘后优先实际净值）"""
+def _parse_real_time(code: str) -> tuple[float | None, str]:
+    """获取实时估算涨跌幅，返回 (涨跌幅, 数据来源)
+    来源: lsjz=今日实际净值, holdings=持仓估算, fallback=历史降级
+    """
     import urllib.request, re as _re, datetime
 
     now = datetime.datetime.now()
@@ -156,7 +158,7 @@ def _parse_real_time(code: str) -> float | None:
         result = _fetch_fund_estimate(code)
         if result:
             _, gszzl = result
-            return gszzl
+            return (gszzl, "lsjz")
 
     # 交易时间 or 收盘后空窗期（15:00~20:00，净值可能未发布）
     # 先快速检查 LSJZ 是否有今日实际净值
@@ -169,26 +171,28 @@ def _parse_real_time(code: str) -> float | None:
             m_date = _re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
             m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
             if m_date and m_val and m_date.group(1) == today_str:
-                return float(m_val.group(1))
+                return (float(m_val.group(1)), "lsjz")
         except Exception:
             pass
 
         # 交易时间且没有今日净值 → 用持仓估算（盘中实时数据）
         if is_market_hours:
-            return _estimate_from_holdings(code)
+            td = _estimate_from_holdings(code)
+            if td is not None:
+                return (td, "holdings")
 
     # 收盘后空窗期（15:00~20:00）且今日净值未发布 → 用持仓估算
     if is_nav_window:
         td = _estimate_from_holdings(code)
         if td is not None:
-            return td
+            return (td, "holdings")
 
     # 全兜底
     result = _fetch_fund_estimate(code)
     if result:
         _, gszzl = result
-        return gszzl
-    return None
+        return (gszzl, "fallback")
+    return (None, "fallback")
 
 
 def _estimate_from_holdings(code: str) -> float | None:
@@ -350,7 +354,7 @@ def get(code: str) -> dict:
     else:
         if nav := _parse_net_trend(data):
             d["nav"] = nav
-    td = _parse_real_time(code)
+    td, _ = _parse_real_time(code)
     if td is not None:
         d["td"] = td
     if holds := _parse_holdings(code):

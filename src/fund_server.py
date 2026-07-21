@@ -1341,9 +1341,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         cached = _rec_cache.get(code)
                         if cached:
                             # ── 推荐缓存命中：td值始终实时刷新，其他数据复用缓存 ──
-                            _td = _parse_real_time(code)
+                            _td, _td_src = _parse_real_time(code)
                             if _td is None:
                                 _td = cached.get("td")
+                                _td_src = "fallback"
                             else:
                                 cached["td"] = _td
                             day_s = f"{_td:+.2f}%" if _td is not None else ""
@@ -1370,7 +1371,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "max_loss_days": cached.get("max_loss_days"),
                                 "sc": cached.get("sc"), "rate": cached.get("rate"),
                                 "inst": cached.get("inst"),
-                                "td": _td,
+                                "td": _td, "_td_src": _td_src,
                             }
                             # 净值走势（从缓存取，无缓存时尝试拉取）
                             _trend = cached.get("_trend")
@@ -1405,7 +1406,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         _name = d.get("n") or fallback_name
                         if not _name:
                             return None
-                        _td = _parse_real_time(code)
+                        _td, _td_src = _parse_real_time(code)
                         d["td"] = _td
                         navs = d.get("nav", [])
                         td = d.get("td")
@@ -1435,7 +1436,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             "max_loss_days": d.get("max_loss_days"),
                             "sc": d.get("sc"), "rate": d.get("rate"),
                             "inst": d.get("inst"),
-                            "td": d.get("td"),
+                            "td": d.get("td"), "_td_src": _td_src,
                         }
                         # 近20日净值走势
                         if len(navs) >= 2:

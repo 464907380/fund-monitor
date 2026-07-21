@@ -86,7 +86,15 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'' + _fcode + '\',\'' + _fname_js + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">' + _fname_html + '</span>' + _warn + '</td>')
         parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:center;">' + _trend_html + '</td>')
         _v = r.get("_day", "")
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}</td>')
+        _src = r.get("_td_src", "")
+        _src_badge = ""
+        if _src == "lsjz":
+            _src_badge = '<span style="font-size:10px;color:#4caf50;margin-left:3px;">净值</span>'
+        elif _src == "holdings":
+            _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
+        elif _src == "fallback":
+            _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}{_src_badge}</td>')
         # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
@@ -161,7 +169,15 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         # 涨跌（当日实时涨跌幅）
         day_raw = r.get("day", "")
         day_color = "#ef5350" if day_raw.startswith("+") else ("#66bb6a" if day_raw.startswith("-") else "#888")
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}</td>')
+        _src = r.get("_td_src", "")
+        _src_badge = ""
+        if _src == "lsjz":
+            _src_badge = '<span style="font-size:10px;color:#4caf50;margin-left:3px;">净值</span>'
+        elif _src == "holdings":
+            _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
+        elif _src == "fallback":
+            _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}{_src_badge}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
@@ -383,7 +399,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
 
         def _fetch_one(code: str) -> tuple[str, float | None]:
             try:
-                td = _parse_real_time(code)
+                td, _ = _parse_real_time(code)
                 if td is not None:
                     return (code, td)
                 return (code, None)
