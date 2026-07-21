@@ -132,7 +132,7 @@ def _spawn_recommend() -> bool:
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── fund-table 缓存 ──
 _fund_table_cache: tuple[float, str] | None = None
-_FUND_TABLE_CACHE_TTL = get_config("server", "fund_table_cache_ttl", default=300)  # 5分钟缓存，净值发布期能及时更新
+_FUND_TABLE_CACHE_TTL = 0  # 不缓存HTML，td始终实时获取
 # 推荐表缓存（用模块级 dict 避免 global 作用域问题）
 _recommend_table_cache: dict[str, tuple[float, str]] = {"data": None}
 _recommend_cache_ttl = _FUND_TABLE_CACHE_TTL
