@@ -38,7 +38,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     parts.append('</tr></thead><tbody>')
     for r in rows:
         parts.append('<tr>')
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-family:Consolas;color:#888;">{_html.escape(str(r.get("code","")))}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;font-family:Consolas;color:#888;white-space:nowrap;">{_html.escape(str(r.get("code","")))}</td>')
         _warn = _skipped_icon(r.get("_skipped_weight", 0))
         _warn_title = ""
         if _warn:
@@ -84,7 +84,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
             except (ValueError, ZeroDivisionError):
                 pass
         parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;white-space:nowrap;color:#ccc;"><span onclick="showHoldings(\'' + _fcode + '\',\'' + _fname_js + '\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">' + _fname_html + '</span>' + _warn + '</td>')
-        parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:center;">' + _trend_html + '</td>')
+        parts.append('<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:center;white-space:nowrap;">' + _trend_html + '</td>')
         _v = r.get("_day", "")
         _src = r.get("_td_src", "")
         _src_badge = ""
@@ -98,7 +98,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
-        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}</td>")
+        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;white-space:nowrap;\" onclick='showScoreDetail({_detail_json})'>{r.get('score','')}</td>")
         # 动态维度列
         for dim_name in dim_names:
             val = _get_dim_value(r, dim_name)
@@ -151,7 +151,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         detail = r.get("score_detail", [])
         detail_json = json.dumps(detail, ensure_ascii=False)
         parts.append('<tr>')
-        parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;">{badge}</td>')
+        parts.append(f'<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;font-size:13px;white-space:nowrap;">{badge}</td>')
         warn = _skipped_icon(r.get("_skipped_weight", 0))
         warn_title = ""
         if warn:
@@ -178,7 +178,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         elif _src == "fallback":
             _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};white-space:nowrap;">{_html.escape(day_raw)}{_src_badge}</td>')
-        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
+        parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;white-space:nowrap;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
             raw_val = r.get(_dim_value_to_key(dim_name))
@@ -194,7 +194,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
                 display_val = val
                 if raw_val is not None and raw_val != "":
                     color = _curve_color(dim_name, raw_val)
-            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}" {title_attr}>{display_val}</td>')
+            parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{color};{style_extra}white-space:nowrap;" {title_attr}>{display_val}</td>')
         parts.append('</tr>')
     parts.append('</tbody></table></div></div>')
     return "\n".join(parts)
