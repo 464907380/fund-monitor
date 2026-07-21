@@ -2414,7 +2414,7 @@ def main():
 
 
 def _check_port_and_kill(host: str, port: int) -> None:
-    """检查端口是否已被占用，有则杀掉占用进程（仅Windows）"""
+    """检查端口是否已被占用，有则杀掉所有占用进程（仅Windows）"""
     import subprocess as _sp, socket as _socket
     # 试连接端口，通则说明被占
     try:
@@ -2422,17 +2422,19 @@ def _check_port_and_kill(host: str, port: int) -> None:
             pass
     except (ConnectionRefusedError, OSError):
         return  # 端口空闲
-    # 端口被占，查找PID
+    # 端口被占，查找并杀掉所有占用进程
     try:
         _r = _sp.run(["netstat", "-ano"], capture_output=True, text=True, timeout=10)
+        _killed = 0
         for _line in _r.stdout.splitlines():
             if f":{port}" in _line and "LISTENING" in _line:
                 _parts = _line.strip().split()
                 _pid = _parts[-1]
                 if _pid.isdigit():
-                    print(f"[startup] 端口 {port} 被进程(PID={_pid})占用，正在清理...", flush=True)
                     _sp.run(["taskkill", "/F", "/PID", _pid], capture_output=True, timeout=10)
-                    return
+                    _killed += 1
+        if _killed:
+            print(f"[startup] 端口 {port} 被 {_killed} 个进程占用，已全部清理", flush=True)
     except Exception:
         pass
 
