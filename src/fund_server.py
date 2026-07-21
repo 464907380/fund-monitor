@@ -1344,7 +1344,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             _td, _td_src = _parse_real_time(code)
                             if _td is None:
                                 _td = cached.get("td")
-                                _td_src = ""  # 自选表不显示"昨日"标签
+                                _td_src = ""  # 前端不显示昨日
                             else:
                                 cached["td"] = _td
                             day_s = f"{_td:+.2f}%" if _td is not None else ""

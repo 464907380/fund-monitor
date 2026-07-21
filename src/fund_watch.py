@@ -199,7 +199,7 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
         if td is not None:
             return (td, "holdings")
 
-    # 全兜底（自选表不用昨日数据，返回 None 由上游从缓存取）
+    # 全兜底（不返回昨日数据，前端不需要）
     return (None, "")
 
 
