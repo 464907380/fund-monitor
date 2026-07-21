@@ -23,7 +23,7 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 def _web_rich_fund_table(rows: list[dict]) -> str:
     """生成自选基金完整数据 HTML 表格（Web 版，维度列动态跟随 SCORE_DIMS）"""
     from fund_scoring import SCORE_DIMS
-    dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
+    dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2]) if d[0] != "当日涨跌"]
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
              '<thead><tr style="background:#2a2a2a;">'
@@ -132,7 +132,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
     if not fresh:
         return ""
     from fund_scoring import SCORE_DIMS
-    dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2])]
+    dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2]) if d[0] != "当日涨跌"]
     dims_shown = dim_names
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              f'<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP {_show_top} \uff08\u5168\u7ef4\u5ea6\uff09</p>'
@@ -348,6 +348,10 @@ def _load_saved_recommend_data() -> list[dict]:
                 "mgr": r.get("mgr", ""), "day": r.get("day", ""),
                 "td": r.get("td"),
             }
+            # 从原始数据透传 _td_src（如果存在）
+            _src = r.get("_td_src", "")
+            if _src:
+                entry["_td_src"] = _src
             score_d = {k: entry.get(k) for k in (
                 "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
                 "annual_return", "sharpe", "sortino",

@@ -88,13 +88,12 @@ def _estimate_td_from_holdings(code: str) -> float | None:
     return None
 
 
-def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
-    """批量获取基金当日涨跌幅，返回 {code: 涨跌幅%, ...}
+def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
+    """批量获取基金当日涨跌幅，返回 {code: (涨跌幅%, 来源), ...}
     
-    盘中（<15:00）优先用持仓股票实时行情估算，因为 fundgz 已下线。
-    收盘后（≥15:00）用天天基金实际净值替换，保证数据准确。
+    来源: lsjz=今日实际净值, holdings=持仓估算, fallback=降级
     """
-    result: dict[str, float] = {}
+    result: dict[str, tuple[float, str]] = {}
     if not codes:
         return result
     now = datetime.datetime.now()
@@ -107,7 +106,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
         for _c in codes:
             _est = _estimate_td_from_holdings(_c)
             if _est is not None:
-                result[_c] = _est
+                result[_c] = (_est, "holdings")
                 _estimated += 1
         if _estimated:
             log.info("持仓估算实时涨跌: %d/%d 只基金", _estimated, len(codes))
@@ -121,7 +120,8 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
 
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
-    def _fetch_one_td(code: str) -> tuple[str, float | None]:
+    def _fetch_one_td(code: str) -> tuple[str, float | None, str]:
+        """返回 (code, 涨跌幅, 来源)"""
         # 收盘后先查 LSJZ 实际净值（优先，避免用新浪的昨日数据）
         if is_after_market:
             try:
@@ -132,7 +132,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                 _m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', _lsjz_data)
                 _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
                 if _m_date and _m_val and _m_date.group(1) == today_str:
-                    return (code, float(_m_val.group(1)))
+                    return (code, float(_m_val.group(1)), "lsjz")
             except Exception:
                 pass
         try:
@@ -145,7 +145,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
             if _m:
                 _parts = _m.group(0).strip('"').split(",")
                 if len(_parts) >= 5 and _parts[4]:
-                    return (code, float(_parts[4]))
+                    return (code, float(_parts[4]), "fallback")
         except Exception:
             pass
         # 2. fundgz（原主力，近期可能404）
@@ -156,10 +156,10 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                 _raw2 = _r2.read().decode("utf-8")
             _m2 = re.search(r'"gszzl":"([-+\d.]+)"', _raw2)
             if _m2 and _m2.group(1):
-                return (code, float(_m2.group(1)))
+                return (code, float(_m2.group(1)), "fallback")
         except Exception:
             pass
-        return (code, None)
+        return (code, None, "fallback")
 
     replaced_gz = 0
     _failed_codes: list[str] = []
@@ -169,9 +169,9 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
         _gfuts = {_ge.submit(_fetch_one_td, c): c for c in codes}
         for _gf in as_completed(_gfuts):
-            code, gz_val = _gf.result()
+            code, gz_val, gz_src = _gf.result()
             if gz_val is not None:
-                result[code] = gz_val
+                result[code] = (gz_val, gz_src)
                 replaced_gz += 1
             else:
                 _failed_codes.append(code)
@@ -194,7 +194,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
                 break
             _td = _fetch_fund_estimate(_code)
             if _td and _td[1] is not None:
-                result[_code] = round(_td[1], 2)
+                result[_code] = (round(_td[1], 2), "fallback")
                 replaced_gz += 1
             _done2 = replaced_gz + (len(_failed_codes) - (_i + 1))
             if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
@@ -627,11 +627,14 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
         print(f"  td刷新完成 ({time.time()-_t2:.1f}s), 获取到 {len(td_map)} 只")
         for r in cached_results:
             code = r.get("code", "")
-            td_val = td_map.get(code)
-            r["td"] = td_val
-            r["day"] = f"{td_val:+.2f}%" if td_val is not None else ""
-            if td_val is not None:
-                r["score"] = _calc_score2(r)
+            _td_item = td_map.get(code)
+            if _td_item:
+                td_val, td_src = _td_item
+                r["td"] = td_val
+                r["_td_src"] = td_src
+                r["day"] = f"{td_val:+.2f}%" if td_val is not None else ""
+                if td_val is not None:
+                    r["score"] = _calc_score2(r)
         cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
     else:
         _t2 = time.time()
@@ -827,11 +830,14 @@ def main() -> None:
 
                     for idx, r in enumerate(cached_results):
                         code = r.get("code", "")
-                        td_val = td_map.get(code)
-                        r["td"] = td_val
-                        r["day"] = f"{td_val:+.2f}%" if td_val is not None else ""
-                        if td_val is not None:
-                            r["score"] = _calc_score2(r)
+                        _td_item = td_map.get(code)
+                        if _td_item:
+                            td_val, td_src = _td_item
+                            r["td"] = td_val
+                            r["_td_src"] = td_src
+                            r["day"] = f"{td_val:+.2f}%" if td_val is not None else ""
+                            if td_val is not None:
+                                r["score"] = _calc_score2(r)
                         if (idx + 1) % 200 == 0:
                             opct = 95 + (idx + 1) / total_candidates * 4
                             update_heartbeat("fund_recommend", progress=idx + 1, total=total_candidates,
