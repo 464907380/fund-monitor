@@ -2378,6 +2378,9 @@ def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else _PORT
     # 启动前检查端口是否已被占用，有则杀掉旧进程
     _check_port_and_kill(host, port)
+    # Windows 子进程有时会向父进程传播 Ctrl+C，忽略 SIGINT 避免被误杀
+    import signal as _sig
+    _sig.signal(_sig.SIGINT, _sig.SIG_IGN)
     server = http.server.ThreadingHTTPServer((host, port), Handler)
     print(f"🌐 基金优选页面：http://{host}:{port}")
     print("   按 Ctrl+C 停止服务")
