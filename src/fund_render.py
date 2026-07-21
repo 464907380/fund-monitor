@@ -177,7 +177,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
             _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
         elif _src == "fallback":
             _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};">{_html.escape(day_raw)}{_src_badge}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};white-space:nowrap;">{_html.escape(day_raw)}{_src_badge}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
