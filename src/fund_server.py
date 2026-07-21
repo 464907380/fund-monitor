@@ -112,7 +112,8 @@ def _spawn_recommend() -> bool:
                 # 保留 30 秒再清除，给前端时间读取
                 threading.Timer(30, clear_heartbeat, ["fund_recommend"]).start()
             else:
-                clear_heartbeat("fund_recommend")
+                # 延迟5秒清除，让前端有时间检测到"完成"状态后刷新表格
+                threading.Timer(5, clear_heartbeat, ["fund_recommend"]).start()
             with _proc_lock:
                 if _recommend_state["proc"] is p:
                     _recommend_state["proc"] = None
