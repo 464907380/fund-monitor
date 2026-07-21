@@ -50,19 +50,31 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     now = datetime.datetime.now()
     is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
 
-    # 用 fundgz 实时估值拉取所有基金
-    def _fetch_fundgz(code: str) -> tuple[str, float | None]:
+    # 用多层降级方式拉取所有基金（fundgz已失效，优先用新浪/净值API）
+    def _fetch_one_td(code: str) -> tuple[str, float | None]:
         try:
-            url = f"https://fundgz.1234567.com.cn/js/{code}.js"
-            _req_gz = urllib.request.Request(url, headers={
-                "Referer": "https://fund.eastmoney.com/",
-                "User-Agent": "Mozilla/5.0",
-            })
-            with urllib.request.urlopen(_req_gz, timeout=get_timeout("default", 10)) as _r_gz:
-                raw_gz = _r_gz.read().decode("utf-8")
-            m = re.search(r'"gszzl":"([-+\d.]+)"', raw_gz)
-            if m and m.group(1):
-                return (code, float(m.group(1)))
+            # 1. 新浪财经（轻量，速度快）
+            _url = f"https://hq.sinajs.cn/list=of{code}"
+            _req = urllib.request.Request(_url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://finance.sina.com.cn"})
+            with urllib.request.urlopen(_req, timeout=get_timeout("default", 6)) as _r:
+                _text = _r.read().decode("gbk")
+            _m = re.search(r'"[^"]*"', _text)
+            if _m:
+                _parts = _m.group(0).strip('"').split(",")
+                # 新浪返回格式: 基金名,净值,累计净值,估算净值,涨跌幅%,日期
+                if len(_parts) >= 5 and _parts[4]:
+                    return (code, float(_parts[4]))
+        except Exception:
+            pass
+        # 2. fundgz（原主力，近期可能404）
+        try:
+            _url2 = f"https://fundgz.1234567.com.cn/js/{code}.js"
+            _req2 = urllib.request.Request(_url2, headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(_req2, timeout=get_timeout("default", 6)) as _r2:
+                _raw2 = _r2.read().decode("utf-8")
+            _m2 = re.search(r'"gszzl":"([-+\d.]+)"', _raw2)
+            if _m2 and _m2.group(1):
+                return (code, float(_m2.group(1)))
         except Exception:
             pass
         return (code, None)
@@ -73,7 +85,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
     _start_gz = time.time()
     _last_hb_pct = -1
     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
-        _gfuts = {_ge.submit(_fetch_fundgz, c): c for c in codes}
+        _gfuts = {_ge.submit(_fetch_one_td, c): c for c in codes}
         for _gf in as_completed(_gfuts):
             code, gz_val = _gf.result()
             if gz_val is not None:
@@ -98,7 +110,6 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
             if time.time() - _retry_start > _retry_max_dur:
                 log.warning("刷新td重试阶段超时(%ds)，跳过剩余 %d 只", _retry_max_dur, len(_failed_codes) - _i)
                 break
-        for _i, _code in enumerate(_failed_codes):
             _td = _fetch_fund_estimate(_code)
             if _td and _td[1] is not None:
                 result[_code] = round(_td[1], 2)
