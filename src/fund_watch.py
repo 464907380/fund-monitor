@@ -166,7 +166,11 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
                 return (float(m_val.group(1)), "lsjz")
         except Exception:
             pass
-        # LSJZ 无今日净值 → 降级
+        # LSJZ 无今日净值 → 用持仓估算填补
+        td = _estimate_from_holdings(code)
+        if td is not None:
+            return (td, "holdings")
+        # 持仓估算也失败 → 降级到接口兜底
         result = _fetch_fund_estimate(code)
         if result:
             _, gszzl = result
