@@ -396,6 +396,9 @@ def update_heartbeat(name: str, **kwargs) -> None:
                                        "start_str": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                        "pid": os.getpid()}
         hb.update(kwargs)
+        # 非完成/失败阶段时，overall_pct 不超过 99，防止前端误判完成
+        if hb.get("phase") not in ("完成", "失败", "保存") and hb.get("overall_pct", 0) >= 100:
+            hb["overall_pct"] = 99
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(hb, f)

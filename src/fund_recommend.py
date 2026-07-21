@@ -97,7 +97,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, float]:
             if _td and _td[1] is not None:
                 result[_code] = round(_td[1], 2)
                 replaced_gz += 1
-            _done2 = replaced_gz + len(_failed_codes)
+            _done2 = replaced_gz + (len(_failed_codes) - (_i + 1))
             if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
                 update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
                                  overall_pct=int(_done2 / _total_gz * 100), phase="刷新td",
