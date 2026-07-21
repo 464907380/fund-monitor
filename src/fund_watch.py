@@ -170,11 +170,6 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
         td = _estimate_from_holdings(code)
         if td is not None:
             return (td, "holdings")
-        # 持仓估算也失败 → 降级到接口兜底
-        result = _fetch_fund_estimate(code)
-        if result:
-            _, gszzl = result
-            return (gszzl, "fallback")
         return (None, "fallback")
 
     # 交易时间 or 收盘后空窗期（15:00~20:00，净值可能未发布）
@@ -204,12 +199,8 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
         if td is not None:
             return (td, "holdings")
 
-    # 全兜底
-    result = _fetch_fund_estimate(code)
-    if result:
-        _, gszzl = result
-        return (gszzl, "fallback")
-    return (None, "fallback")
+    # 全兜底（自选表不用昨日数据，返回 None 由上游从缓存取）
+    return (None, "")
 
 
 def _estimate_from_holdings(code: str) -> float | None:
