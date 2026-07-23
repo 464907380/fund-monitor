@@ -1302,7 +1302,6 @@ loadMarketIndices();
         _marketTimer = setInterval(loadMarketIndices, 60000);
         setInterval(_renderMarketSparklines, 30000);
       }, d.next_check_seconds * 1000);
-      }, d.next_check_seconds * 1000);
     }
   }).catch(function(){
     // 检测失败则持续重试（大盘定时器依赖这个结果）
