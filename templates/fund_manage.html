@@ -1072,25 +1072,49 @@ function loadMarketIndices() {
     document.getElementById('marketBoard').style.display = '';
     var container = document.getElementById('marketIndices');
     var timeEl = document.getElementById('marketTime');
-    var html = '';
+    // 不重建HTML，只更新已有元素的文本（避免清除折线图）
     for (var i = 0; i < d.indices.length; i++) {
       var idx = d.indices[i];
       var color = idx.change_pct > 0 ? '#ef5350' : (idx.change_pct < 0 ? '#66bb6a' : '#888');
       var sign = idx.change_pct > 0 ? '+' : '';
       var ptsSign = idx.change_points > 0 ? '+' : '';
-      html += '<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px;" data-idx-name="' + idx.name + '">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
-        + '<span style="color:#aaa;font-size:12px;">' + idx.name + '</span>'
-        + '<span style="font-family:Consolas;font-weight:600;font-size:14px;color:#e0e0e0;">' + idx.price.toFixed(2) + '</span>'
-        + '</div>'
-        + '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<span class="marketSparkline" style="display:inline-block;width:160px;height:48px;flex-shrink:0;"></span>'
-        + '<span style="font-family:Consolas;font-size:12px;color:' + color + ';">' + ptsSign + idx.change_points.toFixed(2) + '</span>'
-        + '<span style="font-family:Consolas;font-size:12px;font-weight:600;color:' + color + ';">' + sign + idx.change_pct.toFixed(2) + '%</span>'
-        + '</div>'
-        + '</div>';
+      var card = container.children[i];
+      if (card) {
+        // 更新价格
+        var priceEl = card.querySelector('[data-role="price"]');
+        if (priceEl) priceEl.textContent = idx.price.toFixed(2);
+        // 更新点数
+        var ptsEls = card.querySelectorAll('[data-role="change"]');
+        if (ptsEls.length >= 2) {
+          ptsEls[0].textContent = ptsSign + idx.change_points.toFixed(2);
+          ptsEls[0].style.color = color;
+          ptsEls[1].textContent = sign + idx.change_pct.toFixed(2) + '%';
+          ptsEls[1].style.color = color;
+        }
+      } else {
+        // 首次加载或数量变化时回退到重建
+        var html = '';
+        for (var j = i; j < d.indices.length; j++) {
+          var jdx = d.indices[j];
+          var jcolor = jdx.change_pct > 0 ? '#ef5350' : (jdx.change_pct < 0 ? '#66bb6a' : '#888');
+          var jsign = jdx.change_pct > 0 ? '+' : '';
+          var jptsSign = jdx.change_points > 0 ? '+' : '';
+          html += '<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px;" data-idx-name="' + jdx.name + '">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="color:#aaa;font-size:12px;">' + jdx.name + '</span>'
+            + '<span style="font-family:Consolas;font-weight:600;font-size:14px;color:#e0e0e0;" data-role="price">' + jdx.price.toFixed(2) + '</span>'
+            + '</div>'
+            + '<div style="display:flex;align-items:center;gap:8px;">'
+            + '<span class="marketSparkline" style="display:inline-block;width:160px;height:48px;flex-shrink:0;"></span>'
+            + '<span style="font-family:Consolas;font-size:12px;color:' + jcolor + ';" data-role="change">' + jptsSign + jdx.change_points.toFixed(2) + '</span>'
+            + '<span style="font-family:Consolas;font-size:12px;font-weight:600;color:' + jcolor + ';" data-role="change">' + jsign + jdx.change_pct.toFixed(2) + '%</span>'
+            + '</div>'
+            + '</div>';
+        }
+        container.insertAdjacentHTML('beforeend', html);
+        break;
+      }
     }
-    container.innerHTML = html;
     timeEl.textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
     // 加载分时折线图
     _renderMarketSparklines();
@@ -1269,11 +1293,15 @@ loadMarketIndices();
     _loadPrefs();
     if (_isTradingTime) {
       _marketTimer = setInterval(loadMarketIndices, 60000);
+      // 折线图单独刷新（更频繁，不依赖大盘指数API）
+      setInterval(_renderMarketSparklines, 30000);
     } else if (d.next_check_seconds > 0) {
       setTimeout(function(){
         _isTradingTime = true;
         loadMarketIndices();
         _marketTimer = setInterval(loadMarketIndices, 60000);
+        setInterval(_renderMarketSparklines, 30000);
+      }, d.next_check_seconds * 1000);
       }, d.next_check_seconds * 1000);
     }
   }).catch(function(){
