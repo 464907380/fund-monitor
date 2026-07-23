@@ -123,13 +123,8 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                                      elapsed=round(time.time() - _start_h, 1))
         if _estimated:
             log.info("持仓估算实时涨跌: %d/%d 只基金", _estimated, len(codes))
-        # 持仓覆盖率高的基金直接用估算值，剩余用接口补充
-        if len(result) >= len(codes) * 0.5:
-            _remaining = [c for c in codes if c not in result]
-            if _remaining:
-                codes = _remaining
-            else:
-                return result
+        # 持仓估算未覆盖的基金走接口补充
+        codes = [c for c in codes if c not in result]
 
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
