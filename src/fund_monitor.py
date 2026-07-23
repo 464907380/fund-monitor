@@ -414,11 +414,20 @@ def _push_html(fund_alerts: list[str],
         fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
     )]
     if remaining:
+        # 从剩余警报中提取基金名，按基金分组
+        import re as _re
+        remain_groups: dict[str, list[str]] = {}
+        for a in remaining:
+            # 提取基金名: 格式 [时间] 基金名(代码)
+            m = _re.search(r'\[?\d*:?\d*\]?\s*(.*?)\(\d{6}\)', _strip_html(a))
+            fname = m.group(1).strip() if m else "其他"
+            if fname not in remain_groups:
+                remain_groups[fname] = []
+            remain_groups[fname].append(a)
         html_remaining = ''.join(
-            f'<p style="margin:2px 0;font-size:12px;color:{"#66bb6a" if a.startswith("🔴") else "#ef5350"};">{_icon_text(a)[0]} {_icon_text(a)[1]}</p>'
-            for a in remaining
+            _render_fund_section(fn, "", fa, [])
+            for fn, fa in sorted(remain_groups.items())
         )
-        rows.append(f'<tr><td style="padding:6px 12px;"><p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#ccc;">其他</p>{html_remaining}</td></tr>')
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
