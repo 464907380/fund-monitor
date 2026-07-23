@@ -99,33 +99,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
     now = datetime.datetime.now()
     is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
 
-    # 用多层降级方式拉取所有基金（fundgz已失效，优先用新浪/净值API）
-    # 盘中优先用持仓股票实时行情估算（唯一能拿到今日实时数据的方法）
-    if not is_after_market:
-        _estimated = 0
-        _total_h = len(codes)
-        _start_h = time.time()
-        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=8)) as _he:
-            _hfuts = {_he.submit(_estimate_td_from_holdings, _c): _c for _c in codes}
-            for _i, _hf in enumerate(as_completed(_hfuts), 1):
-                _c = _hfuts[_hf]
-                try:
-                    _est = _hf.result(timeout=30)
-                    if _est is not None:
-                        result[_c] = (_est, "holdings")
-                        _estimated += 1
-                except Exception:
-                    pass
-                if _i % 20 == 0 or _i == _total_h:
-                    update_heartbeat("fund_recommend", progress=_i, total=_total_h,
-                                     overall_pct=int(_i / _total_h * 30), phase="刷新td",
-                                     detail=f"持仓估算 {_i}/{_total_h} ({_estimated}成功)",
-                                     elapsed=round(time.time() - _start_h, 1))
-        if _estimated:
-            log.info("持仓估算实时涨跌: %d/%d 只基金", _estimated, len(codes))
-        # 持仓估算未覆盖的基金走接口补充
-        codes = [c for c in codes if c not in result]
-
+    # 统一走接口获取涨跌幅（新浪昨日数据 / LSJZ今日净值），不使用持仓估算
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
     def _fetch_one_td(code: str) -> tuple[str, float | None, str]:
@@ -210,15 +184,6 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                                  overall_pct=int(_done2 / _total_gz * 100), phase="刷新td",
                                  detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
                                  elapsed=round(time.time() - _start_gz, 1))
-
-    # 仍无实时td的基金，用持仓股票实时涨跌估算（fundgz下线后的降级方案）
-    _missing_td = [c for c in codes if c not in result]
-    if _missing_td:
-        log.info("尝试用持仓数据估算 %d 只基金的实时涨跌", len(_missing_td))
-        for _code in _missing_td:
-            _est = _estimate_td_from_holdings(_code)
-            if _est is not None:
-                result[_code] = (_est, "holdings")
 
     # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
