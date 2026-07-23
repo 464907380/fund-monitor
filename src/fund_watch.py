@@ -144,62 +144,26 @@ def _parse_full_nav(data: str) -> list[dict] | None:
 
 def _parse_real_time(code: str) -> tuple[float | None, str]:
     """获取实时估算涨跌幅，返回 (涨跌幅, 数据来源)
-    来源: lsjz=今日实际净值, holdings=持仓估算, fallback=历史降级
+    来源: lsjz=今日实际净值
+    无今日净值时不返回数据（让上游用缓存值，不混合来源）
     """
     import urllib.request, re as _re, datetime
 
     now = datetime.datetime.now()
     today_str = now.strftime("%Y-%m-%d")
-    is_market_hours = (now.hour > 9 or (now.hour == 9 and now.minute >= 15)) and (now.hour < 15 or (now.hour == 15 and now.minute == 0))
-    is_nav_window = now.hour >= 15 and now.hour < 20  # 收盘后~20:00 净值可能还没发布
 
-    # 收盘后且过了净值发布窗口（>=20:00）：优先查 LSJZ 今日实际净值
-    if now.hour >= 20:
-        try:
-            url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
-            req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                gz_data = r.read().decode("utf-8")
-            m_date = _re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
-            m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
-            if m_date and m_val and m_date.group(1) == today_str:
-                return (float(m_val.group(1)), "lsjz")
-        except Exception:
-            pass
-        # LSJZ 无今日净值 → 用持仓估算填补
-        td = _estimate_from_holdings(code)
-        if td is not None:
-            return (td, "holdings")
-        return (None, "fallback")
-
-    # 交易时间 or 收盘后空窗期（15:00~20:00，净值可能未发布）
-    # 先快速检查 LSJZ 是否有今日实际净值
-    if is_nav_window or is_market_hours:
-        try:
-            url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
-            req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                gz_data = r.read().decode("utf-8")
-            m_date = _re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
-            m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
-            if m_date and m_val and m_date.group(1) == today_str:
-                return (float(m_val.group(1)), "lsjz")
-        except Exception:
-            pass
-
-        # 交易时间且没有今日净值 → 用持仓估算（盘中实时数据）
-        if is_market_hours:
-            td = _estimate_from_holdings(code)
-            if td is not None:
-                return (td, "holdings")
-
-    # 收盘后空窗期（15:00~20:00）且今日净值未发布 → 用持仓估算
-    if is_nav_window:
-        td = _estimate_from_holdings(code)
-        if td is not None:
-            return (td, "holdings")
-
-    # 全兜底（不返回昨日数据，前端不需要）
+    # 查 LSJZ 今日实际净值
+    try:
+        url = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+        req = urllib.request.Request(url, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            gz_data = r.read().decode("utf-8")
+        m_date = _re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
+        m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
+        if m_date and m_val and m_date.group(1) == today_str:
+            return (float(m_val.group(1)), "lsjz")
+    except Exception:
+        pass
     return (None, "")
 
 
