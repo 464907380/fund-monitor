@@ -103,9 +103,11 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
     # 盘中优先用持仓股票实时行情估算（唯一能拿到今日实时数据的方法）
     if not is_after_market:
         _estimated = 0
+        _total_h = len(codes)
+        _start_h = time.time()
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=8)) as _he:
             _hfuts = {_he.submit(_estimate_td_from_holdings, _c): _c for _c in codes}
-            for _hf in as_completed(_hfuts):
+            for _i, _hf in enumerate(as_completed(_hfuts), 1):
                 _c = _hfuts[_hf]
                 try:
                     _est = _hf.result(timeout=30)
@@ -114,6 +116,11 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                         _estimated += 1
                 except Exception:
                     pass
+                if _i % 20 == 0 or _i == _total_h:
+                    update_heartbeat("fund_recommend", progress=_i, total=_total_h,
+                                     overall_pct=int(_i / _total_h * 30), phase="刷新td",
+                                     detail=f"持仓估算 {_i}/{_total_h} ({_estimated}成功)",
+                                     elapsed=round(time.time() - _start_h, 1))
         if _estimated:
             log.info("持仓估算实时涨跌: %d/%d 只基金", _estimated, len(codes))
         # 持仓覆盖率高的基金直接用估算值，剩余用接口补充
@@ -183,7 +190,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                 _failed_codes.append(code)
             _done = replaced_gz + len(_failed_codes)
             _pct = int(_done / _total_gz * 100) if _total_gz else 0
-            if (_pct != _last_hb_pct and _done % 50 == 0) or _done == _total_gz:
+            if (_pct != _last_hb_pct and _done % 20 == 0) or _done == _total_gz:
                 _last_hb_pct = _pct
                 update_heartbeat("fund_recommend", progress=_done, total=_total_gz,
                                  overall_pct=_pct, phase="刷新td",
