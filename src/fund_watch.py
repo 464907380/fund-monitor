@@ -144,8 +144,8 @@ def _parse_full_nav(data: str) -> list[dict] | None:
 
 def _parse_real_time(code: str) -> tuple[float | None, str]:
     """获取实时估算涨跌幅，返回 (涨跌幅, 数据来源)
-    来源: lsjz=今日实际净值
-    无今日净值时不返回数据（让上游用缓存值，不混合来源）
+    来源: lsjz=今日实际净值, holding=持仓估算
+    优先实际净值，盘中无净值时用持仓估算（不降级到新浪昨日数据）
     """
     import urllib.request, re as _re, datetime
 
@@ -162,6 +162,13 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
         m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
         if m_date and m_val and m_date.group(1) == today_str:
             return (float(m_val.group(1)), "lsjz")
+    except Exception:
+        pass
+    # 无今日净值 → 持仓估算（盘中实时，非昨日数据）
+    try:
+        est = _estimate_from_holdings(code)
+        if est is not None:
+            return (est, "holdings")
     except Exception:
         pass
     return (None, "")

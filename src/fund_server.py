@@ -501,13 +501,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
                     raw = fetch(url)
                     points = _json.loads(raw)
-                    # 从原始数据中提取昨日收盘价（最后一个非今日的close）
+                    # 从5分钟K线中提取昨日收盘价
                     pre_close = None
                     for p in reversed(points):
                         if not p.get("day", "").startswith(today_str) and p.get("close"):
                             pre_close = float(p["close"])
                             break
-                    # 如果5分钟K线中没有非今日数据（如全天的数据全是今天），从日K线获取
                     if pre_close is None:
                         pre_close = _fetch_pre_close(sym)
                     # 只取今日数据；若今日无数据（如周末），取最近一天
@@ -515,8 +514,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if not today_points and points:
                         last_day = points[-1].get("day", "")[:10]
                         today_points = [p for p in points if p.get("day", "").startswith(last_day)]
-                        # 重新获取昨日收盘价（用日K线API）
-                        pre_close = _fetch_pre_close(sym)
+                        if pre_close is None:
+                            pre_close = _fetch_pre_close(sym)
                     pt_list = []
                     for p in today_points:
                         day_str = p.get("day", "")
@@ -1411,6 +1410,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         if not _name:
                             return None
                         _td, _td_src = _parse_real_time(code)
+                        if _td is None:
+                            from fund_utils import _fetch_fund_estimate
+                            _fe = _fetch_fund_estimate(code)
+                            if _fe and _fe[1] is not None:
+                                _td = round(_fe[1], 2)
+                                _td_src = ""
                         d["td"] = _td
                         navs = d.get("nav", [])
                         td = d.get("td")

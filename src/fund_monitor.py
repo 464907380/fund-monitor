@@ -529,21 +529,35 @@ def monitor() -> None:
             hold_loaded = True
             log.info("持仓数据加载完毕")
 
-        # 轮询检查每只基金 + 持仓个股
+        # 轮询检查每只基金 + 持仓个股（并行，加速持仓估算）
         fund_alerts: list[str] = []
         stock_alerts: list[str] = []
         stock_groups: dict[str, tuple[str, list[str]]] = {}
         got_data = False
+
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            fut_map = {}
+            for f in FUND_LIST:
+                code = f["code"]
+                if code not in states:
+                    states[code] = {}
+                fut = executor.submit(check_intraday, code, states[code])
+                fut_map[fut] = code
+
+            for fut in concurrent.futures.as_completed(fut_map):
+                code = fut_map[fut]
+                try:
+                    fa = fut.result()
+                    fund_alerts.extend(fa)
+                except Exception:
+                    continue
+                if states[code].get("last_td") is not None:
+                    got_data = True
+
+        # 个股检查（持仓已缓存，速度较快）
         for f in FUND_LIST:
             code = f["code"]
-            if code not in states:
-                states[code] = {}
-            fa = check_intraday(code, states[code])
-            fund_alerts.extend(fa)
-            if states[code].get("last_td") is not None:
-                got_data = True
-
-            # 检查该基金的持仓个股
             fund_name = states[code].get("name", code)
             sa = check_holdings_intraday(code, fund_name, stock_states)
             if sa:

@@ -280,7 +280,16 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
     if actual is not None:
         return actual
 
-    # 3. 新浪财经基金行情（最终降级）
+    # 3. 新浪财经基金行情（最终降级，仅返回昨日数据，盘中不准确）
+    #    改为持仓估算（盘中实时）
+    try:
+        from fund_watch import _estimate_from_holdings
+        est = _estimate_from_holdings(code)
+        if est is not None:
+            return (code, est)
+    except Exception:
+        pass
+    # 4. 持仓估算也不可用 → 新浪昨日数据（仅作为最后手段）
     try:
         url = f"http://hq.sinajs.cn/list=of{code}"
         req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})

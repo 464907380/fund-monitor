@@ -92,6 +92,8 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
             _src_badge = '<span style="font-size:10px;color:#4caf50;margin-left:3px;">净值</span>'
         elif _src == "holdings":
             _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
+        elif _src == "fallback" or not _src:
+            _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}{_src_badge}</td>')
         # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
@@ -173,6 +175,8 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
             _src_badge = '<span style="font-size:10px;color:#4caf50;margin-left:3px;">净值</span>'
         elif _src == "holdings":
             _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
+        elif _src == "fallback" or not _src:
+            _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};white-space:nowrap;">{_html.escape(day_raw)}{_src_badge}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;white-space:nowrap;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
@@ -344,9 +348,9 @@ def _load_saved_recommend_data() -> list[dict]:
                 "mgr": r.get("mgr", ""), "day": r.get("day", ""),
                 "td": r.get("td"),
             }
-            # 从原始数据透传 _td_src（过滤掉 fallback，前端不显示昨日）
+            # 从原始数据透传 _td_src
             _src = r.get("_td_src", "")
-            if _src and _src != "fallback":
+            if _src:
                 entry["_td_src"] = _src
             score_d = {k: entry.get(k) for k in (
                 "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",

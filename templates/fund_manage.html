@@ -1119,10 +1119,13 @@ function _renderMarketSparklines() {
       var ptsData = t.points || t.closes.map(function(c, idx){ return {close: c, offset: (t.points && t.points[idx] ? t.points[idx].offset : idx / (t.closes.length-1) * 240)}; });
       var closes = ptsData.map(function(p){ return p.close; });
       if (!closes || closes.length < 2) continue;
-      var mn = closes[0], mx = closes[0];
-      for (var k = 1; k < closes.length; k++) {
-        if (closes[k] < mn) mn = closes[k];
-        if (closes[k] > mx) mx = closes[k];
+      // 把实时现价纳入Y轴范围
+      var allPrices = closes.slice();
+      if (t.current_price !== undefined) allPrices.push(t.current_price);
+      var mn = allPrices[0], mx = allPrices[0];
+      for (var k = 1; k < allPrices.length; k++) {
+        if (allPrices[k] < mn) mn = allPrices[k];
+        if (allPrices[k] > mx) mx = allPrices[k];
       }
       var range = mx - mn || 1;
       var sw = 160, sh = 48, pad = 2, maxOff = 240;
@@ -1134,12 +1137,22 @@ function _renderMarketSparklines() {
         svgPts.push(x.toFixed(1) + ',' + y.toFixed(1));
       }
       var basePrice = t.pre_close || closes[0];
-      var lineColor = closes[closes.length - 1] >= basePrice ? '#ef5350' : '#66bb6a';
+      // 用实时现价（如有）判定颜色，确保和显示数值一致
+      var latestPrice = t.current_price !== undefined ? t.current_price : closes[closes.length - 1];
+      var lineColor = latestPrice >= basePrice ? '#ef5350' : '#66bb6a';
       var polyPts = svgPts.join(' ');
       var bgPts = polyPts + ' ' + (sw - pad).toFixed(1) + ',' + (sh - pad).toFixed(1) + ' ' + pad.toFixed(1) + ',' + (sh - pad).toFixed(1);
+      // 如果后端传了实时现价，在折线末端画一个圆点标记当前价位
+      var dot = '';
+      if (t.current_price !== undefined) {
+        var lastX = parseFloat(svgPts[svgPts.length - 1].split(',')[0]);
+        var dotY = sh - pad - (t.current_price - mn) / range * (sh - pad * 2);
+        dot = '<circle cx="' + lastX.toFixed(1) + '" cy="' + dotY.toFixed(1) + '" r="2.5" fill="' + lineColor + '" stroke="#fff" stroke-width="0.5"/>';
+      }
       var svg = '<svg width="160" height="48" viewBox="0 0 160 48" style="display:block;cursor:pointer;" onclick="showMarketTrend(' + i + ')">'
         + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>'
         + '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + bgPts + '"/>'
+        + dot
         + '</svg>';
       if (containers[i]) containers[i].innerHTML = svg;
     }
@@ -1153,10 +1166,13 @@ function showMarketTrend(idx) {
   var closes = ptsData.map(function(p){ return p.close; });
   if (!closes || closes.length < 2) return;
   var name = t.name;
-  var mn = closes[0], mx = closes[0];
-  for (var k = 1; k < closes.length; k++) {
-    if (closes[k] < mn) mn = closes[k];
-    if (closes[k] > mx) mx = closes[k];
+  // 把实时现价纳入Y轴范围，确保圆点不被裁剪
+  var allPrices = closes.slice();
+  if (t.current_price !== undefined) allPrices.push(t.current_price);
+  var mn = allPrices[0], mx = allPrices[0];
+  for (var k = 1; k < allPrices.length; k++) {
+    if (allPrices[k] < mn) mn = allPrices[k];
+    if (allPrices[k] > mx) mx = allPrices[k];
   }
   var range = mx - mn || 1;
   var maxOff = 240;
@@ -1169,11 +1185,22 @@ function showMarketTrend(idx) {
     pts.push({x: x, y: y, idx: i, val: closes[i], off: off});
   }
   var basePrice = t.pre_close || closes[0];
-  var lineColor = closes[closes.length - 1] >= basePrice ? '#ef5350' : '#66bb6a';
+  // 用实时现价判定颜色，与显示数值一致
+  var latestPrice = t.current_price !== undefined ? t.current_price : closes[closes.length - 1];
+  var lineColor = latestPrice >= basePrice ? '#ef5350' : '#66bb6a';
   var polyPts = pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+  // 画实时现价标记线 + 圆点
+  var currentDot = '';
+  if (t.current_price !== undefined) {
+    var lastP = pts[pts.length - 1];
+    var dotY = pad + ch - (t.current_price - mn) / range * ch;
+    currentDot = '<circle cx="' + lastP.x.toFixed(1) + '" cy="' + dotY.toFixed(1) + '" r="4" fill="' + lineColor + '" stroke="#fff" stroke-width="1"/>'
+      + '<line x1="' + pad + '" y1="' + dotY.toFixed(1) + '" x2="' + (pad + cw) + '" y2="' + dotY.toFixed(1) + '" stroke="' + lineColor + '" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>';
+  }
   var svgHtml = '<svg id="mktTrendSvg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;margin:0 auto;background:transparent;cursor:crosshair;">'
     + '<polyline fill="none" stroke="' + lineColor + '" stroke-width="2" points="' + polyPts + '"/>'
     + '<polygon fill="' + lineColor + '" fill-opacity="0.08" points="' + polyPts + ' ' + (pad+cw) + ',' + (pad+ch) + ' ' + pad + ',' + (pad+ch) + '"/>'
+    + currentDot
     + '<line id="mktCrosshair" x1="0" y1="0" x2="0" y2="0" stroke="#888" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>'
     + '</svg>';
   var backdrop = document.getElementById('trendBackdrop');
