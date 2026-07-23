@@ -142,7 +142,7 @@ _DEFAULTS = {
             "schtasks": 10,
         },
         "max_workers": {
-            "recommend_net_value": 50,
+            "recommend_net_value": 8,
             "recommend_update_day": 50,
             "recommend_limit_check": 50,
             "recommend_scoring": 50,
