@@ -569,7 +569,6 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
             if any(d.get(k) is None or d.get(k) == "" for k in perf_keys):
                 log.debug("跳过 %s(%s): 缺失收益维度", name, code)
                 return None
-        score = _calc_score(d)
         # 获取当日涨跌（供td维度评分）
         td = _fetch_fund_estimate(code)
         if td is not None:
