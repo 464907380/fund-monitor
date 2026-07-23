@@ -366,6 +366,40 @@ def _icon_text(raw: str) -> tuple[str, str]:
     return icon, text
 
 
+def _make_subject(fund_alerts: list[str], stock_alerts: list[str]) -> str:
+    """从警报列表生成描述性邮件标题"""
+    import re as _re
+    down = 0
+    up = 0
+    worst = 0.0
+    worst_name = ""
+    for a in fund_alerts + stock_alerts:
+        is_down = a.startswith("🔴")
+        if is_down:
+            down += 1
+        else:
+            up += 1
+        # 提取涨跌幅数值
+        m = _re.search(r'([+-]\d+\.?\d*)%', a)
+        if m:
+            val = float(m.group(1))
+            if is_down and val < worst:
+                worst = val
+                # 提取基金/个股名
+                nm = _re.sub(r'^[🔴🟢]\s*<font[^>]*>\[?\d*:?\d*\]?\s*', '', a)
+                nm = _re.sub(r'\s*急[涨跌].*', '', nm)
+                worst_name = nm[:12]
+    parts = []
+    if down:
+        parts.append(f"{down}只{'跌' if down==1 else '跌'}")
+        if worst < 0 and worst_name:
+            parts[-1] = f"{down}只跌（最大{worst:.1f}%）"
+    if up:
+        parts.append(f"{up}只涨")
+    summary = "、".join(parts) if parts else "盘中异动"
+    return f"🚨 {summary}"
+
+
 def _push_html(fund_alerts: list[str],
                stock_groups: dict[str, tuple[str, list[str]]] | None) -> None:
     """推送盘中警报 HTML 邮件"""
@@ -400,7 +434,8 @@ def _push_html(fund_alerts: list[str],
 </td></tr></table>
 </body>
 </html>"""
-    send_mail_html("🚨 基金盘中警报", html)
+    subject = _make_subject(fund_alerts, [a for g in (stock_groups or {}).values() for a in g[1]])
+    send_mail_html(subject, html)
 
 
 def _render_fund_section(fund_name: str, fund_code: str,
