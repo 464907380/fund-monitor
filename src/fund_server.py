@@ -17,7 +17,7 @@ import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log
+from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log
 from config import CFG, api_url, get_timeout, get_config
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
