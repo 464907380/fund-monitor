@@ -263,15 +263,17 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
                 f"急涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
 
-        # ── 累计涨跌幅检测（从当天首次检查到现在的总变动） ──
+        # ── 累计涨跌幅检测（带去重，每只个股每日仅触发一次）──
         first_chg = state["first_chg"]
         accum = chg - first_chg
-        if accum <= STOCK_ACCUM_DROP_RED:
+        if accum <= STOCK_ACCUM_DROP_RED and not state.get("_alerted_stock_accum_drop"):
+            state["_alerted_stock_accum_drop"] = True
             alerts.append(
                 f"🔴 <font color=\"warning\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"当日累计急跌 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
             )
-        elif accum >= STOCK_ACCUM_JUMP_RED:
+        elif accum >= STOCK_ACCUM_JUMP_RED and not state.get("_alerted_stock_accum_jump"):
+            state["_alerted_stock_accum_jump"] = True
             alerts.append(
                 f"🟢 <font color=\"info\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"当日累计急涨 {accum:.1f}%（{first_chg:+.2f}%→{chg:+.2f}%，占比{ratio:.1f}%）</font>"
@@ -329,14 +331,16 @@ def check_intraday(code: str, state: dict) -> list[str]:
                 f"（当前{gszzl:+.2f}%）</font>"
             )
 
-        # ── 累计涨跌幅检测 ──
+        # ── 累计涨跌幅检测（带去重，每只基金每日仅触发一次）──
         accum = gszzl - state["first_td"]  # 从当天第一次检查到现在的总变动
-        if accum <= ALERT_ACCUM_DROP:
+        if accum <= ALERT_ACCUM_DROP and not state.get("_alerted_accum_drop"):
+            state["_alerted_accum_drop"] = True
             alerts.append(
                 f"🔴 <font color=\"warning\">[{now}] {name}({code}) 当日累计跌 {accum:.1f}%"
                 f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）</font>"
             )
-        elif accum >= ALERT_ACCUM_JUMP:
+        elif accum >= ALERT_ACCUM_JUMP and not state.get("_alerted_accum_jump"):
+            state["_alerted_accum_jump"] = True
             alerts.append(
                 f"🟢 <font color=\"info\">[{now}] {name}({code}) 当日累计涨 {accum:.1f}%"
                 f"（{state['first_td']:+.2f}%→{gszzl:+.2f}%）</font>"
