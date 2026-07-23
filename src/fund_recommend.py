@@ -103,11 +103,17 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
     # 盘中优先用持仓股票实时行情估算（唯一能拿到今日实时数据的方法）
     if not is_after_market:
         _estimated = 0
-        for _c in codes:
-            _est = _estimate_td_from_holdings(_c)
-            if _est is not None:
-                result[_c] = (_est, "holdings")
-                _estimated += 1
+        with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=8)) as _he:
+            _hfuts = {_he.submit(_estimate_td_from_holdings, _c): _c for _c in codes}
+            for _hf in as_completed(_hfuts):
+                _c = _hfuts[_hf]
+                try:
+                    _est = _hf.result(timeout=30)
+                    if _est is not None:
+                        result[_c] = (_est, "holdings")
+                        _estimated += 1
+                except Exception:
+                    pass
         if _estimated:
             log.info("持仓估算实时涨跌: %d/%d 只基金", _estimated, len(codes))
         # 持仓覆盖率高的基金直接用估算值，剩余用接口补充
