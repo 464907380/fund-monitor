@@ -1343,8 +1343,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # ── 推荐缓存命中：td值始终实时刷新，其他数据复用缓存 ──
                             _td, _td_src = _parse_real_time(code)
                             if _td is None:
-                                _td = cached.get("td")
-                                _td_src = ""  # 前端不显示昨日
+                                # LSJZ 无今日净值 → 新浪昨日数据（统一来源，不混用缓存）
+                                from fund_utils import _fetch_fund_estimate
+                                _fe = _fetch_fund_estimate(code)
+                                if _fe and _fe[1] is not None:
+                                    _td = round(_fe[1], 2)
+                                    _td_src = ""
                             else:
                                 cached["td"] = _td
                             day_s = f"{_td:+.2f}%" if _td is not None else ""
