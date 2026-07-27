@@ -122,6 +122,24 @@ _CACHE_MAX = CFG.get("network", {}).get("cache_max_entries", 100)
 _RETRY_MAX = CFG.get("network", {}).get("retry_max", 3)
 _RETRY_BACKOFF = CFG.get("network", {}).get("retry_backoff_seconds", [1, 3, 8])
 
+# ── 域名级限速器（防止触发 API 频率限制） ──────
+_RATE_LIMIT_DELAY = CFG.get("network", {}).get("rate_limit_delay", 0.3)
+_last_request_time: dict[str, float] = {}
+_rate_limit_lock = threading.Lock()
+
+
+def _rate_limit_domain(url: str) -> None:
+    """对同一域名施加最小请求间隔，防止触发 API 频率限制（如东方财富 514）"""
+    from urllib.parse import urlparse
+    domain = urlparse(url).hostname or "unknown"
+    with _rate_limit_lock:
+        last = _last_request_time.get(domain, 0.0)
+        now = time.time()
+        elapsed = now - last
+        if elapsed < _RATE_LIMIT_DELAY:
+            time.sleep(_RATE_LIMIT_DELAY - elapsed)
+        _last_request_time[domain] = time.time()
+
 
 def _cache_evict() -> None:
     """清除过期缓存；超出上限时清除最旧的条目"""
@@ -139,6 +157,8 @@ def _cache_evict() -> None:
 
 def _request_with_retry(req: urllib.request.Request, decode: bool = True) -> str | bytes | None:
     """带指数退避的 HTTP 请求，返回 str（decode=True）或 bytes（decode=False），失败返回 None"""
+    # 限速：同一域名至少间隔 _RATE_LIMIT_DELAY 秒
+    _rate_limit_domain(req.full_url)
     last_err = None
     for attempt in range(1, _RETRY_MAX + 1):
         try:
