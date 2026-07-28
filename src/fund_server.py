@@ -1347,7 +1347,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 _fe = _fetch_fund_estimate(code)
                                 if _fe and _fe[1] is not None:
                                     _td = round(_fe[1], 2)
-                                    _td_src = ""
+                                    _td_src = _fe[2]
                             else:
                                 cached["td"] = _td
                             day_s = f"{_td:+.2f}%" if _td is not None else ""
@@ -1415,7 +1415,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             _fe = _fetch_fund_estimate(code)
                             if _fe and _fe[1] is not None:
                                 _td = round(_fe[1], 2)
-                                _td_src = ""
+                                _td_src = _fe[2]
                         d["td"] = _td
                         navs = d.get("nav", [])
                         td = d.get("td")

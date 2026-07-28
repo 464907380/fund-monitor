@@ -130,7 +130,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                     return (code, float(_parts[4]), "fallback")
         except Exception:
             pass
-        # 2. fundgz（原主力，近期可能404）
+        # 2. fundgz（实时估算）
         try:
             _url2 = f"https://fundgz.1234567.com.cn/js/{code}.js"
             _req2 = urllib.request.Request(_url2, headers={"User-Agent":"Mozilla/5.0"})
@@ -138,7 +138,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                 _raw2 = _r2.read().decode("utf-8")
             _m2 = re.search(r'"gszzl":"([-+\d.]+)"', _raw2)
             if _m2 and _m2.group(1):
-                return (code, float(_m2.group(1)), "fallback")
+                return (code, float(_m2.group(1)), "holdings")
         except Exception:
             pass
         return (code, None, "fallback")
@@ -176,7 +176,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                 break
             _td = _fetch_fund_estimate(_code)
             if _td and _td[1] is not None:
-                result[_code] = (round(_td[1], 2), "fallback")
+                result[_code] = (round(_td[1], 2), _td[2])
                 replaced_gz += 1
             _done2 = replaced_gz + (len(_failed_codes) - (_i + 1))
             if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):

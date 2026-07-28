@@ -251,14 +251,16 @@ def _strip_html(text: str) -> str:
 
 # ── 基金实时估算（fund_watch 和 fund_monitor 共用） ──────────
 
-def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
+def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
     """获取基金当日涨跌幅，优先返回实际净值，降级到实时估算。
-    
+
     优先级：
       1. 天天基金历史净值 API（实际净值，收盘后可用）
       2. 天天基金实时估值 API（盘中估算）
-      3. 新浪财经基金行情（最终降级）
-    返回 (基金名, 涨跌幅%)
+      3. 持仓估算（盘中实时）
+      4. 新浪财经基金行情（最终降级，昨日数据）
+    返回 (基金名, 涨跌幅%, 来源)
+      来源: lsjz=今日实际净值, holdings=实时估算, fallback=昨日数据
     """
     import urllib.request
     import datetime
@@ -284,7 +286,7 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
 
     # 收盘后直接返回实际净值（不纠结估算值）
     if is_after_market and actual is not None:
-        return actual
+        return (actual[0], actual[1], "lsjz")
 
     # 2. 盘中或实际净值不可用 → 尝试实时估算
     for url in [api_url("fund_estimate", code=code), api_url("fund_estimate_fallback", code=code)]:
@@ -292,24 +294,23 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
             gz = fetch(url)
             json_str = re.sub(r"^\w+\(", "", gz).rstrip(");")
             data = json.loads(json_str)
-            return (data.get("name", code), float(data["gszzl"]))
+            return (data.get("name", code), float(data["gszzl"]), "holdings")
         except Exception:
             continue
 
     # 如果估算失败但实际净值可用，返回实际净值
     if actual is not None:
-        return actual
+        return (actual[0], actual[1], "lsjz")
 
-    # 3. 新浪财经基金行情（最终降级，仅返回昨日数据，盘中不准确）
-    #    改为持仓估算（盘中实时）
+    # 3. 持仓估算（盘中实时）
     try:
         from fund_watch import _estimate_from_holdings
         est = _estimate_from_holdings(code)
         if est is not None:
-            return (code, est)
+            return (code, est, "holdings")
     except Exception:
         pass
-    # 4. 持仓估算也不可用 → 新浪昨日数据（仅作为最后手段）
+    # 4. 新浪昨日数据（仅作为最后手段）
     try:
         url = f"http://hq.sinajs.cn/list=of{code}"
         req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
@@ -318,7 +319,7 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float] | None:
         gz = raw.decode("gbk")
         m = re.search(r'"([^,]*),([-\d.]+),[-\d.]+,([-\d.]+),([-\d.]+),(\d{4}-\d{2}-\d{2})"', gz)
         if m:
-            return m.group(1), float(m.group(4))
+            return (m.group(1), float(m.group(4)), "fallback")
     except Exception:
         pass
 
