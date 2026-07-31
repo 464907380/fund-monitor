@@ -538,6 +538,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/market-kline":
+            """大盘指数30日K线（含成交量，用于画日K蜡烛图）"""
+            try:
+                from fund_utils import fetch
+                import datetime, json as _json
+                symbols = [
+                    ("sh000001", "上证指数"),
+                    ("sz399001", "深证成指"),
+                    ("sz399006", "创业板指"),
+                ]
+                result = []
+                for sym, name in symbols:
+                    url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=30"
+                    raw = fetch(url)
+                    data = _json.loads(raw)
+                    klines = []
+                    for p in data:
+                        klines.append({
+                            "d": p.get("day", "")[:10],
+                            "o": float(p.get("open", 0)),
+                            "h": float(p.get("high", 0)),
+                            "l": float(p.get("low", 0)),
+                            "c": float(p.get("close", 0)),
+                            "v": float(p.get("volume", 0)),
+                        })
+                    result.append({"name": name, "symbol": sym, "klines": klines})
+                self._send(*_json_response({"ok": True, "klines": result}))
+            except Exception as e:
+                print(f"[ERROR] /api/market-kline: {e}", flush=True)
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/search":
             try:
                 q = params.get("q", [""])[0]

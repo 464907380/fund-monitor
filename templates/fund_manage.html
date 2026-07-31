@@ -1107,6 +1107,10 @@ function loadMarketIndices() {
             + '<span style="font-family:Consolas;font-size:12px;color:' + jcolor + ';" data-role="change">' + jptsSign + jdx.change_points.toFixed(2) + '</span>'
             + '<span style="font-family:Consolas;font-size:12px;font-weight:600;color:' + jcolor + ';" data-role="change">' + jsign + jdx.change_pct.toFixed(2) + '%</span>'
             + '</div>'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">'
+            + '<span class="marketKline" style="display:inline-block;width:160px;height:36px;flex-shrink:0;"></span>'
+            + '<span style="color:#555;font-size:10px;">30日K线</span>'
+            + '</div>'
             + '</div>';
         }
         container.insertAdjacentHTML('beforeend', html);
@@ -1116,6 +1120,8 @@ function loadMarketIndices() {
     timeEl.textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
     // 加载分时折线图
     _renderMarketSparklines();
+    // 加载30日K线
+    _renderMarketKlines();
   }).catch(function(){});
 }
 /** 渲染大盘分时折线图 */
@@ -1179,6 +1185,165 @@ function _renderMarketSparklines() {
       if (containers[i]) containers[i].innerHTML = svg;
     }
   }).catch(function(){});
+}
+/** 渲染大盘30日K线（迷你蜡烛图） */
+var _marketKlineData = [];
+/** 构建K线SVG（迷你版，仅蜡烛） */
+function _buildKlineSvg(kl, w, h, onClickIdx) {
+  if (!kl || kl.length < 2) return '';
+  var mn = Infinity, mx = -Infinity;
+  for (var i = 0; i < kl.length; i++) {
+    if (kl[i].l < mn) mn = kl[i].l;
+    if (kl[i].h > mx) mx = kl[i].h;
+  }
+  var range = mx - mn || 1;
+  var pad = 2;
+  var cw = w - pad * 2, ch = h - pad * 2;
+  var n = kl.length;
+  var candleW = cw / n;
+  var bodyW = Math.max(candleW * 0.6, 1.2);
+  var parts = [];
+  for (var i = 0; i < n; i++) {
+    var k = kl[i];
+    var up = k.c >= k.o;
+    var color = up ? '#ef5350' : '#66bb6a';
+    var x = pad + i * candleW + candleW / 2;
+    var yHigh = pad + (1 - (k.h - mn) / range) * ch;
+    var yLow = pad + (1 - (k.l - mn) / range) * ch;
+    var yO = pad + (1 - (k.o - mn) / range) * ch;
+    var yC = pad + (1 - (k.c - mn) / range) * ch;
+    var bodyTop = Math.min(yO, yC), bodyBot = Math.max(yO, yC);
+    var bodyH = Math.max(bodyBot - bodyTop, 1);
+    parts.push('<line x1="' + x.toFixed(1) + '" y1="' + yHigh.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + yLow.toFixed(1) + '" stroke="' + color + '" stroke-width="1"/>');
+    parts.push('<rect x="' + (x - bodyW / 2).toFixed(1) + '" y="' + bodyTop.toFixed(1) + '" width="' + bodyW.toFixed(1) + '" height="' + bodyH.toFixed(1) + '" fill="' + color + '"/>');
+  }
+  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;cursor:pointer;" onclick="showMarketKline(' + onClickIdx + ')">' + parts.join('') + '</svg>';
+}
+function _renderMarketKlines() {
+  fetch(API + '/api/market-kline?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
+    if (!d.ok || !d.klines) return;
+    _marketKlineData = d.klines;
+    var containers = document.querySelectorAll('.marketKline');
+    for (var i = 0; i < d.klines.length; i++) {
+      var kl = d.klines[i].klines || [];
+      var svg = _buildKlineSvg(kl, 160, 36, i);
+      if (containers[i]) containers[i].innerHTML = svg;
+    }
+  }).catch(function(){});
+}
+/** 大盘30日K线弹窗（K线 + 成交量 + 十字光标） */
+function showMarketKline(idx) {
+  var t = _marketKlineData[idx];
+  if (!t || !t.klines || t.klines.length < 2) return;
+  var kl = t.klines;
+  var name = t.name;
+  var mn = Infinity, mx = -Infinity;
+  for (var i = 0; i < kl.length; i++) {
+    if (kl[i].l < mn) mn = kl[i].l;
+    if (kl[i].h > mx) mx = kl[i].h;
+  }
+  var range = mx - mn || 1;
+  var vMax = 0;
+  for (var i = 0; i < kl.length; i++) if (kl[i].v > vMax) vMax = kl[i].v;
+  vMax = vMax || 1;
+  var w = 520, h = 380, pad = 40, cw = w - pad * 2;
+  var ch = 210, vh = 70, vGap = 22;
+  var n = kl.length;
+  var candleW = cw / n;
+  var bodyW = Math.max(candleW * 0.62, 1.5);
+  var parts = [];
+  // 水平参考线（价格区）
+  var gridRows = 5;
+  for (var g = 0; g <= gridRows; g++) {
+    var gy = pad + g / gridRows * ch;
+    var gv = mx - range * g / gridRows;
+    parts.push('<line x1="' + pad + '" y1="' + gy.toFixed(1) + '" x2="' + (pad + cw) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>');
+    parts.push('<text x="' + (pad - 4) + '" y="' + (gy + 3).toFixed(1) + '" font-size="10" fill="#777" text-anchor="end">' + gv.toFixed(0) + '</text>');
+  }
+  // 蜡烛 + 成交量柱
+  var pts = [];
+  for (var i = 0; i < n; i++) {
+    var k = kl[i];
+    var up = k.c >= k.o;
+    var color = up ? '#ef5350' : '#66bb6a';
+    var x = pad + i * candleW + candleW / 2;
+    var yHigh = pad + (1 - (k.h - mn) / range) * ch;
+    var yLow = pad + (1 - (k.l - mn) / range) * ch;
+    var yO = pad + (1 - (k.o - mn) / range) * ch;
+    var yC = pad + (1 - (k.c - mn) / range) * ch;
+    var bodyTop = Math.min(yO, yC), bodyBot = Math.max(yO, yC);
+    var bodyH = Math.max(bodyBot - bodyTop, 1);
+    parts.push('<line x1="' + x.toFixed(1) + '" y1="' + yHigh.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + yLow.toFixed(1) + '" stroke="' + color + '" stroke-width="1"/>');
+    parts.push('<rect x="' + (x - bodyW / 2).toFixed(1) + '" y="' + bodyTop.toFixed(1) + '" width="' + bodyW.toFixed(1) + '" height="' + bodyH.toFixed(1) + '" fill="' + color + '"/>');
+    // 成交量柱
+    var vTop = pad + ch + vGap;
+    var vH = Math.max(k.v / vMax * vh, 0.5);
+    parts.push('<rect x="' + (x - bodyW / 2).toFixed(1) + '" y="' + (vTop + vh - vH).toFixed(1) + '" width="' + bodyW.toFixed(1) + '" height="' + vH.toFixed(1) + '" fill="' + color + '" fill-opacity="0.45"/>');
+    pts.push({x: x, idx: i, k: k});
+  }
+  // 分隔线
+  parts.push('<line x1="' + pad + '" y1="' + (pad + ch + vGap - 6).toFixed(1) + '" x2="' + (pad + cw) + '" y2="' + (pad + ch + vGap - 6).toFixed(1) + '" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>');
+  parts.push('<text x="' + (pad + 4) + '" y="' + (pad + ch + vGap - 10).toFixed(1) + '" font-size="10" fill="#777">成交量</text>');
+  // 十字光标
+  parts.push('<line id="mktKCrossX" x1="0" y1="0" x2="0" y2="0" stroke="#888" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>');
+  parts.push('<line id="mktKCrossY" x1="0" y1="0" x2="0" y2="0" stroke="#888" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>');
+  var svgHtml = '<svg id="mktKSvg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block;margin:0 auto;background:transparent;cursor:crosshair;">' + parts.join('') + '</svg>';
+  var backdrop = document.getElementById('trendBackdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'trendBackdrop';
+    backdrop.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99998;display:flex;align-items:center;justify-content:center;';
+    backdrop.onclick = function(){ backdrop.style.display = 'none'; };
+    document.body.appendChild(backdrop);
+  }
+  backdrop.style.display = 'flex';
+  backdrop.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;max-width:580px;width:92%;" onclick="event.stopPropagation();">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+    + '<span style="color:#e0e0e0;font-size:15px;font-weight:600;">' + name + ' - 30日K线</span>'
+    + '<span onclick="document.getElementById(\'trendBackdrop\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:20px;">&times;</span></div>'
+    + '<div id="mktTooltip" style="text-align:center;font-size:13px;color:#e0e0e0;min-height:22px;margin-bottom:6px;">\u79fb\u52a8\u9f20\u6807\u67e5\u770b\u8be6\u60c5</div>'
+    + svgHtml + '</div>';
+  var svg = document.getElementById('mktKSvg');
+  var crossX = document.getElementById('mktKCrossX');
+  var crossY = document.getElementById('mktKCrossY');
+  var tooltip = document.getElementById('mktTooltip');
+  svg.onmousemove = function(e) {
+    var rect = svg.getBoundingClientRect();
+    var scaleX = w / rect.width;
+    var scaleY = h / rect.height;
+    var mouseX = (e.clientX - rect.left) * scaleX;
+    var mouseY = (e.clientY - rect.top) * scaleY;
+    var nearest = pts[0];
+    for (var k = 1; k < pts.length; k++) {
+      if (Math.abs(pts[k].x - mouseX) < Math.abs(nearest.x - mouseX)) nearest = pts[k];
+    }
+    var kk = nearest.k;
+    var prevC = kl[nearest.idx - 1] ? kl[nearest.idx - 1].c : kk.o;
+    var chg = kk.c - prevC;
+    var pct = prevC ? (chg / prevC * 100) : 0;
+    var sign = chg >= 0 ? '+' : '';
+    var color = chg >= 0 ? '#ef5350' : '#66bb6a';
+    tooltip.innerHTML = '<span style="color:#aaa;">' + kk.d + '</span> '
+      + '<span style="color:#aaa;">开</span><span style="font-family:Consolas;color:#e0e0e0;">' + kk.o.toFixed(2) + '</span> '
+      + '<span style="color:#aaa;">高</span><span style="font-family:Consolas;color:#e0e0e0;">' + kk.h.toFixed(2) + '</span> '
+      + '<span style="color:#aaa;">低</span><span style="font-family:Consolas;color:#e0e0e0;">' + kk.l.toFixed(2) + '</span> '
+      + '<span style="color:#aaa;">收</span><span style="font-family:Consolas;color:#e0e0e0;">' + kk.c.toFixed(2) + '</span> '
+      + '<span style="font-family:Consolas;color:' + color + ';font-weight:600;">' + sign + chg.toFixed(2) + '</span> '
+      + '<span style="font-family:Consolas;color:' + color + ';">' + sign + pct.toFixed(2) + '%</span> '
+      + '<span style="color:#aaa;">量</span><span style="font-family:Consolas;color:#e0e0e0;">' + (kk.v / 100000000).toFixed(1) + '亿</span>';
+    crossX.setAttribute('x1', nearest.x); crossX.setAttribute('x2', nearest.x);
+    crossX.setAttribute('y1', pad); crossX.setAttribute('y2', pad + ch + vGap + vh);
+    crossX.setAttribute('opacity', '0.5');
+    crossY.setAttribute('y1', mouseY.toFixed(1));
+    crossY.setAttribute('y2', mouseY.toFixed(1));
+    crossY.setAttribute('x1', pad); crossY.setAttribute('x2', pad + cw);
+    crossY.setAttribute('opacity', '0.5');
+  };
+  svg.onmouseleave = function() {
+    crossX.setAttribute('opacity', '0');
+    crossY.setAttribute('opacity', '0');
+    tooltip.innerHTML = '\u79fb\u52a8\u9f20\u6807\u67e5\u770b\u8be6\u60c5';
+  };
 }
 /** 大盘分时折线图弹窗 */
 function showMarketTrend(idx) {
@@ -1291,14 +1456,16 @@ loadMarketIndices();
     _loadPrefs();
     if (_isTradingTime) {
       _marketTimer = setInterval(loadMarketIndices, 60000);
-      // 折线图单独刷新（更频繁，不依赖大盘指数API）
+      // 折线图/30日K线单独刷新（更频繁，不依赖大盘指数API）
       setInterval(_renderMarketSparklines, 30000);
+      setInterval(_renderMarketKlines, 60000);
     } else if (d.next_check_seconds > 0) {
       setTimeout(function(){
         _isTradingTime = true;
         loadMarketIndices();
         _marketTimer = setInterval(loadMarketIndices, 60000);
         setInterval(_renderMarketSparklines, 30000);
+        setInterval(_renderMarketKlines, 60000);
       }, d.next_check_seconds * 1000);
     }
   }).catch(function(){
