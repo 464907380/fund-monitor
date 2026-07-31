@@ -302,15 +302,18 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
     if actual is not None:
         return (actual[0], actual[1], "lsjz")
 
-    # 3. 持仓估算（盘中实时）
-    try:
-        from fund_watch import _estimate_from_holdings
-        est = _estimate_from_holdings(code)
-        if est is not None:
-            return (code, est, "holdings")
-    except Exception:
-        pass
-    # 4. 新浪昨日数据（仅作为最后手段）
+    # 3. 持仓估算（仅盘中有效；盘前股票行情为昨日数据，估算无意义）
+    _h, _m = now.hour, now.minute
+    _in_trading = (_h > 9 or (_h == 9 and _m >= 30)) and _h < 15
+    if _in_trading:
+        try:
+            from fund_watch import _estimate_from_holdings
+            est = _estimate_from_holdings(code)
+            if est is not None:
+                return (code, est, "holdings")
+        except Exception:
+            pass
+    # 4. 新浪昨日数据（盘前回退到此）
     try:
         url = f"http://hq.sinajs.cn/list=of{code}"
         req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
