@@ -485,13 +485,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         return 0
 
                 def _fetch_pre_close(sym: str) -> float | None:
-                    """从日K线获取昨日收盘价"""
+                    """从日K线获取昨日收盘价（取最后一个日期早于今天的K线，避免API延迟导致 [-2] 错位）"""
                     try:
-                        daily_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=2"
+                        daily_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=5"
                         raw_daily = fetch(daily_url)
                         daily_data = _json.loads(raw_daily)
-                        if daily_data and len(daily_data) >= 2:
-                            return float(daily_data[-2]["close"])
+                        if daily_data:
+                            # 找最后一个日期早于今日的K线收盘价（昨收）
+                            for p in reversed(daily_data):
+                                if p.get("day", "")[:10] < today_str and p.get("close"):
+                                    return float(p["close"])
                     except Exception:
                         pass
                     return None
@@ -501,14 +504,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
                     raw = fetch(url)
                     points = _json.loads(raw)
-                    # 从5分钟K线中提取昨日收盘价
-                    pre_close = None
-                    for p in reversed(points):
-                        if not p.get("day", "").startswith(today_str) and p.get("close"):
-                            pre_close = float(p["close"])
-                            break
+                    # 昨收优先用日K线（官方收盘价）；失败再回退到5分钟K线推断
+                    pre_close = _fetch_pre_close(sym)
                     if pre_close is None:
-                        pre_close = _fetch_pre_close(sym)
+                        for p in reversed(points):
+                            if not p.get("day", "").startswith(today_str) and p.get("close"):
+                                pre_close = float(p["close"])
+                                break
                     # 只取今日数据；若今日无数据（如周末），取最近一天
                     today_points = [p for p in points if p.get("day", "").startswith(today_str)]
                     if not today_points and points:
