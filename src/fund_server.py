@@ -484,16 +484,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     except Exception:
                         return 0
 
-                def _fetch_pre_close(sym: str) -> float | None:
-                    """从日K线获取昨日收盘价（取最后一个日期早于今天的K线，避免API延迟导致 [-2] 错位）"""
+                def _fetch_pre_close(sym: str, ref_day: str) -> float | None:
+                    """从日K线获取 ref_day 前一交易日的收盘价（昨收）
+                    ref_day 为展示数据的日期：交易日=今天，非交易日=最近交易日
+                    """
                     try:
-                        daily_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=5"
+                        daily_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=10"
                         raw_daily = fetch(daily_url)
                         daily_data = _json.loads(raw_daily)
                         if daily_data:
-                            # 找最后一个日期早于今日的K线收盘价（昨收）
+                            # 找最后一个日期早于 ref_day 的K线收盘价
                             for p in reversed(daily_data):
-                                if p.get("day", "")[:10] < today_str and p.get("close"):
+                                if p.get("day", "")[:10] < ref_day and p.get("close"):
                                     return float(p["close"])
                     except Exception:
                         pass
@@ -504,20 +506,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
                     raw = fetch(url)
                     points = _json.loads(raw)
-                    # 昨收优先用日K线（官方收盘价）；失败再回退到5分钟K线推断
-                    pre_close = _fetch_pre_close(sym)
+                    # 确定展示日期：优先今日；无今日数据（周末/节假日）则用最近交易日
+                    today_points = [p for p in points if p.get("day", "").startswith(today_str)]
+                    if today_points:
+                        display_day = today_str
+                    elif points:
+                        display_day = points[-1].get("day", "")[:10]
+                    else:
+                        display_day = today_str
+                    # 昨收 = 展示日期前一交易日收盘价（非交易日用日K线取前一日）
+                    pre_close = _fetch_pre_close(sym, display_day)
                     if pre_close is None:
                         for p in reversed(points):
-                            if not p.get("day", "").startswith(today_str) and p.get("close"):
+                            if p.get("day", "")[:10] < display_day and p.get("close"):
                                 pre_close = float(p["close"])
                                 break
-                    # 只取今日数据；若今日无数据（如周末），取最近一天
-                    today_points = [p for p in points if p.get("day", "").startswith(today_str)]
+                    # 展示日期的5分钟K线
                     if not today_points and points:
-                        last_day = points[-1].get("day", "")[:10]
-                        today_points = [p for p in points if p.get("day", "").startswith(last_day)]
-                        if pre_close is None:
-                            pre_close = _fetch_pre_close(sym)
+                        today_points = [p for p in points if p.get("day", "").startswith(display_day)]
                     pt_list = []
                     for p in today_points:
                         day_str = p.get("day", "")
