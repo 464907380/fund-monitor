@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG, api_url, get_secret
-from fund_utils import fetch, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html, setup_log
+from fund_utils import fetch, fetch_bytes, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html, setup_log
 
 setup_log("monitor.log")
 from fund_watch import FUND_LIST, _parse_holdings, _ensure_fund_list_loaded
@@ -38,6 +38,15 @@ MAX_EMPTY_ROUNDS = CFG.get("fund_monitor", {}).get("max_empty_rounds", 2)
 
 # ── 个股监控缓存（持仓一日内不变） ────────────
 _holdings_cache: dict[str, list[dict]] = {}
+
+# ── 个股行情短缓存 + 失败冷却（减少无效请求） ──
+_stock_quote_cache: dict[str, tuple[float, str, float]] = {}  # sina_code -> (ts, name, chg)
+_stock_fail_cache: dict[str, float] = {}  # sina_code -> 失败时间戳
+_STOCK_CACHE_TTL = 30.0      # 行情缓存 30 秒
+_STOCK_FAIL_COOLDOWN = 120.0  # 失败后 120 秒内不重试
+
+# ── 警报防抖冷却（秒） ────────────────────────
+ALERT_COOLDOWN = 1800.0  # 同类警报 30 分钟内不重复触发
 
 # ── 状态快照文件（进程重启恢复用） ────────────
 _STATE_SNAPSHOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".monitor_state.json")
@@ -160,18 +169,29 @@ def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
     """
     从新浪获取个股实时涨跌幅。
     返回 (股票名称, 涨跌幅%)，失败返回 None。
+    带 30 秒缓存 + 120 秒失败冷却，避免重复请求和无效重试。
     """
-    # 主数据源：新浪
+    _now = time.time()
+    # 命中缓存
+    _cached = _stock_quote_cache.get(sina_code)
+    if _cached and _now - _cached[0] < _STOCK_CACHE_TTL:
+        return (_cached[1], _cached[2])
+    # 失败冷却中，跳过
+    if _now - _stock_fail_cache.get(sina_code, 0) < _STOCK_FAIL_COOLDOWN:
+        return None
+
+    # 主数据源：新浪（必须带 Referer 头，否则返回 403；GBK 编码需用 fetch_bytes）
     url = api_url("sina_hq", code=sina_code)
     try:
-        data = fetch(url)
-        parts = parse_sina_csv(data)
+        raw = fetch_bytes(url, {"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
+        parts = parse_sina_csv(raw, "gbk") if raw else None
         if parts is not None:
             name = parts[0]
             prev_close = float(parts[2]) if parts[2] else 0
             current = float(parts[3]) if parts[3] else 0
             if prev_close:
                 chg = round((current - prev_close) / prev_close * 100, 2)
+                _stock_quote_cache[sina_code] = (time.time(), name, chg)
                 return name, chg
     except Exception as e:
         log.debug("新浪获取个股 %s 失败: %s", sina_code, e)
@@ -186,10 +206,13 @@ def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
             prev_close = float(parts[4]) if parts[4] else 0
             if prev_close:
                 chg = round((price - prev_close) / prev_close * 100, 2)
+                _stock_quote_cache[sina_code] = (time.time(), name, chg)
                 return name, chg
     except Exception as e:
         log.debug("腾讯获取个股 %s 失败: %s", sina_code, e)
 
+    # 均失败 → 记录失败时间，进入冷却
+    _stock_fail_cache[sina_code] = time.time()
     return None
 
 
@@ -249,15 +272,18 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
 
         prev = stock_states[state_key]["last_chg"]
         state = stock_states[state_key]
+        _now_ts = time.time()
 
-        # ── 单次急涨急跌检测（与上次检查的差值） ──
+        # ── 单次急涨急跌检测（与上次检查的差值，带 30 分钟防抖冷却）──
         diff = chg - prev
-        if diff <= STOCK_DROP_RED:
+        if diff <= STOCK_DROP_RED and _now_ts - state.get("_last_stock_drop_ts", 0) > ALERT_COOLDOWN:
+            state["_last_stock_drop_ts"] = _now_ts
             alerts.append(
                 f"🔴 <font color=\"warning\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"急跌 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
-        elif diff >= STOCK_JUMP_RED:
+        elif diff >= STOCK_JUMP_RED and _now_ts - state.get("_last_stock_jump_ts", 0) > ALERT_COOLDOWN:
+            state["_last_stock_jump_ts"] = _now_ts
             alerts.append(
                 f"🟢 <font color=\"info\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"急涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
@@ -317,15 +343,18 @@ def check_intraday(code: str, state: dict) -> list[str]:
             return []
 
         prev = state["last_td"]
+        _now_ts = time.time()
 
-        # ── 单次急涨急跌检测 ──
+        # ── 单次急涨急跌检测（带 30 分钟防抖冷却）──
         diff_once = gszzl - prev  # 与上次检查的差值
-        if diff_once <= ALERT_DROP_ONCE:
+        if diff_once <= ALERT_DROP_ONCE and _now_ts - state.get("_last_drop_ts", 0) > ALERT_COOLDOWN:
+            state["_last_drop_ts"] = _now_ts
             alerts.append(
                 f"🔴 <font color=\"warning\">[{now}] {name}({code}) 急跌 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
             )
-        elif diff_once >= ALERT_JUMP_ONCE:
+        elif diff_once >= ALERT_JUMP_ONCE and _now_ts - state.get("_last_jump_ts", 0) > ALERT_COOLDOWN:
+            state["_last_jump_ts"] = _now_ts
             alerts.append(
                 f"🟢 <font color=\"info\">[{now}] {name}({code}) 急涨 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
@@ -553,6 +582,9 @@ def monitor() -> None:
         globals()["STOCK_ACCUM_JUMP_RED"] = _mc.get("stock_alert_accum_jump_red", 12)
         globals()["POLL_INTERVAL"] = _mc.get("poll_interval_seconds", 600)
         globals()["MAX_EMPTY_ROUNDS"] = _mc.get("max_empty_rounds", 2)
+        globals()["ALERT_COOLDOWN"] = _mc.get("alert_cooldown_seconds", 1800)
+        globals()["_STOCK_CACHE_TTL"] = _mc.get("stock_cache_ttl", 30)
+        globals()["_STOCK_FAIL_COOLDOWN"] = _mc.get("stock_fail_cooldown", 120)
 
         # 当天已收盘 → 清空状态，等明天
         if now.time() >= datetime.time(15, 5):
@@ -603,14 +635,22 @@ def monitor() -> None:
                 if states[code].get("last_td") is not None:
                     got_data = True
 
-        # 个股检查（持仓已缓存，速度较快）
-        for f in FUND_LIST:
-            code = f["code"]
-            fund_name = states[code].get("name", code)
-            sa = check_holdings_intraday(code, fund_name, stock_states)
-            if sa:
-                stock_alerts.extend(sa)
-                stock_groups[fund_name] = (code, sa)
+        # 个股检查（并行，持仓已缓存 + 行情短缓存，速度较快）
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            _stock_futures = {
+                executor.submit(check_holdings_intraday, f["code"], states[f["code"]].get("name", f["code"]), stock_states): f["code"]
+                for f in FUND_LIST
+            }
+            for _fut in concurrent.futures.as_completed(_stock_futures):
+                _code = _stock_futures[_fut]
+                try:
+                    sa = _fut.result()
+                except Exception:
+                    continue
+                if sa:
+                    stock_alerts.extend(sa)
+                    stock_groups[states[_code].get("name", _code)] = (_code, sa)
 
         # 智能节假日检测：所有基金都无实时数据 → 可能是休市日
         if not got_data:
