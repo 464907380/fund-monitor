@@ -267,8 +267,6 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
 
     now = datetime.datetime.now()
     today_str = now.strftime("%Y-%m-%d")
-    # 判断是否收盘（15:00 之后）
-    is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
 
     # 1. 先尝试实际净值（历史净值 API）
     actual: tuple[str, float] | None = None
@@ -283,10 +281,6 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
             actual = (code, float(m_val.group(1)))
     except Exception:
         pass
-
-    # 收盘后直接返回实际净值（不纠结估算值）
-    if is_after_market and actual is not None:
-        return (actual[0], actual[1], "lsjz")
 
     # 2. 盘中或实际净值不可用 → 尝试实时估算
     for url in [api_url("fund_estimate", code=code), api_url("fund_estimate_fallback", code=code)]:

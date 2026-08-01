@@ -631,7 +631,7 @@ def monitor() -> None:
         globals()["_STOCK_FAIL_COOLDOWN"] = _mc.get("stock_fail_cooldown", 120)
 
         # 当天已收盘 → 清空状态，等明天
-        if now.time() >= datetime.time(15, 5):
+        if now.time() >= datetime.time(15, 0):
             states.clear()
             stock_states.clear()
             _holdings_cache.clear()
