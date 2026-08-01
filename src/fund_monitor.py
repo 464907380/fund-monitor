@@ -45,9 +45,6 @@ _stock_fail_cache: dict[str, float] = {}  # sina_code -> 失败时间戳
 _STOCK_CACHE_TTL = 30.0      # 行情缓存 30 秒
 _STOCK_FAIL_COOLDOWN = 120.0  # 失败后 120 秒内不重试
 
-# ── 警报防抖冷却（秒） ────────────────────────
-ALERT_COOLDOWN = 1800.0  # 同类警报 30 分钟内不重复触发
-
 # ── 状态快照文件（进程重启恢复用） ────────────
 _STATE_SNAPSHOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".monitor_state.json")
 
@@ -314,18 +311,15 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
 
         prev = stock_states[state_key]["last_chg"]
         state = stock_states[state_key]
-        _now_ts = time.time()
 
-        # ── 单次急涨急跌检测（与上次检查的差值，带 30 分钟防抖冷却）──
+        # ── 单次急涨急跌检测（与上次检查的差值，last_chg 已更新防重复）──
         diff = chg - prev
-        if diff <= STOCK_DROP_RED and _now_ts - state.get("_last_stock_drop_ts", 0) > ALERT_COOLDOWN:
-            state["_last_stock_drop_ts"] = _now_ts
+        if diff <= STOCK_DROP_RED:
             alerts.append(
                 f"🔴 <font color=\"warning\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"急跌 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
             )
-        elif diff >= STOCK_JUMP_RED and _now_ts - state.get("_last_stock_jump_ts", 0) > ALERT_COOLDOWN:
-            state["_last_stock_jump_ts"] = _now_ts
+        elif diff >= STOCK_JUMP_RED:
             alerts.append(
                 f"🟢 <font color=\"info\">[{now}] {fund_name}持仓{stock_name}({stock_code})"
                 f"急涨 {diff:+.1f}%（{_chg_text(chg)}，占比{ratio:.1f}%）</font>"
@@ -385,18 +379,15 @@ def check_intraday(code: str, state: dict) -> list[str]:
             return []
 
         prev = state["last_td"]
-        _now_ts = time.time()
 
-        # ── 单次急涨急跌检测（带 30 分钟防抖冷却）──
+        # ── 单次急涨急跌检测（与上次检查的差值，last_td 已更新防重复）──
         diff_once = gszzl - prev  # 与上次检查的差值
-        if diff_once <= ALERT_DROP_ONCE and _now_ts - state.get("_last_drop_ts", 0) > ALERT_COOLDOWN:
-            state["_last_drop_ts"] = _now_ts
+        if diff_once <= ALERT_DROP_ONCE:
             alerts.append(
                 f"🔴 <font color=\"warning\">[{now}] {name}({code}) 急跌 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
             )
-        elif diff_once >= ALERT_JUMP_ONCE and _now_ts - state.get("_last_jump_ts", 0) > ALERT_COOLDOWN:
-            state["_last_jump_ts"] = _now_ts
+        elif diff_once >= ALERT_JUMP_ONCE:
             alerts.append(
                 f"🟢 <font color=\"info\">[{now}] {name}({code}) 急涨 {diff_once:+.1f}%"
                 f"（当前{gszzl:+.2f}%）</font>"
@@ -626,7 +617,6 @@ def monitor() -> None:
         globals()["STOCK_ACCUM_JUMP_RED"] = _mc.get("stock_alert_accum_jump_red", 12)
         globals()["POLL_INTERVAL"] = _mc.get("poll_interval_seconds", 600)
         globals()["MAX_EMPTY_ROUNDS"] = _mc.get("max_empty_rounds", 2)
-        globals()["ALERT_COOLDOWN"] = _mc.get("alert_cooldown_seconds", 1800)
         globals()["_STOCK_CACHE_TTL"] = _mc.get("stock_cache_ttl", 30)
         globals()["_STOCK_FAIL_COOLDOWN"] = _mc.get("stock_fail_cooldown", 120)
 
