@@ -196,6 +196,13 @@ def load_config() -> dict:
 CFG = load_config()
 
 
+def reload_config() -> dict:
+    """重新读取 config.json 并原地更新 CFG（保持既有引用有效），返回新配置"""
+    global CFG
+    CFG = load_config()
+    return CFG
+
+
 def get_timeout(name: str, default: int = 10) -> int:
     """读取网络超时配置（秒）"""
     return CFG.get("network", {}).get("timeout", {}).get(name, default)

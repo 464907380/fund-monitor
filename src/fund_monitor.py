@@ -612,7 +612,9 @@ def monitor() -> None:
     while True:
         now = datetime.datetime.now()
 
-        # 每次轮询重新读取配置，支持运行中自动更新
+        # 每次轮询重新读取配置（支持运行中通过前端修改自动生效）
+        from config import reload_config
+        reload_config()
         _mc = CFG.get("fund_monitor", {})
         globals()["ALERT_DROP_ONCE"] = _mc.get("alert_drop_once", -3)
         globals()["ALERT_JUMP_ONCE"] = _mc.get("alert_jump_once", 5)

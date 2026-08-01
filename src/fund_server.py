@@ -1842,17 +1842,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 with open(_CONFIG_PATH, encoding="utf-8") as _fmc:
                     cfg = json.load(_fmc)
-                cfg["fund_monitor"] = {
-                    "alert_drop_once": float(body.get("alert_drop_once", -3)),
-                    "alert_jump_once": float(body.get("alert_jump_once", 5)),
-                    "alert_accum_drop": float(body.get("alert_accum_drop", -7)),
-                    "accum_jump": float(body.get("accum_jump", 10)),
-                    "stock_alert_drop_red": float(body.get("stock_alert_drop_red", -5)),
-                    "stock_alert_jump_red": float(body.get("stock_alert_jump_red", 7)),
-                    "stock_alert_accum_drop_red": float(body.get("stock_alert_accum_drop_red", -10)),
-                    "stock_alert_accum_jump_red": float(body.get("stock_alert_accum_jump_red", 12)),
-                    "poll_interval_seconds": int(body.get("poll_interval_seconds", 600)),
-                }
+                # 保留已有键，再更新前端传回的阈值（不丢弃未回传的扩展项）
+                fm = cfg.setdefault("fund_monitor", {})
+                fm.update({
+                    "alert_drop_once": float(body.get("alert_drop_once", fm.get("alert_drop_once", -3))),
+                    "alert_jump_once": float(body.get("alert_jump_once", fm.get("alert_jump_once", 5))),
+                    "alert_accum_drop": float(body.get("alert_accum_drop", fm.get("alert_accum_drop", -7))),
+                    "accum_jump": float(body.get("accum_jump", fm.get("accum_jump", 10))),
+                    "stock_alert_drop_red": float(body.get("stock_alert_drop_red", fm.get("stock_alert_drop_red", -5))),
+                    "stock_alert_jump_red": float(body.get("stock_alert_jump_red", fm.get("stock_alert_jump_red", 7))),
+                    "stock_alert_accum_drop_red": float(body.get("stock_alert_accum_drop_red", fm.get("stock_alert_accum_drop_red", -10))),
+                    "stock_alert_accum_jump_red": float(body.get("stock_alert_accum_jump_red", fm.get("stock_alert_accum_jump_red", 12))),
+                    "poll_interval_seconds": int(body.get("poll_interval_seconds", fm.get("poll_interval_seconds", 600))),
+                })
                 _write_config(cfg)
                 self._send(*_json_response({"ok": True, "message": "监控配置已更新"}))
             except Exception as e:
