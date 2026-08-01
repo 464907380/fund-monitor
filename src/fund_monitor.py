@@ -216,6 +216,43 @@ def _fetch_stock_change(sina_code: str) -> tuple[str, float] | None:
     return None
 
 
+def _fetch_stock_changes_batch(sina_codes: list[str]) -> dict[str, tuple[str, float]]:
+    """批量获取个股行情（一次新浪请求，多个代码），返回 {sina_code: (name, chg)}
+    新浪一次最多约 50 个代码，超出分块请求。失败个股由调用方按需降级。
+    """
+    result: dict[str, tuple[str, float]] = {}
+    if not sina_codes:
+        return result
+    # 去重，按块处理（每块 40 个）
+    unique = list(dict.fromkeys(sina_codes))
+    for i in range(0, len(unique), 40):
+        chunk = unique[i:i + 40]
+        url = api_url("sina_hq_batch", codes=",".join(chunk))
+        try:
+            raw = fetch_bytes(url, {"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
+            if not raw:
+                continue
+            text = raw.decode("gbk", errors="ignore")
+            for line in text.strip().split("\n"):
+                m = re.search(r'hq_str_(\w+)="(.*?)"', line)
+                if not m:
+                    continue
+                code = m.group(1)
+                fields = m.group(2).split(",")
+                if len(fields) < 4:
+                    continue
+                name = fields[0]
+                prev_close = float(fields[2]) if fields[2] else 0
+                current = float(fields[3]) if fields[3] else 0
+                if prev_close:
+                    chg = round((current - prev_close) / prev_close * 100, 2)
+                    result[code] = (name, chg)
+                    _stock_quote_cache[code] = (time.time(), name, chg)
+        except Exception as e:
+            log.debug("批量获取个股失败: %s", e)
+    return result
+
+
 def _get_fund_holdings(code: str) -> list[dict]:
     """获取基金持仓（缓存，盘中不重复请求）"""
     if code not in _holdings_cache:
@@ -235,10 +272,12 @@ def _chg_text(chg: float) -> str:
 
 
 def check_holdings_intraday(fund_code: str, fund_name: str,
-                            stock_states: dict[str, dict]) -> list[str]:
+                            stock_states: dict[str, dict],
+                            quotes: dict[str, tuple[str, float]] | None = None) -> list[str]:
     """
     盘中检查基金持仓个股的涨跌，返回警报列表。
     stock_states: 个股状态字典（key=f"{fund_code}:{stock_code}"）
+    quotes: 可选，预取的个股行情 {sina_code: (name, chg)}，避免重复请求
     """
     now = datetime.datetime.now().strftime("%H:%M")
     alerts: list[str] = []
@@ -256,10 +295,13 @@ def check_holdings_intraday(fund_code: str, fund_name: str,
 
         checked += 1
         sina_code = _sina_stock_code(stock_code)
-        result = _fetch_stock_change(sina_code)
-        if result is None:
-            continue
-        _, chg = result  # chg = 当前涨跌幅%（相对昨收）
+        if quotes and sina_code in quotes:
+            chg = quotes[sina_code][1]
+        else:
+            result = _fetch_stock_change(sina_code)
+            if result is None:
+                continue
+            _, chg = result  # chg = 当前涨跌幅%（相对昨收）
 
         state_key = f"{fund_code}:{stock_code}"
         if state_key not in stock_states:
@@ -331,7 +373,7 @@ def check_intraday(code: str, state: dict) -> list[str]:
         result = _fetch_fund_estimate(code)
         if not result:
             return []
-        name, gszzl = result
+        name, gszzl, _ = result
 
         # 初始化当日状态
         if "first_td" not in state:
@@ -609,6 +651,8 @@ def monitor() -> None:
             hold_loaded = True
             log.info("持仓数据加载完毕")
 
+        _round_start = time.time()
+
         # 轮询检查每只基金 + 持仓个股（并行，加速持仓估算）
         fund_alerts: list[str] = []
         stock_alerts: list[str] = []
@@ -635,11 +679,20 @@ def monitor() -> None:
                 if states[code].get("last_td") is not None:
                     got_data = True
 
-        # 个股检查（并行，持仓已缓存 + 行情短缓存，速度较快）
+        # 个股检查（并行；先批量获取所有持仓个股行情，再按基金检查）
+        # 收集所有唯一个股代码
+        _all_stock_codes: list[str] = []
+        for f in FUND_LIST:
+            for h in _get_fund_holdings(f["code"]):
+                c = h.get("c", "")
+                if c:
+                    _all_stock_codes.append(_sina_stock_code(c))
+        # 批量获取行情（一次/分块请求，大幅减少请求数）
+        _batch_quotes = _fetch_stock_changes_batch(_all_stock_codes)
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             _stock_futures = {
-                executor.submit(check_holdings_intraday, f["code"], states[f["code"]].get("name", f["code"]), stock_states): f["code"]
+                executor.submit(check_holdings_intraday, f["code"], states[f["code"]].get("name", f["code"]), stock_states, _batch_quotes): f["code"]
                 for f in FUND_LIST
             }
             for _fut in concurrent.futures.as_completed(_stock_futures):
@@ -677,6 +730,9 @@ def monitor() -> None:
                      len(fund_alerts), len(stock_alerts))
         else:
             log.debug("本轮检查无警报")
+
+        # 记录单轮耗时（监控性能，判断能否支撑高频轮询）
+        log.info("本轮检查耗时 %.1f 秒（间隔 %d 秒）", time.time() - _round_start, POLL_INTERVAL)
 
         # 持久化状态快照（进程崩溃恢复用）
         _save_snapshot(states, stock_states, today, empty_rounds, hold_loaded)

@@ -119,6 +119,7 @@ _DEFAULTS = {
             "fund_rank": "https://fund.eastmoney.com/data/rankhandler.aspx",
             "fund_search_index": "https://fund.eastmoney.com/js/fundcode_search.js",
             "sina_hq": "https://hq.sinajs.cn/list={code}",
+            "sina_hq_batch": "https://hq.sinajs.cn/list={codes}",
             "sina_volume": "https://hq.sinajs.cn/list=sh000001,sz399001",
             "sina_market": "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData",
             "tencent_kline": "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,10,qfq",
