@@ -990,14 +990,12 @@ function toggleAutoRefresh() {
     _updateCountdownDisplay();
     _autoRefreshCountdown = setInterval(function() {
       _autoRefreshTicks--;
-      if (_autoRefreshTicks <= 0) {
-        _autoRefreshTicks = _autoRefreshInterval;
-        _doAutoRefresh();
-      }
+      if (_autoRefreshTicks <= 0) _autoRefreshTicks = 0;
       _updateCountdownDisplay();
     }, 1000);
     _doAutoRefresh();
     _savePref('fundAutoRefresh', '1');
+    _autoRefreshTimer = setInterval(_doAutoRefresh, _autoRefreshInterval * 1000);
   }
 }
 
@@ -1015,10 +1013,14 @@ function _saveRefreshInterval() {
   if (!sel) return;
   _autoRefreshInterval = parseInt(sel.value, 10) || 600;
   _savePref('fundRefreshInterval', String(_autoRefreshInterval));
-  // 如果正在刷新中，重置倒计时
+  // 如果正在刷新中，重置倒计时和定时器
   if (_autoRefreshEnabled) {
     _autoRefreshTicks = _autoRefreshInterval;
     _updateCountdownDisplay();
+    if (_autoRefreshTimer) {
+      clearInterval(_autoRefreshTimer);
+      _autoRefreshTimer = setInterval(_doAutoRefresh, _autoRefreshInterval * 1000);
+    }
   }
 }
 

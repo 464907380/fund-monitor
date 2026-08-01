@@ -305,7 +305,7 @@ def check_intraday(code: str, state: dict) -> list[str]:
         result = _fetch_fund_estimate(code)
         if not result:
             return []
-        name, gszzl, _ = result
+        name, gszzl = result
 
         # 初始化当日状态
         if "first_td" not in state:
