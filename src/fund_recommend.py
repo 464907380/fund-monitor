@@ -99,11 +99,17 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
     now = datetime.datetime.now()
     is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
 
-    # 统一走接口获取涨跌幅（新浪昨日数据 / LSJZ今日净值），不使用持仓估算
+    # 涨跌来源：收盘后=LSJZ当日净值，盘中(9:30-15:00)=持仓估算，其余=新浪昨日
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
     def _fetch_one_td(code: str) -> tuple[str, float | None, str]:
-        """返回 (code, 涨跌幅, 来源)"""
+        """返回 (code, 涨跌幅, 来源)
+
+        来源优先级（当日涨跌维度开启时）:
+          收盘后 → LSJZ 当日实际净值 "lsjz"
+          盘中(9:30-15:00) → 持仓估算 "holdings"
+          其余/失败 → 新浪昨日 "fallback"
+        """
         # 收盘后先查 LSJZ 实际净值（优先，避免用新浪的昨日数据）
         if is_after_market:
             try:
@@ -115,6 +121,16 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                 _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
                 if _m_date and _m_val and _m_date.group(1) == today_str:
                     return (code, float(_m_val.group(1)), "lsjz")
+            except Exception:
+                pass
+        # 盘中(9:30-15:00)：优先持仓估算（与自选表"估算"一致）
+        _now2 = datetime.datetime.now()
+        if (9, 30) <= (_now2.hour, _now2.minute) < (15, 0):
+            try:
+                from fund_watch import _estimate_from_holdings
+                _est = _estimate_from_holdings(code)
+                if _est is not None:
+                    return (code, _est, "holdings")
             except Exception:
                 pass
         try:
