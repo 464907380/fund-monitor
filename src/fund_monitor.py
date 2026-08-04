@@ -513,14 +513,18 @@ def _render_fund_section(fund_name: str, fund_code: str,
              f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}{"（" + fund_code + "）" if fund_code else ""}</p>']
     for a in matched_fa:
         icon, text = _icon_text(a)
+        _mt = re.search(r'\[(\d{1,2}:\d{2})\]', text)
+        _ts = f"[{_mt.group(1)}] " if _mt else ""
         clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
         color = "#66bb6a" if icon == "🔴" else "#ef5350"
-        parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 基金：{clean_fa}</p>')
+        parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 基金：{_ts}{clean_fa}</p>')
     for a in s_alerts:
         icon, text = _icon_text(a)
+        _mt = re.search(r'\[(\d{1,2}:\d{2})\]', text)
+        _ts = f"[{_mt.group(1)}] " if _mt else ""
         clean = text.split("持仓", 1)[-1] if "持仓" in a else text
         color = "#66bb6a" if icon == "🔴" else "#ef5350"
-        parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 持股·{clean}</p>')
+        parts.append(f'<p style="margin:2px 0;font-size:12px;color:{color};">{icon} 持股·{_ts}{clean}</p>')
     parts.append('</div></td></tr>')
     return '\n'.join(parts)
 
@@ -542,12 +546,16 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
             lines.append(f"**{fund_name}{"（" + fund_code + "）" if fund_code else ""}**")
             for a in matched_fa:
                 icon, text = _icon_text(a)
+                _mt = re.search(r'\[(\d{1,2}:\d{2})\]', text)
+                _ts = f"[{_mt.group(1)}] " if _mt else ""
                 clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
-                lines.append(f"  {icon} 基金：{clean_fa}")
+                lines.append(f"  {icon} 基金：{_ts}{clean_fa}")
             for a in s_alerts:
                 icon, text = _icon_text(a)
+                _mt = re.search(r'\[(\d{1,2}:\d{2})\]', text)
+                _ts = f"[{_mt.group(1)}] " if _mt else ""
                 clean = text.split("持仓", 1)[-1] if "持仓" in a else text
-                lines.append(f"  {icon} 持股·{clean}")
+                lines.append(f"  {icon} 持股·{_ts}{clean}")
 
     remaining = [a for a in fund_alerts if not any(
         fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
