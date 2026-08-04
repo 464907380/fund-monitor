@@ -470,20 +470,22 @@ def _push_html(fund_alerts: list[str],
         fn in a for fn in (list(stock_groups.keys()) if stock_groups else [])
     )]
     if remaining:
-        # 从剩余警报中提取基金名，按基金分组
+        # 从剩余警报中提取基金名+代码，按基金分组
         import re as _re
-        remain_groups: dict[str, list[str]] = {}
+        remain_groups: dict[tuple[str, str], list[str]] = {}
         for a in remaining:
-            # 提取基金名: 格式 [时间] 基金名(代码)（先去掉开头的🔴🟢图标，避免带入标题）
+            # 提取基金名+代码: 格式 [时间] 基金名(代码)（先去掉开头的🔴🟢图标）
             _clean_a = _re.sub(r'^[🔴🟢]\s*', '', _strip_html(a))
-            m = _re.search(r'\[?\d*:?\d*\]?\s*(.*?)\(\d{6}\)', _clean_a)
+            m = _re.search(r'\[?\d*:?\d*\]?\s*(.*?)\((\d{6})\)', _clean_a)
             fname = m.group(1).strip() if m else "其他"
-            if fname not in remain_groups:
-                remain_groups[fname] = []
-            remain_groups[fname].append(a)
+            fcode = m.group(2) if m else ""
+            key = (fname, fcode)
+            if key not in remain_groups:
+                remain_groups[key] = []
+            remain_groups[key].append(a)
         html_remaining = ''.join(
-            _render_fund_section(fn, "", fa, [])
-            for fn, fa in sorted(remain_groups.items())
+            _render_fund_section(fn, fc, fa, [])
+            for (fn, fc), fa in sorted(remain_groups.items())
         )
 
     html = f"""<!DOCTYPE html>
