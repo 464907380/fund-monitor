@@ -162,10 +162,12 @@ def _request_with_retry(req: urllib.request.Request, decode: bool = True) -> str
     last_err = None
     for attempt in range(1, _RETRY_MAX + 1):
         try:
-            resp = urllib.request.urlopen(req, timeout=get_timeout("request_with_retry", 15)).read()
+            # 用 with 确保 response 被正确关闭，防止连接/句柄泄漏导致进程 OOM 被杀
+            with urllib.request.urlopen(req, timeout=get_timeout("request_with_retry", 15)) as _resp:
+                _raw = _resp.read()
             if decode:
-                return resp.decode("utf-8", errors="ignore")  # type: ignore[no-any-return]
-            return resp  # type: ignore[no-any-return]
+                return _raw.decode("utf-8", errors="ignore")  # type: ignore[no-any-return]
+            return _raw  # type: ignore[no-any-return]
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             last_err = e
             if attempt < _RETRY_MAX:
@@ -357,7 +359,8 @@ def send_wechat(content: str, markdown: bool = True) -> bool:
         headers={"Content-Type": "application/json"},
     )
     try:
-        urllib.request.urlopen(req, timeout=get_timeout("wechat_push", 10)).read()
+        with urllib.request.urlopen(req, timeout=get_timeout("wechat_push", 10)) as _resp:
+            _resp.read()
         log.info("企业微信推送成功")
         return True
     except Exception as e:

@@ -85,15 +85,18 @@ def _stop_task(task_id: str) -> bool:
 def _spawn_recommend() -> bool:
     """启动推荐任务，返回是否成功"""
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
+    _err_f = None
     try:
         _si = subprocess.STARTUPINFO()
         _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         _si.wShowWindow = subprocess.SW_HIDE
+        # stderr 重定向到文件（不用 DEVNULL），崩溃时保留 Traceback 便于诊断
+        _err_f = open(os.path.join(_PROJECT_ROOT, "recommend_err.log"), "a", encoding="utf-8")
         proc = subprocess.Popen(
             [sys.executable, script],
             cwd=_SCRIPT_DIR,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=_err_f,
             creationflags=subprocess.CREATE_NEW_CONSOLE,
             startupinfo=_si,
         )
@@ -102,8 +105,12 @@ def _spawn_recommend() -> bool:
         with _proc_lock:
             _recommend_state["proc"] = proc
 
-        def _wait_and_cleanup(p=proc) -> None:
-            p.wait()
+        def _wait_and_cleanup(p=proc, ef=_err_f) -> None:
+            try:
+                p.wait()
+            finally:
+                if ef is not None:
+                    ef.close()
             if p.returncode != 0:
                 _err_msg = f"推荐进程异常退出(code={p.returncode})，请查看 recommend.log"
                 write_heartbeat("fund_recommend", progress=0, total=0, overall_pct=100,
@@ -123,6 +130,8 @@ def _spawn_recommend() -> bool:
     except Exception as e:
         print(f"[ERROR] 推荐启动异常: {e}", flush=True)
         clear_heartbeat("fund_recommend")
+        if _err_f is not None:
+            _err_f.close()
         return False
 
 
@@ -1156,7 +1165,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 def _fetch_f10(path: str) -> str:
                     url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/{path}"
                     r = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    return _ur.urlopen(r, timeout=get_timeout("default", 10)).read().decode("gbk", errors="ignore")
+                    with _ur.urlopen(r, timeout=get_timeout("default", 10)) as _resp:
+                        return _resp.read().decode("gbk", errors="ignore")
 
                 result: dict = {}
 
