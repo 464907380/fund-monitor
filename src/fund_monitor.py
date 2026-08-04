@@ -429,36 +429,30 @@ def _icon_text(raw: str) -> tuple[str, str]:
 
 
 def _make_subject(fund_alerts: list[str], stock_alerts: list[str]) -> str:
-    """从警报列表生成描述性邮件标题"""
-    import re as _re
-    down = 0
-    up = 0
-    worst = 0.0
-    worst_name = ""
-    for a in fund_alerts + stock_alerts:
-        is_down = a.startswith("🔴")
-        if is_down:
-            down += 1
-        else:
-            up += 1
-        # 提取涨跌幅数值
-        m = _re.search(r'([+-]\d+\.?\d*)%', a)
-        if m:
-            val = float(m.group(1))
-            if is_down and val < worst:
-                worst = val
-                # 提取基金/个股名
-                nm = _re.sub(r'^[🔴🟢]\s*<font[^>]*>\[?\d*:?\d*\]?\s*', '', a)
-                nm = _re.sub(r'\s*急[涨跌].*', '', nm)
-                worst_name = nm[:12]
-    parts = []
-    if down:
-        parts.append(f"{down}只{'跌' if down==1 else '跌'}")
-        if worst < 0 and worst_name:
-            parts[-1] = f"{down}只跌（最大{worst:.1f}%）"
-    if up:
-        parts.append(f"{up}只涨")
-    summary = "、".join(parts) if parts else "盘中异动"
+    """从警报列表生成描述性邮件标题（区分基金/持股涨跌数量）"""
+    def _count(alerts: list[str]) -> tuple[int, int]:
+        down = sum(1 for a in alerts if a.startswith("🔴"))
+        up = sum(1 for a in alerts if a.startswith("🟢"))
+        return down, up
+
+    parts: list[str] = []
+    fd, fu = _count(fund_alerts)
+    if fund_alerts:
+        seg = []
+        if fd:
+            seg.append(f"{fd}只跌")
+        if fu:
+            seg.append(f"{fu}只涨")
+        parts.append(f"基金{'、'.join(seg)}" if seg else "基金异动")
+    sd, su = _count(stock_alerts)
+    if stock_alerts:
+        seg = []
+        if sd:
+            seg.append(f"{sd}只跌")
+        if su:
+            seg.append(f"{su}只涨")
+        parts.append(f"持股{'、'.join(seg)}" if seg else "持股异动")
+    summary = " · ".join(parts) if parts else "盘中异动"
     return f"🚨 {summary}"
 
 
@@ -514,7 +508,7 @@ def _render_fund_section(fund_name: str, fund_code: str,
                           matched_fa: list[str], s_alerts: list[str]) -> str:
     """渲染单只基金的警报 HTML 区块"""
     parts = [f'<tr><td style="padding:10px 12px;"><div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:10px;">'
-             f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}</p>']
+             f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}{"（" + fund_code + "）" if fund_code else ""}</p>']
     for a in matched_fa:
         icon, text = _icon_text(a)
         clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
@@ -543,7 +537,7 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
             if not matched_fa and not s_alerts:
                 continue
             lines.append("")
-            lines.append(f"**{fund_name}**")
+            lines.append(f"**{fund_name}{"（" + fund_code + "）" if fund_code else ""}**")
             for a in matched_fa:
                 icon, text = _icon_text(a)
                 clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
