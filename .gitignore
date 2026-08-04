@@ -13,6 +13,7 @@ fund_watch.log
 monitor.log
 server.log
 recommend.log
+recommend_err.log
 
 # 节假日 API 缓存（自动生成）
 .holiday_cache.json
