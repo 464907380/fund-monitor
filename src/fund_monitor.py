@@ -480,8 +480,9 @@ def _push_html(fund_alerts: list[str],
         import re as _re
         remain_groups: dict[str, list[str]] = {}
         for a in remaining:
-            # 提取基金名: 格式 [时间] 基金名(代码)
-            m = _re.search(r'\[?\d*:?\d*\]?\s*(.*?)\(\d{6}\)', _strip_html(a))
+            # 提取基金名: 格式 [时间] 基金名(代码)（先去掉开头的🔴🟢图标，避免带入标题）
+            _clean_a = _re.sub(r'^[🔴🟢]\s*', '', _strip_html(a))
+            m = _re.search(r'\[?\d*:?\d*\]?\s*(.*?)\(\d{6}\)', _clean_a)
             fname = m.group(1).strip() if m else "其他"
             if fname not in remain_groups:
                 remain_groups[fname] = []
