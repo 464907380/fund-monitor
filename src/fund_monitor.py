@@ -513,7 +513,7 @@ def _render_fund_section(fund_name: str, fund_code: str,
                           matched_fa: list[str], s_alerts: list[str]) -> str:
     """渲染单只基金的警报 HTML 区块"""
     parts = [f'<tr><td style="padding:10px 12px;"><div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:10px;">'
-             f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}（{fund_code}）</p>']
+             f'<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#e0e0e0;">{fund_name}</p>']
     for a in matched_fa:
         icon, text = _icon_text(a)
         clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
@@ -542,7 +542,7 @@ def push_alert(fund_alerts: list[str], stock_alerts: list[str],
             if not matched_fa and not s_alerts:
                 continue
             lines.append("")
-            lines.append(f"**{fund_name}（{fund_code}）**")
+            lines.append(f"**{fund_name}**")
             for a in matched_fa:
                 icon, text = _icon_text(a)
                 clean_fa = re.sub(r'^.+?\d{6}\)\s*', '', text)
