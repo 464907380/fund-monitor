@@ -253,6 +253,32 @@ def _strip_html(text: str) -> str:
 
 # ── 基金实时估算（fund_watch 和 fund_monitor 共用） ──────────
 
+# 基金代码→名称映射缓存（懒加载天天基金全市场索引，线程安全）
+_FUND_NAME_MAP: dict[str, str] | None = None
+_FUND_NAME_MAP_LOCK = threading.Lock()
+
+
+def _get_fund_name(code: str) -> str:
+    """获取基金名称（全市场索引缓存，首次加载后 O(1)）"""
+    global _FUND_NAME_MAP
+    if _FUND_NAME_MAP is None:
+        with _FUND_NAME_MAP_LOCK:
+            if _FUND_NAME_MAP is None:
+                _FUND_NAME_MAP = {}
+                try:
+                    url = api_url("fund_search_index")
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=get_timeout("load_fund_index", 15)) as r:
+                        data = r.read().decode("utf-8")
+                    # 格式: var r = [["000001","HXCZHH","华夏成长混合","混合型-灵活",...], ...]
+                    m = re.search(r"var r\s*=\s*(\[.*?\]);", data, re.DOTALL)
+                    if m:
+                        raw = json.loads(m.group(1))
+                        _FUND_NAME_MAP = {item[0]: item[2] for item in raw}
+                except Exception:
+                    _FUND_NAME_MAP = {}
+    return _FUND_NAME_MAP.get(code, "")
+
 def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
     """获取基金当日涨跌幅，优先返回实际净值，降级到实时估算。
 
@@ -296,7 +322,7 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
 
     # 如果估算失败但实际净值可用，返回实际净值
     if actual is not None:
-        return (actual[0], actual[1], "lsjz")
+        return (_get_fund_name(code) or actual[0], actual[1], "lsjz")
 
     # 3. 持仓估算（仅盘中有效；盘前股票行情为昨日数据，估算无意义）
     _h, _m = now.hour, now.minute
@@ -306,7 +332,7 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
             from fund_watch import _estimate_from_holdings
             est = _estimate_from_holdings(code)
             if est is not None:
-                return (code, est, "holdings")
+                return (_get_fund_name(code) or code, est, "holdings")
         except Exception:
             pass
     # 4. 新浪昨日数据（盘前回退到此）
