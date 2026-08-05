@@ -8,7 +8,7 @@ import time
 import datetime
 from config import CFG, api_url, get_timeout
 from config import get_secret as _get_secret
-from fund_utils import fetch, log, HISTORY_DIR, _fetch_fund_estimate
+from fund_utils import fetch, fetch_bytes, log, HISTORY_DIR, _fetch_fund_estimate
 from fund_scoring import SCORE_DIMS, calc_score_detail
 from fund_metrics import _calc_nav_metrics
 
@@ -183,40 +183,68 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
     return (None, "")
 
 
+def _fetch_stock_quotes_batch(sina_codes: list[str]) -> dict[str, tuple[str, float]]:
+    """批量获取个股行情（新浪一次请求多代码，40个/块），返回 {sina_code: (name, chg)}"""
+    result: dict[str, tuple[str, float]] = {}
+    if not sina_codes:
+        return result
+    unique = list(dict.fromkeys(sina_codes))
+    for i in range(0, len(unique), 40):
+        chunk = unique[i:i + 40]
+        url = api_url("sina_hq_batch", codes=",".join(chunk))
+        try:
+            raw = fetch_bytes(url, {"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
+            if not raw:
+                continue
+            text = raw.decode("gbk", errors="ignore")
+            for line in text.strip().split("\n"):
+                m = re.search(r'hq_str_(\w+)="(.*?)"', line)
+                if not m:
+                    continue
+                code = m.group(1)
+                fields = m.group(2).split(",")
+                if len(fields) < 4 or not fields[2]:
+                    continue
+                prev_close = float(fields[2])
+                current = float(fields[3]) if fields[3] else 0
+                if prev_close:
+                    chg = round((current - prev_close) / prev_close * 100, 2)
+                    result[code] = (fields[0], chg)
+        except Exception:
+            continue
+    return result
+
+
 def _estimate_from_holdings(code: str) -> float | None:
-    """根据持仓股票实时行情估算基金涨跌幅"""
-    import urllib.request, re as _re
+    """根据持仓股票实时行情估算基金涨跌幅（批量获取行情，避免逐只串行请求）"""
     try:
         holds = _parse_holdings(code)
-        if holds:
-            total_w = 0.0
-            weighted_chg = 0.0
-            for h in holds:
-                if not h.get("c") or not h.get("p"):
-                    continue
-                sc = h["c"]
-                prefix = "sh" if h.get("m") == "sh" else "sz"
-                try:
-                    url = f"https://hq.sinajs.cn/list={prefix}{sc}"
-                    req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Referer":"https://finance.sina.com.cn"})
-                    with urllib.request.urlopen(req, timeout=5) as resp:
-                        raw = resp.read().decode("gbk")
-                    m = _re.search(r'"[^"]*"', raw)
-                    if not m:
-                        continue
-                    parts = m.group(0).strip('"').split(",")
-                    if len(parts) < 4:
-                        continue
-                    prev_close = float(parts[2]) if parts[2] else 0
-                    current = float(parts[3]) if parts[3] else 0
-                    if prev_close and prev_close > 0:
-                        chg_pct = (current - prev_close) / prev_close * 100
-                        total_w += h["p"]
-                        weighted_chg += chg_pct * h["p"]
-                except Exception:
-                    continue
-            if total_w >= 5:
-                return round(weighted_chg / total_w, 2)
+        if not holds:
+            return None
+        # 收集所有持仓股票的 sina 代码，批量一次获取行情
+        sina_codes = []
+        for h in holds:
+            sc = h.get("c", "")
+            if not sc:
+                continue
+            prefix = "sh" if h.get("m") == "sh" else "sz"
+            sina_codes.append(f"{prefix}{sc}")
+        quotes = _fetch_stock_quotes_batch(sina_codes)
+        total_w = 0.0
+        weighted_chg = 0.0
+        for h in holds:
+            if not h.get("c") or not h.get("p"):
+                continue
+            sc = h["c"]
+            prefix = "sh" if h.get("m") == "sh" else "sz"
+            item = quotes.get(f"{prefix}{sc}")
+            if not item:
+                continue
+            chg_pct = item[1]
+            total_w += h["p"]
+            weighted_chg += chg_pct * h["p"]
+        if total_w >= 5:
+            return round(weighted_chg / total_w, 2)
     except Exception:
         pass
     return None
@@ -358,16 +386,19 @@ def get(code: str) -> dict:
 
 def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
     """从 LSJZ 历史净值 API 并行获取多页净值数据，兼容旧格式返回。
-    
+
     返回 [{d: YYYY-MM-DD, v: nav_value}, ...] 按日期升序。
-    LSJZ API 每页 20 条，max_pages=38 约 760 条（~3 年数据）。
+    LSJZ API pageSize=200（一次最多约200条），max_pages 按旧 20条/页 换算页数。
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import urllib.request, re, json as _json
 
+    # 换算页数：旧 max_pages 页 × 20 条/页 → 新 200 条/页
+    _total_pages = max(1, (max_pages * 20 + 199) // 200)
+
     def _fetch_page(page: int) -> list[dict]:
         url = (f"https://api.fund.eastmoney.com/f10/lsjz"
-               f"?callback=j&fundCode={code}&pageIndex={page}&pageSize=20")
+               f"?callback=j&fundCode={code}&pageIndex={page}&pageSize=200")
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://fund.eastmoney.com/",
@@ -382,8 +413,8 @@ def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
         return [{"d": it["FSRQ"], "v": float(it["DWJZ"])} for it in items if it.get("DWJZ")]
 
     all_by_date: dict[str, float] = {}
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        futs = {ex.submit(_fetch_page, p): p for p in range(1, max_pages + 1)}
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        futs = {ex.submit(_fetch_page, p): p for p in range(1, _total_pages + 1)}
         for fut in as_completed(futs):
             for entry in fut.result():
                 if entry["d"] not in all_by_date:  # 去重，最新优先
@@ -442,9 +473,30 @@ def _required_nav_pages() -> int:
 
 
 def _fetch_fund_name_light(code: str) -> str:
-    """获取基金名，优先 fundgz，降级到新浪财经"""
+    """获取基金名，优先全市场名称索引缓存（替代已失效的 fundgz），降级新浪/fundgz"""
     import urllib.request, re, json as _json
-    # 1. fundgz（原主力，近期可能返回404）
+    # 1. 全市场名称索引缓存（懒加载，O(1)）
+    try:
+        from fund_utils import _get_fund_name
+        nm = _get_fund_name(code)
+        if nm:
+            return nm
+    except Exception:
+        pass
+    # 2. 新浪降级
+    try:
+        url = f"https://hq.sinajs.cn/list=of{code}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn"})
+        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
+            text = r.read().decode("gbk")
+        m = re.search(r'"(.*?)"', text)
+        if m:
+            parts = m.group(1).split(",")
+            if parts[0]:
+                return parts[0]
+    except Exception:
+        pass
+    # 3. fundgz 兜底
     try:
         url = f"https://fundgz.1234567.com.cn/js/{code}.js"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -456,19 +508,6 @@ def _fetch_fund_name_light(code: str) -> str:
             name = data.get("name", "")
             if name:
                 return name
-    except Exception:
-        pass
-    # 2. 降级：新浪财经
-    try:
-        url = f"https://hq.sinajs.cn/list=of{code}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn"})
-        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
-            text = r.read().decode("gbk")
-        m = re.search(r'"(.*?)"', text)
-        if m:
-            parts = m.group(1).split(",")
-            if parts[0]:
-                return parts[0]
     except Exception:
         pass
     return ""
