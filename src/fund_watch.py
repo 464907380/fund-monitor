@@ -416,7 +416,11 @@ def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
     with ThreadPoolExecutor(max_workers=3) as ex:
         futs = {ex.submit(_fetch_page, p): p for p in range(1, _total_pages + 1)}
         for fut in as_completed(futs):
-            for entry in fut.result():
+            try:
+                page_entries = fut.result()
+            except Exception:
+                continue  # 单页网络失败跳过，不影响整体
+            for entry in page_entries:
                 if entry["d"] not in all_by_date:  # 去重，最新优先
                     all_by_date[entry["d"]] = entry["v"]
 

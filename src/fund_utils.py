@@ -256,14 +256,16 @@ def _strip_html(text: str) -> str:
 # 基金代码→名称映射缓存（懒加载天天基金全市场索引，线程安全）
 _FUND_NAME_MAP: dict[str, str] | None = None
 _FUND_NAME_MAP_LOCK = threading.Lock()
+_FUND_NAME_MAP_LAST_FAIL: float = 0.0  # 上次索引加载失败时间戳（用于定时重试）
 
 
 def _get_fund_name(code: str) -> str:
-    """获取基金名称（全市场索引缓存，首次加载后 O(1)）"""
-    global _FUND_NAME_MAP
-    if _FUND_NAME_MAP is None:
+    """获取基金名称（全市场索引缓存，首次加载后 O(1)；加载失败后定时重试）"""
+    global _FUND_NAME_MAP, _FUND_NAME_MAP_LAST_FAIL
+    now = time.time()
+    if _FUND_NAME_MAP is None or (not _FUND_NAME_MAP and now - _FUND_NAME_MAP_LAST_FAIL > 120):
         with _FUND_NAME_MAP_LOCK:
-            if _FUND_NAME_MAP is None:
+            if _FUND_NAME_MAP is None or (not _FUND_NAME_MAP and now - _FUND_NAME_MAP_LAST_FAIL > 120):
                 _FUND_NAME_MAP = {}
                 try:
                     url = api_url("fund_search_index")
@@ -275,8 +277,9 @@ def _get_fund_name(code: str) -> str:
                     if m:
                         raw = json.loads(m.group(1))
                         _FUND_NAME_MAP = {item[0]: item[2] for item in raw}
+                    _FUND_NAME_MAP_LAST_FAIL = 0.0
                 except Exception:
-                    _FUND_NAME_MAP = {}
+                    _FUND_NAME_MAP_LAST_FAIL = now
     return _FUND_NAME_MAP.get(code, "")
 
 def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:

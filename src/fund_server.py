@@ -1458,7 +1458,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         d = get_scoring_data(code)
                         _name = d.get("n") or fallback_name
                         if not _name:
-                            return None
+                            # 名称获取失败时降级显示代码，避免整行缺失
+                            _name = code
                         _td, _td_src = _parse_real_time(code)
                         if _td is None:
                             from fund_utils import _fetch_fund_estimate
