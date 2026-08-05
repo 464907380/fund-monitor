@@ -388,17 +388,16 @@ def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
     """从 LSJZ 历史净值 API 并行获取多页净值数据，兼容旧格式返回。
 
     返回 [{d: YYYY-MM-DD, v: nav_value}, ...] 按日期升序。
-    LSJZ API pageSize=200（一次最多约200条），max_pages 按旧 20条/页 换算页数。
+    注意: LSJZ API 每页固定返回 20 条（pageSize>20 无效），页数即 max_pages。
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import urllib.request, re, json as _json
 
-    # 换算页数：旧 max_pages 页 × 20 条/页 → 新 200 条/页
-    _total_pages = max(1, (max_pages * 20 + 199) // 200)
+    _total_pages = max(1, max_pages)
 
     def _fetch_page(page: int) -> list[dict]:
         url = (f"https://api.fund.eastmoney.com/f10/lsjz"
-               f"?callback=j&fundCode={code}&pageIndex={page}&pageSize=200")
+               f"?callback=j&fundCode={code}&pageIndex={page}&pageSize=20")
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://fund.eastmoney.com/",
