@@ -308,7 +308,9 @@ def _parse_holdings(code: str) -> list[dict] | None:
                 elif prefix == "1":
                     market = "sh"
             holds.append({"n": name, "c": code_s, "p": pct, "m": market})
-        return holds if holds else None
+        # 只取前十大持仓：fund_holdings 接口返回两个表格（第2组列结构不同、
+        # 无占比数据且与第1组重复），避免解析出占比为0的无效条目
+        return (holds[:10] if holds else None)
     except Exception as e:
         log.debug("拉取重仓股失败 %s: %s", code, e)
         return None
