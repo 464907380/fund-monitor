@@ -1400,6 +1400,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     _td_src = _fe[2]
                             else:
                                 cached["td"] = _td
+                            # 实时数据失败或降级到"昨日"时，回退推荐缓存里的今日估算，避免显示昨日
+                            if (_td is None or _td_src == "fallback") and isinstance(cached.get("td"), (int, float)):
+                                _td = round(cached["td"], 2)
+                                _td_src = cached.get("_td_src") or "holdings"
                             day_s = f"{_td:+.2f}%" if _td is not None else ""
                             name = cached.get("name", "")
                             row = {
