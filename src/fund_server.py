@@ -1813,16 +1813,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         else:
                             score = round(pct_pos * 100)
                         curve.append([v, score])
-                    # 极值延展：在得分接近0的一端外推一段，让超低/超高值也有区分度
+                    # 极值延展：让超低/超高值也有区分度
                     data_range = curve[-1][0] - curve[0][0] if len(curve) >= 2 else 10
                     extend = max(round(data_range * 0.3, 2), round(abs(curve[0][0]) * 0.15, 2), 3)
-                    if not is_lower and len(curve) >= 2 and curve[0][1] < 10:
-                        # 越高越好：左端延展（提升首点分数+加左延展点）
-                        bump = min(10, max(5, curve[1][1] / 2))
-                        new_left = round(curve[0][0] - extend, 2)
-                        curve.insert(0, [new_left, 0])
-                        if len(curve) >= 3 and curve[2][1] > bump:
-                            curve[1][1] = round(bump)
+                    if not is_lower and len(curve) >= 2:
+                        # 越高越好：低分端负区间梯度化——避免所有负收益/低值都0分
+                        # （校准数据常为已筛选的正收益池，负区间无分位点 → 首点0分截断）
+                        x0, y0 = curve[0]
+                        if y0 < 25:
+                            zero_base = 30  # 0 收益基准分（中性偏弱）
+                            if x0 > 0:
+                                # 数据全为正：负下界延伸到合理负区间
+                                neg_bound = round(-max(20, abs(x0) * 2), 2)
+                            else:
+                                neg_bound = round(x0 - max(10, abs(x0)), 2)
+                            # 保留原曲线中基准分以上的部分（正收益按原百分位）
+                            rest = [p for p in curve if p[1] >= zero_base - 5]
+                            new_curve = [[neg_bound, 0], [0, zero_base]] + (rest or [[x0, zero_base]])
+                            # 保证单调不下降
+                            curve = []
+                            prev_y = -1.0
+                            for _pt in new_curve:
+                                if _pt[1] >= prev_y:
+                                    curve.append(_pt)
+                                    prev_y = _pt[1]
                     elif is_lower and len(curve) >= 2 and curve[-1][1] < 10:
                         # 越低越好：右端延展（提升末点分数+加右延展点）
                         bump = min(10, max(5, curve[-2][1] / 2))
