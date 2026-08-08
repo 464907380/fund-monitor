@@ -1774,8 +1774,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # 需要解析百分号字符串的字段
                 pct_keys = {"f5"}
 
-                # 直接使用推荐缓存中的维度数据（无需重新拉取）
-                all_data = rec_data
+                # 校准数据：推荐缓存 + 自选基金（覆盖负收益等极端样本，使曲线
+                # 在负收益/低值区间也有区分度，而非全部截断为0分）
+                all_data = list(rec_data)
+                try:
+                    from fund_watch import get_scoring_data
+                    _fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
+                    if os.path.exists(_fl_path):
+                        _fl = json.load(open(_fl_path, encoding="utf-8"))
+                        _rec_codes = {r.get("code") for r in rec_data}
+                        _self_codes = [f.get("code", "") for f in _fl if f.get("code") and f["code"] not in _rec_codes]
+                        if _self_codes:
+                            import concurrent.futures as _cf2
+                            with _cf2.ThreadPoolExecutor(max_workers=8) as _ex2:
+                                _futs2 = {_ex2.submit(get_scoring_data, c): c for c in _self_codes}
+                                for _fut2 in _cf2.as_completed(_futs2):
+                                    try:
+                                        _d2 = _fut2.result()
+                                        if _d2:
+                                            all_data.append(_d2)
+                                    except Exception:
+                                        pass
+                except Exception:
+                    pass
                 for dim in dims:
                     key = dim.get("key", "")
                     name = dim.get("name", "")
@@ -1789,61 +1810,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if len(vals) < 10:
                         continue  # 数据不足不校准
                     vals.sort()
-                    n = len(vals)
-                    # 每10%一个百分位点，共11个点，粒度更细
-                    percentiles = list(range(0, 101, 10))
-                    pts = []
-                    for p in percentiles:
-                        idx = min(int(n * p / 100), n - 1)
-                        pts.append(vals[idx])
-                    # 去重：相邻值相同则保留一个（避免曲线上出现平线断点）
-                    uniq = []
-                    for v in pts:
-                        if not uniq or abs(v - uniq[-1]) > 1e-9:
-                            uniq.append(v)
-                    pts = uniq
-                    # 重新计算对应的百分位索引
                     is_lower = name in lower_better
+                    # 收集唯一数据值（升序）
+                    uniq_vals = sorted(set(vals))
+                    if len(uniq_vals) < 2:
+                        continue  # 数据不足不校准
+                    # 点数过多时等距抽样（最多101点，保证0-100严格单调可行）
+                    if len(uniq_vals) > 101:
+                        _step = len(uniq_vals) / 100
+                        uniq_vals = [uniq_vals[min(int(i * _step), len(uniq_vals) - 1)] for i in range(101)]
+                        uniq_vals = sorted(set(uniq_vals))
+                    m = len(uniq_vals)
+                    # 每个唯一值一个分数，强制严格单调（数据不一样 → 分数不一样）
                     curve = []
-                    n_pts = len(pts)
-                    for i, v in enumerate(pts):
-                        pct_pos = i / (n_pts - 1) if n_pts > 1 else 0.5
-                        if is_lower:
-                            score = round((1 - pct_pos) * 100)
-                        else:
-                            score = round(pct_pos * 100)
-                        curve.append([v, score])
-                    # 极值延展：让超低/超高值也有区分度
-                    data_range = curve[-1][0] - curve[0][0] if len(curve) >= 2 else 10
-                    extend = max(round(data_range * 0.3, 2), round(abs(curve[0][0]) * 0.15, 2), 3)
-                    if not is_lower and len(curve) >= 2:
-                        # 越高越好：低分端负区间梯度化——避免所有负收益/低值都0分
-                        # （校准数据常为已筛选的正收益池，负区间无分位点 → 首点0分截断）
-                        x0, y0 = curve[0]
-                        if y0 < 25:
-                            zero_base = 30  # 0 收益基准分（中性偏弱）
-                            if x0 > 0:
-                                # 数据全为正：负下界延伸到合理负区间
-                                neg_bound = round(-max(20, abs(x0) * 2), 2)
-                            else:
-                                neg_bound = round(x0 - max(10, abs(x0)), 2)
-                            # 保留原曲线中基准分以上的部分（正收益按原百分位）
-                            rest = [p for p in curve if p[1] >= zero_base - 5]
-                            new_curve = [[neg_bound, 0], [0, zero_base]] + (rest or [[x0, zero_base]])
-                            # 保证单调不下降
-                            curve = []
-                            prev_y = -1.0
-                            for _pt in new_curve:
-                                if _pt[1] >= prev_y:
-                                    curve.append(_pt)
-                                    prev_y = _pt[1]
-                    elif is_lower and len(curve) >= 2 and curve[-1][1] < 10:
-                        # 越低越好：右端延展（提升末点分数+加右延展点）
-                        bump = min(10, max(5, curve[-2][1] / 2))
-                        new_right = round(curve[-1][0] + extend, 2)
-                        curve.append([new_right, 0])
-                        if len(curve) >= 3 and curve[-3][1] > bump:
-                            curve[-2][1] = round(bump)
+                    prev_s = -1
+                    for i, v in enumerate(uniq_vals):
+                        s = round(i / (m - 1) * 100) if m > 1 else 50
+                        if s <= prev_s:
+                            s = min(100, prev_s + 1)
+                        curve.append([v, s])
+                        prev_s = s
+                    # 值域外两端延伸，保持单调（低端覆盖负收益/低值，高端留余量）
+                    span = curve[-1][0] - curve[0][0] if curve[-1][0] != curve[0][0] else max(abs(curve[0][0]) or 1, 1)
+                    _ext_lo = round(curve[0][0] - span * 0.2, 2)
+                    _ext_hi = round(curve[-1][0] + span * 0.2, 2)
+                    if is_lower:
+                        # 越低越好：值越小分越高（严格单调递减）
+                        curve = [[v, 100 - s] for v, s in curve]
+                        curve.insert(0, [_ext_lo, min(100, curve[0][1] + 5)])
+                        curve.append([_ext_hi, max(0, curve[-1][1] - 5)])
+                    else:
+                        # 越高越好：值越大分越高（严格单调递增）
+                        curve.insert(0, [_ext_lo, max(0, curve[0][1] - 5)])
+                        curve.append([_ext_hi, min(100, curve[-1][1] + 5)])
                     dim["curve"] = {"points": curve}
 
                 _write_config(cfg)
