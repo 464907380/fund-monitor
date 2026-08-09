@@ -225,19 +225,20 @@ _trend_full_cache: dict[str, tuple[float, list]] = {}
 _TREND_FULL_TTL = 600  # 10 分钟
 
 
-def _trend_full(code: str) -> list:
-    """获取基金近一年完整净值序列 [{d,v}]：内存缓存 → 磁盘当天缓存（推荐进程预热）→ 拉取并落盘"""
+def _trend_full(code: str, force: bool = False) -> list:
+    """获取基金近三年完整净值序列 [{d,v}]：内存 → 磁盘当天缓存（推荐进程预热）→ 拉取并落盘"""
     now = time.time()
     _c = _trend_full_cache.get(code)
-    if _c and now - _c[0] < _TREND_FULL_TTL:
+    if not force and _c and now - _c[0] < _TREND_FULL_TTL:
         return _c[1]
-    # 磁盘当天缓存：推荐运行/之前折线图已拉过时直接复用，不再请求网络
-    disk_navs = _get_fund_trend_navs(code)
-    if disk_navs:
-        _trend_full_cache[code] = (now, disk_navs)
-        return disk_navs
+    if not force:
+        # 磁盘当天缓存：推荐运行/之前折线图已拉过时直接复用，不再请求网络
+        disk_navs = _get_fund_trend_navs(code)
+        if disk_navs:
+            _trend_full_cache[code] = (now, disk_navs)
+            return disk_navs
     from fund_watch import _fetch_nav_from_lsjz
-    navs = _fetch_nav_from_lsjz(code, max_pages=13)  # 13页×20条≈260条，覆盖近1年
+    navs = _fetch_nav_from_lsjz(code, max_pages=38)  # 38页×20条≈760条，覆盖近3年
     if navs is None:
         navs = []
     if navs:
@@ -1635,11 +1636,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 code = params.get("code", [""])[0].strip()
                 days = int(params.get("days", ["250"])[0] or 250)
-                days = max(2, min(days, 500))
+                days = max(2, min(days, 800))
                 if not re.fullmatch(r"\d{6}", code):
                     self._send(*_json_response({"ok": False, "error": "code 格式错误"}, 400))
                     return
                 navs = _trend_full(code)
+                if len(navs) < days:
+                    # 缓存数据不足请求周期（如旧缓存只有近1年）→ 强制重新拉取并升级缓存
+                    _trend_full_cache.pop(code, None)
+                    navs = _trend_full(code, force=True)
                 if not navs or len(navs) < 2:
                     self._send(*_json_response({"ok": True, "d": [], "v": []}))
                     return

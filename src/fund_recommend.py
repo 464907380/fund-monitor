@@ -558,12 +558,12 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
         d = _get(code)
         if not d.get("n"):
             return None
-        # 预热近一年净值走势到共享磁盘缓存（供前端折线图近1月/3月/6月/1年复用，避免重复请求）
+        # 预热近三年净值走势到共享磁盘缓存（供前端折线图近1月/3月/6月/1年/2年/3年复用）
         try:
             _nav_all = d.get("nav", [])
             if len(_nav_all) >= 250:
                 with _trend_flush_lock:
-                    _trend_flush_buf[code] = [[n["d"], n["v"]] for n in _nav_all[-250:]]
+                    _trend_flush_buf[code] = [[n["d"], n["v"]] for n in _nav_all[-760:]]
         except Exception:
             pass
         # 计算近一周涨跌幅（需在缺失检查前计算，因为 f5 不在原始数据中）
