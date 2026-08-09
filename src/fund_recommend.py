@@ -599,6 +599,10 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
             else:
                 day_str = ""
         score = _calc_score(d)  # 带td值重新评分
+        # 多窗口指标（供维度按窗口评分：改窗口后无需重新运行推荐，直接从结果文件读取）
+        _win_dims = ["max_dd", "volatility", "max_loss_days", "sharpe", "sortino",
+                     "calmar", "recovery", "win_rate", "profit_ratio", "annual_return"]
+        _win_fields = {f"{_dk}_{_lb}": d.get(f"{_dk}_{_lb}") for _dk in _win_dims for _lb in ("1y", "2y", "3y")}
         return {
             "code": code, "name": name, "score": score,
             "limit_amount": limit_amount,
@@ -616,6 +620,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
             "_trend": (lambda _n: [[_n[0]["d"], 0.0]] + [[_n[i]["d"], round((_n[i]["v"] - _n[i-1]["v"]) / _n[i-1]["v"] * 100, 2)] for i in range(1, len(_n))] if len(_n) >= 2 else None)(d.get("nav", [])[-20:]),
             "mgr": (d.get("mgr") or "")[:6],
             "day": day_str,
+            **_win_fields,
         }
     except Exception as e:
         log.debug("跳过 %s: %s", code, e)
