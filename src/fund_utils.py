@@ -77,6 +77,52 @@ def is_trading_day(d: datetime.date) -> bool:
 # ── 路径 ──────────────────────────────────────
 HISTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# ── 基金净值走势磁盘缓存（推荐进程与 Web 服务器共享，避免重复请求）──
+_TREND_CACHE_PATH = os.path.join(HISTORY_DIR, "data", "fund_trend_cache.json")
+_TREND_DISK_LOCK = threading.Lock()
+
+
+def _load_fund_trend_cache() -> dict:
+    """读取净值走势磁盘缓存 {code: {date, navs:[[d,v],...]}}"""
+    try:
+        with open(_TREND_CACHE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_fund_trend_cache(cache: dict) -> None:
+    """原子写入净值走势缓存"""
+    try:
+        os.makedirs(os.path.dirname(_TREND_CACHE_PATH), exist_ok=True)
+        _tmp = _TREND_CACHE_PATH + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+        os.replace(_tmp, _TREND_CACHE_PATH)
+    except Exception:
+        pass
+
+
+def _get_fund_trend_navs(code: str) -> list | None:
+    """读取当天净值走势缓存，返回 [{d,v}] 或 None（无缓存/已过期）"""
+    entry = _load_fund_trend_cache().get(code)
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    if entry and entry.get("date") == today and entry.get("navs"):
+        return [{"d": d, "v": v} for d, v in entry["navs"]]
+    return None
+
+
+def _set_fund_trend_navs(code: str, navs: list) -> None:
+    """把 [{d,v}] 写入当天净值走势缓存（跨进程共享，原子写）"""
+    if not navs:
+        return
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    with _TREND_DISK_LOCK:
+        cache = _load_fund_trend_cache()
+        cache[code] = {"date": today, "navs": [[n["d"], n["v"]] for n in navs]}
+        _save_fund_trend_cache(cache)
+
+
 # ── 日志 ──────────────────────────────────────
 _handlers: list[logging.Handler] = [logging.StreamHandler()]
 _log_name = "fund_watch.log"

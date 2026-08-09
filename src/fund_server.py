@@ -17,7 +17,7 @@ import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log, _get_fund_name
+from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log, _get_fund_name, _get_fund_trend_navs, _set_fund_trend_navs
 from config import CFG, api_url, get_timeout, get_config
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -226,15 +226,22 @@ _TREND_FULL_TTL = 600  # 10 分钟
 
 
 def _trend_full(code: str) -> list:
-    """获取基金近一年完整净值序列 [{d,v}]，带缓存"""
+    """获取基金近一年完整净值序列 [{d,v}]：内存缓存 → 磁盘当天缓存（推荐进程预热）→ 拉取并落盘"""
     now = time.time()
     _c = _trend_full_cache.get(code)
     if _c and now - _c[0] < _TREND_FULL_TTL:
         return _c[1]
+    # 磁盘当天缓存：推荐运行/之前折线图已拉过时直接复用，不再请求网络
+    disk_navs = _get_fund_trend_navs(code)
+    if disk_navs:
+        _trend_full_cache[code] = (now, disk_navs)
+        return disk_navs
     from fund_watch import _fetch_nav_from_lsjz
     navs = _fetch_nav_from_lsjz(code, max_pages=13)  # 13页×20条≈260条，覆盖近1年
     if navs is None:
         navs = []
+    if navs:
+        _set_fund_trend_navs(code, navs)
     _trend_full_cache[code] = (now, navs)
     return navs
 

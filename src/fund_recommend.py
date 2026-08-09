@@ -20,6 +20,7 @@ import urllib.request
 import datetime
 import os
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fund_utils import update_heartbeat, clear_heartbeat, _fetch_fund_estimate, setup_log
@@ -293,6 +294,29 @@ _RANK_FIELD_MAP = {
 }
 _RECOMMEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
+
+# 净值走势磁盘缓存批量预热缓冲（评分线程填充，main 结束统一落盘一次）
+_trend_flush_buf: dict[str, list] = {}
+_trend_flush_lock = threading.Lock()
+
+
+def _flush_trend_cache() -> None:
+    """把评分过程中拉取的净值走势批量写入共享磁盘缓存（供前端折线图复用）"""
+    with _trend_flush_lock:
+        _buf = dict(_trend_flush_buf)
+        _trend_flush_buf.clear()
+    if not _buf:
+        return
+    try:
+        from fund_utils import _load_fund_trend_cache, _save_fund_trend_cache
+        today = datetime.date.today().isoformat()
+        cache = _load_fund_trend_cache()
+        for code, navs in _buf.items():
+            cache[code] = {"date": today, "navs": navs}
+        _save_fund_trend_cache(cache)
+        print(f"   💾 已预热 {len(_buf)} 只基金净值走势到共享缓存", flush=True)
+    except Exception:
+        pass
 _FUND_LIST_FILE = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
 
 # ── 超时统计（供推荐任务结束时展示）──
@@ -534,6 +558,14 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
         d = _get(code)
         if not d.get("n"):
             return None
+        # 预热近一年净值走势到共享磁盘缓存（供前端折线图近1月/3月/6月/1年复用，避免重复请求）
+        try:
+            _nav_all = d.get("nav", [])
+            if len(_nav_all) >= 250:
+                with _trend_flush_lock:
+                    _trend_flush_buf[code] = [[n["d"], n["v"]] for n in _nav_all[-250:]]
+        except Exception:
+            pass
         # 计算近一周涨跌幅（需在缺失检查前计算，因为 f5 不在原始数据中）
         navs = d.get("nav", [])
         f5_val = ""
@@ -977,6 +1009,8 @@ def main() -> None:
         # 先补充自选基金再保存，确保最终数量与评分阶段一致
         _supplement_self_selected(scored)
         _final_count = len(scored)
+        # 把评分时拉取的净值走势批量写入共享缓存，供前端折线图直接复用
+        _flush_trend_cache()
         update_heartbeat("fund_recommend", progress=_final_count, total=_final_count,
                          overall_pct=97, phase="保存",
                          detail=f"保存 {_final_count} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
