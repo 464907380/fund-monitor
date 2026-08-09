@@ -288,6 +288,8 @@ _RANK_FIELD_MAP = {
     "m1":  {"idx": 8,  "name": "近1月收益"},
     "sy2": {"idx": 12, "name": "近2年收益"},
     "sy3": {"idx": 13, "name": "近3年收益"},
+    "f5":  {"idx": 7,  "name": "近一周收益"},
+    "sc":  {"idx": 18, "name": "规模(亿)"},
 }
 _RECOMMEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RESULT_FILE = os.path.join(_RECOMMEND_DIR, ".fund_recommend_result.json")
