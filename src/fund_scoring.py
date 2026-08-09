@@ -158,6 +158,21 @@ _WINDOW_KEYS = {"max_dd", "volatility", "max_loss_days", "sharpe", "sortino",
                 "calmar", "recovery", "win_rate", "profit_ratio", "annual_return"}
 # 窗口选项：key → 交易日数（None=全部）；与 fund_watch.get_scoring_data 的多窗口 key 对应
 _WINDOW_CHOICES = {"all": None, "1y": 250, "2y": 500, "3y": 750}
+# 窗口标签（用于动态说明）
+_WINDOW_LABELS = {"all": "全部(约3年)", "1y": "近1年", "2y": "近2年", "3y": "近3年"}
+# 窗口维度说明模板（{lbl} 会被替换为窗口标签）
+_WINDOW_DESC = {
+    "max_dd": "基于{lbl}净值的最大回撤",
+    "volatility": "基于{lbl}净值的年化波动率",
+    "max_loss_days": "{lbl}最长连续下跌天数",
+    "sharpe": "超额年化收益÷年化波动率(基于{lbl}净值)",
+    "sortino": "超额年化收益÷下行波动率(基于{lbl}净值)",
+    "calmar": "年化收益÷最大回撤(基于{lbl}净值)",
+    "recovery": "区间总收益÷最大回撤(基于{lbl}净值)",
+    "win_rate": "赚钱交易日占比(基于{lbl}净值)",
+    "profit_ratio": "平均盈利÷平均亏损(基于{lbl}净值)",
+    "annual_return": "基于{lbl}净值的年化复合收益",
+}
 
 # 维度名称 → 数据字典 key 映射（用于取值展示）
 _DIM_VALUE_KEYS: dict[str, str] = {
@@ -239,6 +254,10 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
                 data_key = f"{key}_{_lb}"
                 _parse_pct = _SCORE_DEFS.get(key, (key, False))[1]
                 func = _make_scorer(data_key, key, _parse_pct)
+            # 维度说明随窗口动态变化
+            _tmpl = _WINDOW_DESC.get(key)
+            if _tmpl:
+                desc = _tmpl.format(lbl=_WINDOW_LABELS.get(_lb, "全部"))
         if func is None and d.get("enabled", True):
             log.warning("评分维度 key='%s' (%s) 在评分函数中未找到，已跳过", key, name)
         if func and weight > 0:

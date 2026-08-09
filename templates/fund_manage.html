@@ -1613,6 +1613,24 @@ function _windowSelectHtml(key, cur) {
   var opts = _WINDOW_OPTS.map(function(o){ return '<option value="' + o[0] + '"' + (o[0]===cur?' selected':'') + '>' + o[1] + '</option>'; }).join('');
   return '<select onchange="markDimsDirty()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ccc;padding:2px 4px;font-size:11px;">' + opts + '</select>';
 }
+function _dimDesc(key, desc, lookback) {
+  if (_WINDOW_DIMS.indexOf(key) < 0) return desc;
+  var lb = lookback || 'all';
+  var lbl = {'all':'全部(约3年)', '1y':'近1年', '2y':'近2年', '3y':'近3年'}[lb] || '全部(约3年)';
+  var base = {
+    max_dd:'基于'+lbl+'净值的最大回撤',
+    volatility:'基于'+lbl+'净值的年化波动率',
+    max_loss_days: lbl+'最长连续下跌天数',
+    sharpe:'超额年化收益÷年化波动率(基于'+lbl+'净值)',
+    sortino:'超额年化收益÷下行波动率(基于'+lbl+'净值)',
+    calmar:'年化收益÷最大回撤(基于'+lbl+'净值)',
+    recovery:'区间总收益÷最大回撤(基于'+lbl+'净值)',
+    win_rate:'赚钱交易日占比(基于'+lbl+'净值)',
+    profit_ratio:'平均盈利÷平均亏损(基于'+lbl+'净值)',
+    annual_return:'基于'+lbl+'净值的年化复合收益'
+  };
+  return base[key] || desc;
+}
 _CAT_NAMES = {perf:'📈 收益表现', risk:'🛡️ 风险指标', quality:'⭐ 收益性价比', other:'📋 基金特征'};
 _CAT_ORDER = ['perf','risk','quality','other'];
 
@@ -1696,7 +1714,7 @@ async function loadDims(customDims) {
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><input type="checkbox" ' + (dim.enabled !== false ? 'checked' : '') + ' onchange="markDimsDirty()"></td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + htmlEscape(dim.key) + '</span></td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
-          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(dim.desc) + '</td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(_dimDesc(dim.key, dim.desc, dim.lookback)) + '</td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:center;">' + _windowSelectHtml(dim.key, dim.lookback) + '</td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleCurveEditor(this)" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;" title="调整评分曲线">📐</button></td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
@@ -2053,7 +2071,7 @@ async function saveDims() {
       if (pts.length >= 2) curvePoints = {points: pts};
     }
     var cat = DIM_INFO[key]?.cat || '';
-    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc, lookback: lookback, curve: curvePoints, category: cat});
+    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: _dimDesc(key, desc, lookback), lookback: lookback, curve: curvePoints, category: cat});
   });
   try {
     if (progFill) progFill.style.width = '60%';
