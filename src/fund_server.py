@@ -17,7 +17,7 @@ import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log
+from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log, _get_fund_name
 from config import CFG, api_url, get_timeout, get_config
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -171,7 +171,14 @@ _PORT = get_config("server", "port", default=8080)
 
 
 def _fetch_fund_name(code: str) -> str:
-    """从 fundgz 实时估值 API 获取基金名称（160B 轻量请求）"""
+    """获取基金名称：优先全市场索引（缓存+失败自动重试），fundgz 仅兜底"""
+    try:
+        name = _get_fund_name(code)
+        if name:
+            return name
+    except Exception:
+        pass
+    # 兜底：fundgz 实时估值接口（已不稳定，仅作最后尝试）
     import urllib.request, re, json as _json
     try:
         url = f"https://fundgz.1234567.com.cn/js/{code}.js"
@@ -417,6 +424,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/api/list":
             try:
                 funds = _load()
+                # 补全缺失的基金名称（如历史遗留只存代码的项），避免列表只显示代码
+                changed = False
+                for f in funds:
+                    if not f.get("name") and f.get("code"):
+                        nm = _fetch_fund_name(f["code"])
+                        if nm:
+                            f["name"] = nm
+                            changed = True
+                if changed:
+                    _save(funds)
                 self._send(*_json_response({"ok": True, "funds": funds}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -1663,14 +1680,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 for code in codes:
                     code = code.strip()
                     if not re.fullmatch(r"\d{6}", code):
-                        invalid.append(code)
-                    elif code in existing:
+                        # 输入的是名称 → 自动解析为代码（完全匹配优先，否则取第一个搜索结果）
+                        parsed = _search_funds(code, limit=10)
+                        hit = next((p for p in parsed if p["name"] == code), parsed[0] if parsed else None)
+                        if hit:
+                            code = hit["code"]
+                        else:
+                            invalid.append(code)
+                            continue
+                    if code in existing:
                         skipped.append(code)
                     else:
                         name = _fetch_fund_name(code)
                         funds.append({"code": code, "name": name})
                         existing.add(code)
-                        added.append(code)
+                        added.append(f"{name}({code})" if name else code)
                 _save(funds)
                 _fund_table_cache = None
                 self._send(*_json_response({
