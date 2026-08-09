@@ -1595,11 +1595,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             }
                             # 净值走势（从缓存取，无缓存时尝试拉取）
                             _trend = cached.get("_trend")
-                            if _trend and len(_trend) >= 2:
+                            if _trend and len(_trend) >= 66:
                                 row["_trend"] = _trend
                             elif code:
                                 try:
-                                    _nav_data = _fetch_nav_from_lsjz(code, max_pages=1)
+                                    _nav_data = _fetch_nav_from_lsjz(code, max_pages=4)  # 66条≈4页(近3月)
                                     if _nav_data and len(_nav_data) >= 2:
                                         _trend_list = [[_nav_data[0]["d"], 0.0]] + [[_nav_data[i]["d"], round((_nav_data[i]["v"] - _nav_data[i-1]["v"]) / _nav_data[i-1]["v"] * 100, 2)] for i in range(1, len(_nav_data))]
                                         row["_trend"] = _trend_list
@@ -1661,7 +1661,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         }
                         # 近20日净值走势
                         if len(navs) >= 2:
-                            _trend_navs = navs[-20:]
+                            _trend_navs = navs[-66:]  # 近3月(66交易日)
                             row["_trend"] = [[_trend_navs[0]["d"], 0.0]] + [[_trend_navs[i]["d"], round((_trend_navs[i]["v"] - _trend_navs[i-1]["v"]) / _trend_navs[i-1]["v"] * 100, 2)] for i in range(1, len(_trend_navs))]
                             # 追加今日实时涨跌到走势图末尾
                             if td is not None:
