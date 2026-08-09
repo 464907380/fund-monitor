@@ -23,7 +23,7 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fund_utils import update_heartbeat, clear_heartbeat, _fetch_fund_estimate, setup_log
+from fund_utils import update_heartbeat, clear_heartbeat, _fetch_fund_estimate, setup_log, is_trading_day
 
 setup_log("recommend.log")
 
@@ -120,8 +120,13 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                     _lsjz_data = _r.read().decode("utf-8")
                 _m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', _lsjz_data)
                 _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
-                if _m_date and _m_val and _m_date.group(1) == today_str:
-                    return (code, float(_m_val.group(1)), "lsjz")
+                if _m_date and _m_val:
+                    # 今日有实际净值 → 当日净值
+                    if _m_date.group(1) == today_str:
+                        return (code, float(_m_val.group(1)), "lsjz")
+                    # 今日无净值（非交易日/节假日）→ 返回最近净值，与自选表一致（不降级到新浪昨日）
+                    if not is_trading_day(datetime.date.today()):
+                        return (code, float(_m_val.group(1)), "lsjz")
             except Exception:
                 pass
         # 盘中(9:30-15:00)：优先持仓估算（与自选表"估算"一致）

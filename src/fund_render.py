@@ -399,21 +399,22 @@ def _fetch_fresh_recommend_data() -> list[dict]:
         from fund_scoring import calc_score_detail
         day_map: dict[str, str] = {}
         td_map: dict[str, float] = {}
+        src_map: dict[str, str] = {}
         _done = 0
 
-        def _fetch_one(code: str) -> tuple[str, float | None]:
+        def _fetch_one(code: str) -> tuple[str, float | None, str]:
             try:
-                td, _ = _parse_real_time(code)
+                td, src = _parse_real_time(code)
                 if td is not None:
-                    return (code, td)
-                return (code, None)
+                    return (code, td, src)
+                return (code, None, "")
             except Exception:
-                return (code, None)
+                return (code, None, "")
 
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "render_recommend", default=20)) as ex:
             futs = {ex.submit(_fetch_one, code): code for code in codes}
             for fut in as_completed(futs):
-                code, td_val = fut.result()
+                code, td_val, td_src = fut.result()
                 _done += 1
                 # 每 5% 或最后一条时更新心跳
                 _pct = int(_done / total * 100) if total else 100
@@ -424,6 +425,7 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                 if td_val is not None:
                     day_map[code] = f"{td_val:+.2f}%"
                     td_map[code] = td_val
+                    src_map[code] = td_src
 
         # td 刷新完成，清理心跳
         clear_heartbeat(_hb_name)
@@ -434,6 +436,9 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                 r["day"] = day_map[code]
             if code in td_map:
                 r["td"] = td_map[code]
+                # 同步更新来源标注（净值/估算/昨日），与自选表一致
+                if code in src_map and src_map[code]:
+                    r["_td_src"] = src_map[code]
                 # 用新td值重算评分
                 score_d = {k: r.get(k) for k in (
                     "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
