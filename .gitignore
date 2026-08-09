@@ -36,6 +36,9 @@ fund_list.json
 # 基金推荐结果缓存（自动生成）
 .fund_recommend_result.json
 
+# 净值走势磁盘缓存（自动生成，供折线图复用）
+fund_trend_cache.json
+
 # 评分历史（自动生成）
 .score_history.json
 
