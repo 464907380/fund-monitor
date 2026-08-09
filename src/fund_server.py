@@ -220,6 +220,25 @@ def _load_fund_index() -> list[dict]:
     return _FUND_INDEX
 
 
+# 基金净值走势缓存（/api/fund-trend 用，按 code 缓存近一年全量，避免重复请求）
+_trend_full_cache: dict[str, tuple[float, list]] = {}
+_TREND_FULL_TTL = 600  # 10 分钟
+
+
+def _trend_full(code: str) -> list:
+    """获取基金近一年完整净值序列 [{d,v}]，带缓存"""
+    now = time.time()
+    _c = _trend_full_cache.get(code)
+    if _c and now - _c[0] < _TREND_FULL_TTL:
+        return _c[1]
+    from fund_watch import _fetch_nav_from_lsjz
+    navs = _fetch_nav_from_lsjz(code, max_pages=13)  # 13页×20条≈260条，覆盖近1年
+    if navs is None:
+        navs = []
+    _trend_full_cache[code] = (now, navs)
+    return navs
+
+
 def _search_funds(q: str, limit: int = 10) -> list[dict]:
     """按代码或名称模糊搜索基金"""
     q = q.strip().lower()
@@ -1602,6 +1621,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(500, {"Content-Type": "text/html; charset=utf-8"},
                            f"<p style=\"color:#ef5350;\">获取基金表格失败: {e}</p>".encode("utf-8"))
+            return
+
+        if parsed.path == "/api/fund-trend":
+            """按周期返回基金净值走势（日涨跌序列），供前端折线图切换近1月/3月/6月/1年"""
+            try:
+                code = params.get("code", [""])[0].strip()
+                days = int(params.get("days", ["250"])[0] or 250)
+                days = max(2, min(days, 500))
+                if not re.fullmatch(r"\d{6}", code):
+                    self._send(*_json_response({"ok": False, "error": "code 格式错误"}, 400))
+                    return
+                navs = _trend_full(code)
+                if not navs or len(navs) < 2:
+                    self._send(*_json_response({"ok": True, "d": [], "v": []}))
+                    return
+                navs = navs[-days:]
+                dates = [n["d"] for n in navs]
+                vals: list[float] = [0.0]
+                for i in range(1, len(navs)):
+                    _prev = navs[i - 1]["v"]
+                    _cur = navs[i]["v"]
+                    vals.append(round((_cur - _prev) / _prev * 100, 2) if _prev else 0.0)
+                self._send(*_json_response({"ok": True, "d": dates, "v": vals, "period": len(dates)}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/" or parsed.path == "/index.html":
