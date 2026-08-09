@@ -1538,6 +1538,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 def _process_one(code: str, fallback_name: str = "") -> dict | None:
                     """拉取一只基金数据并计算评分（优先从推荐缓存复用）"""
                     import datetime
+
+                    def _carry_window(row: dict, src: dict) -> dict:
+                        """透传多窗口指标到 row，供表格列按窗口显示"""
+                        for _wd in ("max_dd", "volatility", "max_loss_days", "sharpe", "sortino",
+                                    "calmar", "recovery", "win_rate", "profit_ratio", "annual_return"):
+                            for _lb in ("1y", "2y", "3y"):
+                                _vk = src.get(f"{_wd}_{_lb}")
+                                if _vk is not None:
+                                    row[f"{_wd}_{_lb}"] = _vk
+                        return row
+
                     try:
                         cached = _rec_cache.get(code)
                         if cached:
@@ -1602,7 +1613,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             row["score"] = score
                             row["_score_detail"] = details
                             row["_skipped_weight"] = skipped
-                            return row
+                            return _carry_window(row, cached)
 
                         # ── 推荐缓存未命中：全量拉取 pingzhongdata ──
                         d = get_scoring_data(code)
@@ -1660,7 +1671,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         row["score"] = score
                         row["_score_detail"] = details
                         row["_skipped_weight"] = skipped
-                        return row
+                        return _carry_window(row, d)
                     except Exception:
                         return None
 
