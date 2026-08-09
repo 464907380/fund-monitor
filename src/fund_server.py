@@ -1962,6 +1962,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 lower_better = {"波动率", "最大回撤", "最大连跌天数", "费率"}
                 # 需要解析百分号字符串的字段
                 pct_keys = {"f5"}
+                # 窗口维度：校准数据用对应的窗口键（如 sharpe_1y），而非基础键 sharpe
+                from fund_scoring import _WINDOW_KEYS
 
                 # 校准数据：推荐缓存 + 自选基金（覆盖负收益等极端样本，使曲线
                 # 在负收益/低值区间也有区分度，而非全部截断为0分）
@@ -1989,9 +1991,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 for dim in dims:
                     key = dim.get("key", "")
                     name = dim.get("name", "")
+                    data_key = key
+                    if key in _WINDOW_KEYS:
+                        _lb = dim.get("lookback", "all")
+                        if _lb in ("1y", "2y", "3y"):
+                            data_key = f"{key}_{_lb}"
                     vals = []
                     for d in all_data:
-                        v = d.get(key)
+                        v = d.get(data_key)
                         if key in pct_keys and isinstance(v, str) and "%" in v:
                             v = float(v.replace("%", "").replace("+", ""))
                         if v is not None and isinstance(v, (int, float)):
