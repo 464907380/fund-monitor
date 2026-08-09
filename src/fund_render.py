@@ -223,7 +223,14 @@ def _skipped_icon(weight: float) -> str:
     return ""
 
 def _dim_value_to_key(dim_name: str) -> str | None:
-    """维度中文名 → 数据字典 key"""
+    """维度中文名 → 数据字典 key（窗口维度按当前 SCORE_DIMS 动态，如 max_dd_1y）"""
+    try:
+        from fund_scoring import _DIM_DATA_KEYS
+        dk = _DIM_DATA_KEYS.get(dim_name)
+        if dk:
+            return dk
+    except Exception:
+        pass
     m = {
         "\u8fd11\u5e74\u6536\u76ca": "y1", "\u8fd13\u6708\u6536\u76ca": "m3",
         "\u8fd11\u6708\u6536\u76ca": "m1", "\u8fd1\u4e00\u5468\u6536\u76ca": "f5",
@@ -243,7 +250,7 @@ def _dim_value_to_key(dim_name: str) -> str | None:
 
 
 def _get_dim_value(r: dict, dim_name: str) -> str:
-    """根据维度名称从推荐结果中取值，缺失统一返回 '-'"""
+    """根据维度名称从推荐结果中取值（窗口维度按配置动态取键），缺失统一返回 '-'"""
     def _v(key, decimals=1):
         v = r.get(key)
         if v is None or v == "":
@@ -251,31 +258,18 @@ def _get_dim_value(r: dict, dim_name: str) -> str:
         if isinstance(v, (int, float)):
             return f"{v:.{decimals}f}"
         return str(v)
-    mapping = {
-        "近1年收益": lambda: _v("y1"),
-        "近3月收益": lambda: _v("m3"),
-        "近1月收益": lambda: _v("m1"),
-        "近一周收益": lambda: _v("f5"),
-        "近2年收益": lambda: _v("sy2"),
-        "夏普比率": lambda: _v("sharpe", 2),
-        "上行胜率": lambda: _v("win_rate", 2),
-        "盈亏比": lambda: _v("profit_ratio", 2),
-        "索提诺比率": lambda: _v("sortino", 2),
-        "修复系数": lambda: _v("recovery", 2),
-        "近3年收益": lambda: _v("sy3"),
-        "近6月收益": lambda: _v("sy6"),
-        "波动率": lambda: _v("volatility", 2),
-        "卡玛比率": lambda: _v("calmar", 2),
-        "最大连跌天数": lambda: _v("max_loss_days", 1),
-        "费率": lambda: _v("rate", 2),
-        "最大回撤": lambda: _v("max_dd", 2),
-        "基金规模": lambda: _v("sc", 2),
-        "年化收益率": lambda: _v("annual_return"),
-        "机构持有比例": lambda: _v("inst", 2),
-        "当日涨跌": lambda: _v("td", 2),
-    }
-    fn = mapping.get(dim_name)
-    return fn() if fn else "-"
+    key = _dim_value_to_key(dim_name)
+    if not key:
+        return "-"
+    decimals = {
+        "\u590f\u666e\u6bd4\u7387": 2, "\u7d22\u63d0\u8bfa\u6bd4\u7387": 2,
+        "\u76c8\u4e8f\u6bd4": 2, "\u4e0a\u884c\u80dc\u7387": 2,
+        "\u6ce2\u52a8\u7387": 2, "\u5361\u739b\u6bd4\u7387": 2,
+        "\u6700\u5927\u56de\u64a4": 2, "\u8d39\u7387": 2,
+        "\u57fa\u91d1\u89c4\u6a21": 2, "\u673a\u6784\u6301\u6709\u6bd4\u4f8b": 2,
+        "\u6700\u5927\u8fde\u8dcc\u5929\u6570": 1, "\u5f53\u65e5\u6da8\u8dcc": 2,
+    }.get(dim_name, 1)
+    return _v(key, decimals)
 
 
 def _score_color(score: float | int | str) -> str:
@@ -352,14 +346,15 @@ def _load_saved_recommend_data() -> list[dict]:
             _src = r.get("_td_src", "")
             if _src:
                 entry["_td_src"] = _src
-            score_d = {k: entry.get(k) for k in (
-                "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
-                "annual_return", "sharpe", "sortino",
-                "profit_ratio", "win_rate", "recovery", "calmar",
-                "max_dd", "volatility", "max_loss_days",
-                "sc", "rate", "inst", "td",
-            )}
-            score, details, skipped = calc_score_detail(score_d)
+            # 透传多窗口指标（供维度按窗口评分/展示：max_dd_1y 等）
+            for _wd in ("max_dd", "volatility", "max_loss_days", "sharpe", "sortino",
+                        "calmar", "recovery", "win_rate", "profit_ratio", "annual_return"):
+                for _lb in ("1y", "2y", "3y"):
+                    _vk = r.get(f"{_wd}_{_lb}")
+                    if _vk is not None:
+                        entry[f"{_wd}_{_lb}"] = _vk
+            # 直接用完整 entry 评分（窗口维度键可被取到）
+            score, details, skipped = calc_score_detail(entry)
             entry["score"] = score
             entry["score_detail"] = details
             entry["_skipped_weight"] = skipped
