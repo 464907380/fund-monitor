@@ -72,6 +72,26 @@ def _spawn_task(task_id: str) -> bool:
         return False
 
 
+def _task_pid_alive(task_id: str) -> bool:
+    """通过心跳 pid 检查任务进程是否已在运行（防止重复启动）
+    Windows 上 os.kill(pid,0) 会报 WinError 87 而非'不存在'，改用 OpenProcess 检查。"""
+    hb_name = _task_heartbeats.get(task_id, task_id)
+    hb = read_heartbeat(hb_name)
+    if not hb or not hb.get("pid"):
+        return False
+    pid = int(hb["pid"])
+    try:
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        _h = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if _h:
+            ctypes.windll.kernel32.CloseHandle(_h)
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def _stop_task(task_id: str) -> bool:
     """停止一个正在运行的任务"""
     with _proc_lock:
@@ -2468,11 +2488,12 @@ def _background_refresh_recommend_cache():
 
 def main():
     setup_log("server.log")
-    # 启动时清理上次残留的心跳，避免前端读到旧进度
-    for _hb_name in ["fund_recommend", "fund_watch", "fund_monitor", "fund_briefing"]:
+    # 清理上次残留的心跳（monitor 心跳保留，用于防重复启动判断）
+    for _hb_name in ["fund_recommend", "fund_watch", "fund_briefing"]:
         clear_heartbeat(_hb_name)
-    # 自动启动盘中监控
-    _spawn_task("fund_monitor")
+    # 自动启动盘中监控（若已有 monitor 进程在运行则跳过，避免多次重启 server 累积重复 monitor）
+    if not _task_pid_alive("fund_monitor"):
+        _spawn_task("fund_monitor")
     # 后台线程刷新推荐表缓存
     threading.Thread(target=_background_refresh_recommend_cache, daemon=True).start()
     host = get_config("server", "host", default="0.0.0.0")
