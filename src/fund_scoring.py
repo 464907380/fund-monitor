@@ -153,6 +153,12 @@ _SCORE_FUNCS: dict[str, Callable] = {
     for curve_key, (data_key, parse_pct) in _SCORE_DEFS.items()
 }
 
+# 支持按窗口（lookback）计算的维度：原始值基于净值，可按 近1年/2年/3年/全部 计算
+_WINDOW_KEYS = {"max_dd", "volatility", "max_loss_days", "sharpe", "sortino",
+                "calmar", "recovery", "win_rate", "profit_ratio", "annual_return"}
+# 窗口选项：key → 交易日数（None=全部）；与 fund_watch.get_scoring_data 的多窗口 key 对应
+_WINDOW_CHOICES = {"all": None, "1y": 250, "2y": 500, "3y": 750}
+
 # 维度名称 → 数据字典 key 映射（用于取值展示）
 _DIM_VALUE_KEYS: dict[str, str] = {
     "近1年收益": "y1",
@@ -177,6 +183,9 @@ _DIM_VALUE_KEYS: dict[str, str] = {
     "机构持有比例": "inst",
     "当日涨跌": "td",
 }
+
+# 维度名称 → 实际取数 key（窗口维度按 lookback 动态，如 最大回撤→max_dd_1y；未配置时回退 _DIM_VALUE_KEYS）
+_DIM_DATA_KEYS: dict[str, str] = {}
 
 _DEFAULT_DIMS: list[tuple[str, Callable, float, str]] = [
     ("近1年收益",    _SCORE_FUNCS["y1"],             0.10, "最近一年的表现，反映基金近期赚钱能力"),
@@ -212,6 +221,7 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
         log.warning("config.json 中未找到评分维度配置，使用内置默认值（共 %d 维）", len(_DEFAULT_DIMS))
         return _DEFAULT_DIMS
     result = []
+    _new_data_keys: dict[str, str] = {}
     for d in cfg_dims:
         if not d.get("enabled", True):
             continue
@@ -220,10 +230,20 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
         weight = d.get("weight", 0)
         desc = d.get("desc", "")
         func = _SCORE_FUNCS.get(key)
+        data_key = key
+        # 窗口维度：按配置 lookback 动态绑定对应窗口的数据键（如 max_dd_1y；all 用原 key 兼容已有缓存/推荐数据）
+        lookback = d.get("lookback", "all")
+        if key in _WINDOW_KEYS and func is not None:
+            _lb = lookback if lookback in _WINDOW_CHOICES else "all"
+            if _lb != "all":
+                data_key = f"{key}_{_lb}"
+                _parse_pct = _SCORE_DEFS.get(key, (key, False))[1]
+                func = _make_scorer(data_key, key, _parse_pct)
         if func is None and d.get("enabled", True):
             log.warning("评分维度 key='%s' (%s) 在评分函数中未找到，已跳过", key, name)
         if func and weight > 0:
             result.append((name, func, weight, desc))
+            _new_data_keys[name] = data_key
     if not result:
         log.warning("筛选后无有效评分维度，使用内置默认值（共 %d 维）", len(_DEFAULT_DIMS))
         return _DEFAULT_DIMS
@@ -231,6 +251,7 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
     if abs(total - 1.0) > 0.001:
         result = [(n, f, w/total, d) for n,f,w,d in result]
     log.info("评分维度加载完成：%d 维（来源：config.json）", len(result))
+    globals()["_DIM_DATA_KEYS"] = _new_data_keys
     return result
 
 
@@ -246,7 +267,7 @@ def _calc_score(d: dict) -> float:
     for name, fn, weight, desc in SCORE_DIMS:
         if weight <= 0:
             continue
-        key = _DIM_VALUE_KEYS.get(name)
+        key = _DIM_DATA_KEYS.get(name) or _DIM_VALUE_KEYS.get(name)
         if key and d.get(key) is None:
             total += 50.0 * weight
         else:
@@ -269,7 +290,7 @@ def calc_score_detail(d: dict) -> tuple[float, list[tuple[str, float | None, flo
     for name, fn, weight, desc in SCORE_DIMS:
         if weight <= 0:
             continue
-        key = _DIM_VALUE_KEYS.get(name)
+        key = _DIM_DATA_KEYS.get(name) or _DIM_VALUE_KEYS.get(name)
         raw = d.get(key) if key else None
         if raw is None:
             details.append((name, 50.0, weight, None, desc + "（无原始数据，取中性分50）"))

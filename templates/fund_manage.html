@@ -1604,6 +1604,15 @@ var DIM_INFO = {
   'institutional': {name:'机构持有比例',desc:'机构持有比例(%)',cat:'other'},
   'td': {name:'当日涨跌',desc:'当日实时涨跌幅(盘中估算/收盘净值)',cat:'perf'},
 };
+// 支持按窗口（计算周期）的维度：全部/近1年/近2年/近3年
+var _WINDOW_DIMS = ['max_dd','volatility','max_loss_days','sharpe','sortino','calmar','recovery','win_rate','profit_ratio','annual_return'];
+var _WINDOW_OPTS = [['all','全部'],['1y','近1年'],['2y','近2年'],['3y','近3年']];
+function _windowSelectHtml(key, cur) {
+  if (_WINDOW_DIMS.indexOf(key) < 0) return '<span style="color:#444;">—</span>';
+  cur = cur || 'all';
+  var opts = _WINDOW_OPTS.map(function(o){ return '<option value="' + o[0] + '"' + (o[0]===cur?' selected':'') + '>' + o[1] + '</option>'; }).join('');
+  return '<select onchange="markDimsDirty()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ccc;padding:2px 4px;font-size:11px;">' + opts + '</select>';
+}
 _CAT_NAMES = {perf:'📈 收益表现', risk:'🛡️ 风险指标', quality:'⭐ 收益性价比', other:'📋 基金特征'};
 _CAT_ORDER = ['perf','risk','quality','other'];
 
@@ -1664,6 +1673,7 @@ async function loadDims(customDims) {
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">维度</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;">权重</th>'
     + '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;">说明</th>'
+    + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;">窗口</th>'
     + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;">曲线</th>'
     + '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;"></th>'
     + '</tr></thead><tbody>'
@@ -1687,11 +1697,12 @@ async function loadDims(customDims) {
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(dim.name) + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + htmlEscape(dim.key) + '</span></td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="' + pct + '" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
           + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(dim.desc) + '</td>'
+          + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:center;">' + _windowSelectHtml(dim.key, dim.lookback) + '</td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleCurveEditor(this)" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;" title="调整评分曲线">📐</button></td>'
           + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>'
           + '</tr>'
           + '<tr class="curve-edit-row" style="display:none;background:rgba(255,255,255,0.02);">'
-          + '<td colspan="6" style="padding:6px 12px;">'
+          + '<td colspan="7" style="padding:6px 12px;">'
           + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
           + '<div style="display:flex;gap:12px;align-items:flex-start;">'
           + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + dim.key + '">'
@@ -1763,6 +1774,7 @@ function doAddDim() {
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;">' + htmlEscape(info.name) + '<br><span style="color:#555;font-size:10px;font-family:Consolas;">' + htmlEscape(key) + '</span></td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;"><input type="number" min="0" max="100" value="5" style="width:50px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#e0e0e0;padding:2px 6px;text-align:right;font-family:Consolas;font-size:12px;" onchange="markDimsDirty()">%</td>'
     + '<td style="padding:3px 6px;border-bottom:1px solid #333;color:#666;font-size:11px;">' + htmlEscape(info.desc) + '</td>'
+    + '<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:center;">' + _windowSelectHtml(key, 'all') + '</td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="toggleCurveEditor(this)" style="background:none;border:none;color:#42a5f5;cursor:pointer;font-size:14px;" title="调整评分曲线">📐</button></td>'
     + '<td style="padding:3px 6px;text-align:center;border-bottom:1px solid #333;"><button onclick="removeDim(this)" style="background:none;border:none;color:#ef5350;cursor:pointer;font-size:14px;">✖</button></td>';
   tbody.appendChild(tr);
@@ -1771,7 +1783,7 @@ function doAddDim() {
   curveSubRow.className = 'curve-edit-row';
   curveSubRow.style.cssText = 'display:none;background:rgba(255,255,255,0.02);';
   var pts2 = _getCurvePoints(key, null);
-  curveSubRow.innerHTML = '<td colspan="6" style="padding:6px 12px;">'
+  curveSubRow.innerHTML = '<td colspan="7" style="padding:6px 12px;">'
     + '<div style="font-size:11px;color:#888;margin-bottom:4px;">评分曲线断点（输入值 → 得分）</div>'
     + '<div style="display:flex;gap:12px;align-items:flex-start;">'
     + '<table style="border-collapse:collapse;font-size:11px;" id="curve-tbl-' + key + '">'
@@ -2005,6 +2017,9 @@ async function saveDims() {
     var name = row.querySelector('td:nth-child(2)').textContent.replace(key,'').trim();
     if (name.endsWith('\n')) name = name.slice(0,-1).trim();
     const desc = row.querySelectorAll('td')[3].textContent;
+    var lbTd = row.querySelectorAll('td')[4];
+    var lbSel = lbTd ? lbTd.querySelector('select') : null;
+    const lookback = lbSel ? lbSel.value : 'all';
     var curvePoints = null;
     var curveRow = row.nextElementSibling;
     if (curveRow && curveRow.classList.contains('curve-edit-row')) {
@@ -2021,7 +2036,7 @@ async function saveDims() {
       if (pts.length >= 2) curvePoints = {points: pts};
     }
     var cat = DIM_INFO[key]?.cat || '';
-    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc, curve: curvePoints, category: cat});
+    dims.push({name: name, key: key, weight: parseInt(num.value) / 100, enabled: cb.checked, desc: desc, lookback: lookback, curve: curvePoints, category: cat});
   });
   try {
     if (progFill) progFill.style.width = '60%';

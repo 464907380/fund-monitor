@@ -542,6 +542,15 @@ def get_scoring_data(code: str) -> dict:
         # 计算风险指标
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
+        # 多窗口版本（供维度按窗口评分：如 max_dd_1y / volatility_3y / max_dd_all）
+        _window_dims = ["max_dd", "volatility", "max_loss_days", "sharpe",
+                        "sortino", "calmar", "recovery", "win_rate",
+                        "profit_ratio", "annual_return"]
+        _windows = {"all": None, "1y": 250, "2y": 500, "3y": 750}
+        for _lb, _days in _windows.items():
+            _m = _calc_nav_metrics(full_nav, lookback=_days) if _days else metrics
+            for _dk in _window_dims:
+                d[f"{_dk}_{_lb}"] = _m.get(_dk)
         # 从净值数据计算各阶段收益
         d["m1"] = _calc_period_return(full_nav, 22)    # ≈1月
         d["m3"] = _calc_period_return(full_nav, 66)    # ≈3月

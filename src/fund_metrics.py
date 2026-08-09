@@ -2,13 +2,19 @@
 基金净值指标计算模块
 """
 import math
-def _calc_nav_metrics(full_nav: list[dict]) -> dict:
+def _calc_nav_metrics(full_nav: list[dict], lookback: int | None = None) -> dict:
     """
     从完整净值列表计算风险指标（单趟扫描优化版）。
     同时计算日收益率、波动率、最大回撤、胜率、盈亏比、连跌天数。
+    lookback — 若指定（交易日数），仅用最近 lookback 个交易日计算；
+               数据不足该窗口时返回空 dict（该窗口无数据）。
     """
     if not full_nav or len(full_nav) < 30:
         return {}
+    if lookback:
+        if len(full_nav) < lookback:
+            return {}  # 数据不足该窗口
+        full_nav = full_nav[-lookback:]
     prices = [n["v"] for n in full_nav]
     days = len(prices)
     n = days - 1
