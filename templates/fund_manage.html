@@ -3720,8 +3720,9 @@ function _openTrendModal() {
 }
 function _renderTrend(dates, dayVals) {
   if (!dates || !dayVals || dayVals.length < 2) return;
-  var cumVals = [], cum = 0;
-  for (var vi = 0; vi < dayVals.length; vi++) { cum += dayVals[vi]; cumVals.push(cum); }
+  // 累计用复利（连乘）计算，与数据表"近1年收益"等净值收益一致；简单相加会高估/低估波动大的基金
+  var cumVals = [], cum = 1;
+  for (var vi = 0; vi < dayVals.length; vi++) { cum *= (1 + dayVals[vi] / 100); cumVals.push((cum - 1) * 100); }
   var minV = Math.min.apply(null, cumVals), maxV = Math.max.apply(null, cumVals), range = maxV - minV || 1;
   var w = _trendModal.w, h = _trendModal.h, pad = _trendModal.pad, cw = w - pad * 2, ch = h - pad * 2;
   var pts = [];
