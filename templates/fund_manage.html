@@ -1986,10 +1986,27 @@ async function _refreshTablesWithProgress(progFill, progPct, progText, onDone) {
         }
       }).catch(function(){});
     }, 800);
-    var rtR = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
-    if (rtR.ok) { var rtH = await rtR.text(); if (rtH.indexOf('<tbody>') > 0) { var rtE = document.getElementById('recommendFullTable'); if (rtE) { rtE.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (rtH) { var rtE2 = document.getElementById('recommendFullTable'); if (rtE2) { rtE2.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } }
+    // 先刷新自选表（get_scoring_data 已含多窗口指标，立即生效）
     var ftR = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
     if (ftR.ok) { var ftH = await ftR.text(); if (ftH.indexOf('<tbody>') > 0) { var ftE = document.getElementById('fundFullTable'); if (ftE) { ftE.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (ftH) { var ftE2 = document.getElementById('fundFullTable'); if (ftE2) { ftE2.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } }
+    // 等待后台补算窗口指标完成（改维度窗口时），再刷新推荐表
+    var t0 = Date.now();
+    while (Date.now() - t0 < 120000) {
+      var bf = null;
+      try {
+        var hb2 = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
+        bf = hb2 && hb2.heartbeats && hb2.heartbeats['fund-backfill'];
+      } catch(e) {}
+      if (!bf) break; // 无补算任务或已完成
+      var bp = bf.total > 0 ? Math.round(bf.progress / bf.total * 100) : 0;
+      if (progFill) progFill.style.width = Math.min(bp, 99) + '%';
+      if (progPct) progPct.textContent = bp + '%';
+      if (progText) progText.textContent = '🔧 补算窗口指标 ' + (bf.detail || '') + ' | ' + bp + '%';
+      await new Promise(function(r){ setTimeout(r, 1200); });
+    }
+    // 刷新推荐表（补算后按新窗口评分）
+    var rtR = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
+    if (rtR.ok) { var rtH = await rtR.text(); if (rtH.indexOf('<tbody>') > 0) { var rtE = document.getElementById('recommendFullTable'); if (rtE) { rtE.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (rtH) { var rtE2 = document.getElementById('recommendFullTable'); if (rtE2) { rtE2.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } }
     clearInterval(poll);
   } catch(e) {}
   if (onDone) onDone();

@@ -439,15 +439,8 @@ def _fetch_fresh_recommend_data() -> list[dict]:
                 # 同步更新来源标注（净值/估算/昨日），与自选表一致
                 if code in src_map and src_map[code]:
                     r["_td_src"] = src_map[code]
-                # 用新td值重算评分
-                score_d = {k: r.get(k) for k in (
-                    "y1", "m3", "m1", "f5", "sy6", "sy2", "sy3",
-                    "annual_return", "sharpe", "sortino",
-                    "profit_ratio", "win_rate", "recovery", "calmar",
-                    "max_dd", "volatility", "max_loss_days",
-                    "sc", "rate", "inst", "td",
-                )}
-                score, details, skipped = calc_score_detail(score_d)
+                # 用新td值重算评分（传完整数据，窗口维度键 max_dd_1y 等可被取到）
+                score, details, skipped = calc_score_detail(r)
                 r["score"] = score
                 r["score_detail"] = details
                 r["_skipped_weight"] = skipped

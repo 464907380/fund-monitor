@@ -401,8 +401,8 @@ def _recalc_cached_scores() -> None:
             "sc", "rate", "inst", "td",
         ]
         for r in results:
-            score_d = {k: r.get(k) for k in score_keys}
-            score, details, skipped = calc_score_detail(score_d)
+            # 直接传完整数据，使窗口维度键（如 max_dd_1y）能被取到
+            score, details, skipped = calc_score_detail(r)
             r["score"] = score
             r["_score_detail"] = details
             r["_skipped_weight"] = skipped
@@ -415,6 +415,94 @@ def _recalc_cached_scores() -> None:
         print(f"[recalc] 已用新权重重新评分 {len(results)} 只基金", flush=True)
     except Exception as e:
         print(f"[recalc] 重新评分失败: {e}", flush=True)
+
+
+# ── 维度窗口指标后台补算（改窗口保存后，只补受影响维度的新窗口值，无需重跑推荐）──
+_BACKFILL_LOCK = threading.Lock()
+
+
+def _backfill_window_metrics() -> None:
+    """为推荐缓存补齐缺失的多窗口指标（仅当前启用的非 all 窗口维度）。
+    优先用已缓存的净值秒算，无缓存则 get_scoring_data 拉取；完成后重算评分并清表格缓存。"""
+    if not _BACKFILL_LOCK.acquire(blocking=False):
+        return  # 已有补算在跑
+    try:
+        rec_path = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
+        if not os.path.exists(rec_path):
+            return
+        with open(rec_path, encoding="utf-8") as _f:
+            data = json.load(_f)
+        results = data.get("results", [])
+        if not results:
+            return
+        from fund_scoring import _WINDOW_KEYS, _WINDOW_CHOICES, _DIM_DATA_KEYS
+        # 当前启用的非 all 窗口维度数据键（如 max_dd_1y）
+        need_keys = {dk for dk in _DIM_DATA_KEYS.values() if dk.endswith(("_1y", "_2y", "_3y"))}
+        if not need_keys:
+            return
+        missing = [r for r in results if r.get("code") and any(r.get(k) is None for k in need_keys)]
+        if not missing:
+            return
+        write_heartbeat("fund-backfill", total=len(missing), progress=0,
+                        phase="补算窗口", detail=f"补齐 {len(missing)} 只基金多窗口指标")
+        print(f"[backfill] 补齐 {len(missing)} 只基金: {sorted(need_keys)}", flush=True)
+        from fund_utils import _load_fund_trend_cache
+        from fund_metrics import _calc_nav_metrics
+        trend_cache = _load_fund_trend_cache()
+        _wds = list(_WINDOW_KEYS)
+        _lbs = ("1y", "2y", "3y")
+
+        def _one(code: str) -> dict | None:
+            entry = trend_cache.get(code)
+            if entry and entry.get("navs") and len(entry["navs"]) >= 30:
+                navs = [{"d": d, "v": v} for d, v in entry["navs"]]
+                return {f"{k}_{lb}": _calc_nav_metrics(navs, lookback=_WINDOW_CHOICES[lb]).get(k)
+                        for k in _wds for lb in _lbs}
+            try:
+                from fund_watch import get_scoring_data
+                dd = get_scoring_data(code)
+                return {f"{k}_{lb}": dd.get(f"{k}_{lb}") for k in _wds for lb in _lbs}
+            except Exception:
+                return None
+
+        rmap = {r.get("code"): r for r in missing}
+        done = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "backfill_window", default=10)) as ex:
+            futs = {ex.submit(_one, c): c for c in rmap}
+            for fut in concurrent.futures.as_completed(futs):
+                c = futs[fut]
+                vals = fut.result()
+                if vals:
+                    r = rmap[c]
+                    for k, v in vals.items():
+                        if v is not None:
+                            r[k] = v
+                done += 1
+                update_heartbeat("fund-backfill", progress=done, total=len(missing),
+                                 detail=f"{done}/{len(missing)}", phase="补算窗口")
+        # 重算评分并保存
+        from fund_scoring import calc_score_detail
+        for r in results:
+            score, details, skipped = calc_score_detail(r)
+            r["score"] = score
+            r["_score_detail"] = details
+            r["_skipped_weight"] = skipped
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        tmp = rec_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as _f:
+            json.dump(data, _f, indent=2, ensure_ascii=False)
+        os.replace(tmp, rec_path)
+        # 清表格缓存，让前端刷新拿到新窗口评分
+        global _fund_table_cache
+        _fund_table_cache = None
+        _recommend_table_cache["data"] = None
+        clear_heartbeat("fund-backfill")
+        print(f"[backfill] 完成: {done} 只基金多窗口指标已补齐", flush=True)
+    except Exception as e:
+        print(f"[backfill] 失败: {e}", flush=True)
+        clear_heartbeat("fund-backfill")
+    finally:
+        _BACKFILL_LOCK.release()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -1509,14 +1597,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # 追加今日实时涨跌到走势图末尾
                             if _td is not None and row.get("_trend"):
                                 row["_trend"].append((datetime.date.today().isoformat(), round(_td, 2)))
-                            score_d = {k: cached.get(k) for k in (
-                                "y1","m3","m1","f5","sy6","sy2","sy3",
-                                "annual_return","sharpe","sortino",
-                                "profit_ratio","win_rate","recovery","calmar",
-                                "max_dd","volatility","max_loss_days",
-                                "sc","rate","inst","td",
-                            )}
-                            score, details, skipped = calc_score_detail(score_d)
+                            # 直接传完整缓存数据，使窗口维度键（如 max_dd_1y）能被取到
+                            score, details, skipped = calc_score_detail(cached)
                             row["score"] = score
                             row["_score_detail"] = details
                             row["_skipped_weight"] = skipped
@@ -1573,14 +1655,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             # 追加今日实时涨跌到走势图末尾
                             if td is not None:
                                 row["_trend"].append((datetime.date.today().isoformat(), round(td, 2)))
-                        score_d = {k: d.get(k) for k in (
-                            "y1","m3","m1","f5","sy6","sy2","sy3",
-                            "annual_return","sharpe","sortino",
-                            "profit_ratio","win_rate","recovery","calmar",
-                            "max_dd","volatility","max_loss_days",
-                            "sc","rate","inst","td",
-                        )}
-                        score, details, skipped = calc_score_detail(score_d)
+                        # 直接传完整数据，窗口维度键（如 max_dd_1y）可被取到
+                        score, details, skipped = calc_score_detail(d)
                         row["score"] = score
                         row["_score_detail"] = details
                         row["_skipped_weight"] = skipped
@@ -1830,6 +1906,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 importlib.reload(fund_render)
                 # 重新计算缓存中的评分（无需重新拉取数据）
                 _recalc_cached_scores()
+                # 窗口维度变更 → 后台补齐缺失的多窗口指标（只算受影响维度，不重跑推荐）
+                threading.Thread(target=_backfill_window_metrics, daemon=True).start()
                 # 预热推荐表缓存（从文件读取，不拉取实时 td，速度快）
                 _fund_table_cache = None
                 try:
