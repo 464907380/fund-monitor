@@ -80,25 +80,39 @@ HISTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ── 基金净值走势磁盘缓存（推荐进程与 Web 服务器共享，避免重复请求）──
 _TREND_CACHE_PATH = os.path.join(HISTORY_DIR, "data", "fund_trend_cache.json")
 _TREND_DISK_LOCK = threading.Lock()
+# 进程内缓存 + 文件 mtime，避免评分阶段每只基金都重读整个 JSON 文件
+_TREND_CACHE_MEM: dict | None = None
+_TREND_CACHE_MTIME: float = -1.0
 
 
 def _load_fund_trend_cache() -> dict:
-    """读取净值走势磁盘缓存 {code: {date, navs:[[d,v],...]}}"""
+    """读取净值走势磁盘缓存 {code: {date, navs:[[d,v],...]}}（进程内缓存+mtime 检测）"""
+    global _TREND_CACHE_MEM, _TREND_CACHE_MTIME
     try:
-        with open(_TREND_CACHE_PATH, encoding="utf-8") as f:
-            return json.load(f)
+        if os.path.exists(_TREND_CACHE_PATH):
+            _mtime = os.path.getmtime(_TREND_CACHE_PATH)
+            if _TREND_CACHE_MEM is not None and _mtime == _TREND_CACHE_MTIME:
+                return _TREND_CACHE_MEM
+            with open(_TREND_CACHE_PATH, encoding="utf-8") as f:
+                _TREND_CACHE_MEM = json.load(f)
+            _TREND_CACHE_MTIME = _mtime
+            return _TREND_CACHE_MEM
     except Exception:
-        return {}
+        pass
+    return {}
 
 
 def _save_fund_trend_cache(cache: dict) -> None:
-    """原子写入净值走势缓存"""
+    """原子写入净值走势缓存，并同步进程内缓存避免重复读文件"""
+    global _TREND_CACHE_MEM, _TREND_CACHE_MTIME
     try:
         os.makedirs(os.path.dirname(_TREND_CACHE_PATH), exist_ok=True)
         _tmp = _TREND_CACHE_PATH + ".tmp"
         with open(_tmp, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False)
         os.replace(_tmp, _TREND_CACHE_PATH)
+        _TREND_CACHE_MEM = cache
+        _TREND_CACHE_MTIME = os.path.getmtime(_TREND_CACHE_PATH)
     except Exception:
         pass
 

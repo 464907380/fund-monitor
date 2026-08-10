@@ -535,7 +535,18 @@ def get_scoring_data(code: str) -> dict:
 
     # 2. 获取净值历史（LSJZ API, 根据启用维度动态决定页数）
     max_pages = _required_nav_pages()
-    full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages)
+    full_nav = None
+    # 优先读当天磁盘净值缓存（推荐评分 _score_one / 折线图已写入），
+    # 命中则免去每只基金 38 页网络请求，评分阶段从数万次请求降到 O(1)
+    try:
+        from fund_utils import _get_fund_trend_navs
+        _cached_navs = _get_fund_trend_navs(code)
+        if _cached_navs and len(_cached_navs) >= 250:
+            full_nav = _cached_navs
+    except Exception:
+        pass
+    if full_nav is None:
+        full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages)
     if full_nav:
         d["full_nav"] = full_nav
         d["nav"] = full_nav  # 完整净值数据
