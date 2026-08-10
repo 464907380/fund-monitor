@@ -17,7 +17,7 @@ import urllib.request
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, HISTORY_DIR, setup_log, _get_fund_name, _get_fund_trend_navs, _set_fund_trend_navs
+from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, heartbeat_age, HISTORY_DIR, setup_log, _get_fund_name, _get_fund_trend_navs, _set_fund_trend_navs
 from config import CFG, api_url, get_timeout, get_config
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -105,6 +105,12 @@ def _stop_task(task_id: str) -> bool:
 def _spawn_recommend() -> bool:
     """启动推荐任务，返回是否成功"""
     script = os.path.join(_SCRIPT_DIR, "fund_recommend.py")
+    # 防重复启动：已有推荐进程在跑则拒绝（避免并发写结果/心跳导致异常退出与显示错乱）
+    with _proc_lock:
+        _cur = _recommend_state.get("proc")
+        if _cur and _cur.poll() is None:
+            print("[recommend] 已有推荐进程运行中，跳过本次启动", flush=True)
+            return False
     _err_f = None
     try:
         _si = subprocess.STARTUPINFO()
@@ -2129,21 +2135,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 with _proc_lock:
                     if _recommend_state["proc"] and _recommend_state["proc"].poll() is None:
-                        # 二次检查：心跳是否长时间未更新（说明进程可能已挂死）
-                        _hb = read_heartbeat("fund_recommend")
-                        if _hb:
-                            _elapsed = time.time() - _hb.get("start", 0)
-                            _hb_elapsed = _hb.get("elapsed", 0) or 0
-                            # 进程启动超过10分钟、心跳elapsed超过5分钟未变、进度已满 → 挂死
-                            if _elapsed > 600 and _hb_elapsed > 300 and _hb.get("progress", 0) == _hb.get("total", 0):
-                                print(f"[recommend] 检测到进程挂死(PID={_recommend_state['proc'].pid})，强制清理", flush=True)
-                                try: _recommend_state["proc"].kill()
-                                except Exception: pass
-                                _recommend_state["proc"] = None
-                                clear_heartbeat("fund_recommend")
-                            else:
-                                self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
-                                return
+                        # 二次检查：心跳是否长时间未更新（说明进程可能真的挂死）
+                        # 用心跳文件 mtime 判断，而不是 progress==total（初筛/排行阶段 progress 本来就等于 total，会误判误杀）
+                        _hb_age = heartbeat_age("fund_recommend")
+                        if _hb_age > 600:
+                            print(f"[recommend] 心跳 {_hb_age:.0f}s 未更新，判定进程挂死(PID={_recommend_state['proc'].pid})，强制清理", flush=True)
+                            try: _recommend_state["proc"].kill()
+                            except Exception: pass
+                            _recommend_state["proc"] = None
+                            clear_heartbeat("fund_recommend")
                         else:
                             self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
                             return

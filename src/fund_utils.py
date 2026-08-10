@@ -476,6 +476,18 @@ def _ensure_heartbeat_dir() -> None:
     os.makedirs(_HEARTBEAT_DIR, exist_ok=True)
 
 
+def heartbeat_age(name: str) -> float:
+    """返回心跳文件最后写入时间距今的秒数；无心跳文件返回 -1。
+    用于判断进程是否真的挂死（心跳长时间未更新），而不是凭 progress==total 误判。"""
+    try:
+        path = os.path.join(_HEARTBEAT_DIR, f"{name}.json")
+        if os.path.exists(path):
+            return time.time() - os.path.getmtime(path)
+    except Exception:
+        pass
+    return -1.0
+
+
 def write_heartbeat(name: str, **kwargs) -> None:
     _ensure_heartbeat_dir()
     path = os.path.join(_HEARTBEAT_DIR, f"{name}.json")
