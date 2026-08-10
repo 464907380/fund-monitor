@@ -29,14 +29,20 @@ _proc_lock = threading.Lock()
 # ── 估算误差结算（盘中估算 vs 实际净值，后台幂等结算）──
 _est_settle_lock = threading.Lock()
 _est_settling = False
+_est_last_settle_ts: float = 0.0
+_EST_SETTLE_MIN_INTERVAL = 600  # 结算间隔秒数（10分钟），避免每次表格请求都触发长结算拖慢页面
 
 
 def _trigger_settle_estimates() -> None:
-    """后台结算估算误差（幂等；只结算早于今天的日期，当天收盘后调用即可看到当天差异）"""
-    global _est_settling
+    """后台结算估算误差（幂等 + 降频：最多每 10 分钟一次）"""
+    global _est_settling, _est_last_settle_ts
     with _est_settle_lock:
         if _est_settling:
             return
+        _now = time.time()
+        if _now - _est_last_settle_ts < _EST_SETTLE_MIN_INTERVAL:
+            return
+        _est_last_settle_ts = _now
         _est_settling = True
 
     def _run() -> None:

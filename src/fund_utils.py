@@ -456,7 +456,7 @@ def _save_est_error(cache: dict) -> None:
 
 
 def record_estimate(code: str, est_pct: float) -> None:
-    """盘中记录持仓估算涨跌(%)，供收盘后与实际净值对比"""
+    """盘中记录持仓估算涨跌(%)，供收盘后与实际净值对比。同一天值未变化时不重复写盘。"""
     if est_pct is None:
         return
     try:
@@ -465,57 +465,97 @@ def record_estimate(code: str, est_pct: float) -> None:
             _cache = _load_est_error()
             _est_map = _cache.setdefault("estimates", {})
             _day = _est_map.setdefault(_today, {})
-            _day[code] = round(float(est_pct), 2)
+            _val = round(float(est_pct), 2)
+            if _day.get(code) == _val:
+                return  # 值未变，避免反复写盘（自选表每次刷新都会调用）
+            _day[code] = _val
             _save_est_error(_cache)
     except Exception:
         pass
 
 
 def _fetch_actual_nav_pct(code: str, date: str) -> float | None:
-    """拉取基金指定交易日的实际净值涨跌幅(%)，LSJZ 接口（查最近 3 页）"""
-    for _page in range(1, 4):
-        _url = (f"https://api.fund.eastmoney.com/f10/lsjz"
-                f"?callback=j&fundCode={code}&pageIndex={_page}&pageSize=20")
-        try:
-            _req = urllib.request.Request(_url, headers={
-                "User-Agent": "Mozilla/5.0", "Referer": "https://fund.eastmoney.com/"})
-            with urllib.request.urlopen(_req, timeout=get_timeout("default", 10)) as _r:
-                _text = _r.read().decode("utf-8")
-            _m = re.search(r"j\((.+)\)", _text)
-            if not _m:
-                continue
+    """拉取基金指定交易日的实际净值涨跌幅(%)，LSJZ 接口（最新 1 页，覆盖最近 20 个交易日）"""
+    _url = (f"https://api.fund.eastmoney.com/f10/lsjz"
+            f"?callback=j&fundCode={code}&pageIndex=1&pageSize=20")
+    try:
+        _req = urllib.request.Request(_url, headers={
+            "User-Agent": "Mozilla/5.0", "Referer": "https://fund.eastmoney.com/"})
+        with urllib.request.urlopen(_req, timeout=get_timeout("default", 10)) as _r:
+            _text = _r.read().decode("utf-8")
+        _m = re.search(r"j\((.+)\)", _text)
+        if not _m:
+            return None
+        _data = json.loads(_m.group(1))
+        for _it in _data.get("Data", {}).get("LSJZList", []):
+            if _it.get("FSRQ") == date and _it.get("JZZZL"):
+                return float(_it["JZZZL"])
+    except Exception:
+        pass
+    return None
+
+
+def _probe_latest_nav_date(code: str) -> str | None:
+    """轻量探测：拉基金 LSJZ 最新 1 条，返回最新净值日期 YYYY-MM-DD，失败返回 None"""
+    _url = (f"https://api.fund.eastmoney.com/f10/lsjz"
+            f"?callback=j&fundCode={code}&pageIndex=1&pageSize=1")
+    try:
+        _req = urllib.request.Request(_url, headers={
+            "User-Agent": "Mozilla/5.0", "Referer": "https://fund.eastmoney.com/"})
+        with urllib.request.urlopen(_req, timeout=6) as _r:
+            _text = _r.read().decode("utf-8")
+        _m = re.search(r"j\((.+)\)", _text)
+        if _m:
             _data = json.loads(_m.group(1))
-            for _it in _data.get("Data", {}).get("LSJZList", []):
-                if _it.get("FSRQ") == date and _it.get("JZZZL"):
-                    return float(_it["JZZZL"])
-        except Exception:
-            continue
+            _items = _data.get("Data", {}).get("LSJZList", [])
+            if _items:
+                return _items[0].get("FSRQ")
+    except Exception:
+        pass
     return None
 
 
 def settle_estimate_errors() -> None:
-    """结算估算误差：对已有估算记录的日期（含今天），拉实际净值算差异。
-    当天实际净值未出（如晚上才发布）的条目保留待下次；净值已出的当天即可结算，
-    当天就能看到当天差异。幂等：结算成功的日期会从 estimates 删除。"""
+    """结算估算误差：先探测最新净值日期，只结算净值已发布的日期（含今天，若已发布）。
+    当天净值未出时秒级完成（不做无效拉取）；净值发布后并行结算当天。幂等。"""
     try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         with _EST_ERROR_LOCK:
             _cache = _load_est_error()
             _est_map = _cache.setdefault("estimates", {})
             _errors = _cache.setdefault("errors", {})
-            _pending = sorted(_est_map.keys())
-            for _d in _pending:
-                _day_map = _est_map.get(_d, {})
-                if not _day_map:
-                    _est_map.pop(_d, None)
-                    continue
+            # 待结算任务 (date, code) -> est
+            _tasks: dict[tuple[str, str], float] = {}
+            for _d, _day_map in list(_est_map.items()):
                 for _code, _est in list(_day_map.items()):
-                    _actual = _fetch_actual_nav_pct(_code, _d)
-                    if _actual is None:
-                        continue  # 实际净值未出，保留待下次
-                    _errors.setdefault(_code, {})[_d] = {
-                        "est": _est, "actual": round(_actual, 2), "err": round(_est - _actual, 2)}
-                    _day_map.pop(_code, None)
-                if not _day_map:
+                    _tasks[(_d, _code)] = _est
+            if not _tasks:
+                return
+            # 探测最新净值日期：只结算日期 <= 最新净值日期的（该日净值已出）
+            _probe_code = next(iter(_tasks))[1]
+            _latest = _probe_latest_nav_date(_probe_code)
+            _settled: dict[tuple[str, str], float] = {}
+            _do_tasks = {k: v for k, v in _tasks.items() if _latest is not None and k[0] <= _latest}
+            if _do_tasks:
+                with ThreadPoolExecutor(max_workers=20) as _ex:
+                    _futs = {_ex.submit(_fetch_actual_nav_pct, _c, _d): (_d, _c) for (_d, _c) in _do_tasks}
+                    for _f in as_completed(_futs):
+                        _d, _c = _futs[_f]
+                        try:
+                            _actual = _f.result()
+                        except Exception:
+                            _actual = None
+                        if _actual is not None:
+                            _settled[(_d, _c)] = _actual
+            # 写入 errors + 从 estimates 移除已结算条目
+            for (_d, _c), _actual in _settled.items():
+                _est = _tasks[(_d, _c)]
+                _errors.setdefault(_c, {})[_d] = {
+                    "est": _est, "actual": round(_actual, 2), "err": round(_est - _actual, 2)}
+                _day_map = _est_map.get(_d)
+                if _day_map is not None and _c in _day_map:
+                    _day_map.pop(_c, None)
+                if _day_map is not None and not _day_map:
                     _est_map.pop(_d, None)
             _save_est_error(_cache)
     except Exception:
