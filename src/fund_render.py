@@ -21,7 +21,7 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 
 def _est_err_badge(code: str) -> str:
-    """估算误差徽章：按近10天平均绝对误差显示彩色圆点（绿准/黄中/红偏差大），点击弹详情"""
+    """估算误差圆点（纯展示，点击由整个涨跌列触发）"""
     try:
         from fund_utils import get_est_error_summary
         s = get_est_error_summary(code)
@@ -31,15 +31,13 @@ def _est_err_badge(code: str) -> str:
         return ""
     mae = s.get("mae", 0)
     if mae < 1.0:
-        color, tip = "#4caf50", f"估算较准（±{mae}%）"
+        color = "#4caf50"
     elif mae <= 2.0:
-        color, tip = "#ff9800", f"估算一般（±{mae}%）"
+        color = "#ff9800"
     else:
-        color, tip = "#f44336", f"估算偏差大（±{mae}%）"
-    return (f'<span onclick="showEstError(\'{code}\')" style="display:inline-block;width:9px;height:9px;'
-            f'border-radius:50%;background:{color};box-shadow:0 0 4px {color};vertical-align:middle;'
-            f'margin-left:4px;cursor:pointer;" '
-            f'title="{tip} · 点击查看近10天估算 vs 实际差异"></span>')
+        color = "#f44336"
+    return (f'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;'
+            f'background:{color};box-shadow:0 0 4px {color};vertical-align:middle;margin-left:4px;"></span>')
 
 
 def _web_rich_fund_table(rows: list[dict]) -> str:
@@ -116,7 +114,15 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
             _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
         elif _src == "fallback" or not _src:
             _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}{_src_badge}{_est_err_badge(_fcode)}</td>')
+        _err_badge = _est_err_badge(_fcode)
+        _err_click = _err_title = ''
+        _err_cur = ''
+        if _err_badge:
+            # 整个涨跌列可点击查看估算差异详情（方便鼠标点击）
+            _err_click = f'onclick="showEstError(\'{_fcode}\')"'
+            _err_title = 'title="点击查看估算 vs 实际净值差异"'
+            _err_cur = 'cursor:pointer;'
+        parts.append(f'<td {_err_click} {_err_title} style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_err_cur}{_color_inline(_v)}">{_html.escape(str(_v))}{_src_badge}{_err_badge}</td>')
         # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
@@ -199,7 +205,15 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
             _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
         elif _src == "fallback" or not _src:
             _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};white-space:nowrap;">{_html.escape(day_raw)}{_src_badge}{_est_err_badge(_fund_code)}</td>')
+        _err_badge = _est_err_badge(_fund_code)
+        _err_click = _err_title = ''
+        _err_cur = ''
+        if _err_badge:
+            # 整个涨跌列可点击查看估算差异详情（方便鼠标点击）
+            _err_click = f'onclick="showEstError(\'{_fund_code}\')"'
+            _err_title = 'title="点击查看估算 vs 实际净值差异"'
+            _err_cur = 'cursor:pointer;'
+        parts.append(f'<td {_err_click} {_err_title} style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};white-space:nowrap;{_err_cur}">{_html.escape(day_raw)}{_src_badge}{_err_badge}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;white-space:nowrap;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
