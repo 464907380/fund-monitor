@@ -21,7 +21,7 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 
 def _est_err_badge(code: str) -> str:
-    """估算差异箭头：颜色=差异大小(绿MAE<1%/黄1~2%/红>2%)，箭头方向=总体好坏(↑实际好于估算/↓差于估算)。纯展示，点击由涨跌列触发。"""
+    """估算差异图标：勾✓=实际总体好于估算，叉✗=实际总体差于估算；颜色=差异大小(绿MAE<1%/黄1~2%/红>2%)。纯展示，点击由涨跌列触发。"""
     try:
         from fund_utils import get_est_error_summary
         s = get_est_error_summary(code)
@@ -40,14 +40,18 @@ def _est_err_badge(code: str) -> str:
         color = "#ff9800"
     else:
         color = "#f44336"
-    # 好坏方向（箭头）：总体好于估算 ↑，差于估算 ↓
-    _up = _mean >= 0
-    _path = "M8 2 L13 9 H10 V14 H6 V9 H3 Z" if _up else "M8 14 L13 7 H10 V2 H6 V7 H3 Z"
-    _tip = "实际总体好于估算" if _up else "实际总体差于估算"
+    # 好坏（勾/叉）
+    _good = _mean >= 0
+    _tip = "实际总体好于估算" if _good else "实际总体差于估算"
+    if _good:
+        _inner = (f'<path d="M3.5 8.5 L7 12.5 L12.5 4" stroke="{color}" stroke-width="2.6" '
+                  f'fill="none" stroke-linecap="round" stroke-linejoin="round"/>')
+    else:
+        _inner = (f'<path d="M4 4 L12 12 M12 4 L4 12" stroke="{color}" stroke-width="2.6" '
+                  f'stroke-linecap="round"/>')
     return (f'<svg width="13" height="13" viewBox="0 0 16 16" '
             f'style="vertical-align:middle;margin-left:3px;" '
-            f'title="{_tip} · 近10天平均绝对误差±{mae}% · 点击查看每日明细">'
-            f'<path d="{_path}" fill="{color}"/></svg>')
+            f'title="{_tip} · 近10天平均绝对误差±{mae}% · 点击查看每日明细">{_inner}</svg>')
 
 
 def _web_rich_fund_table(rows: list[dict]) -> str:
