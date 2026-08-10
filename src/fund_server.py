@@ -111,6 +111,12 @@ def _spawn_recommend() -> bool:
         if _cur and _cur.poll() is None:
             print("[recommend] 已有推荐进程运行中，跳过本次启动", flush=True)
             return False
+    # 跨 server 重启的孤儿进程检测：心跳存在、新鲜(<10分钟)且未完成 → 说明有
+    # 其它 server 启动的推荐仍在跑，拒绝启动避免并发写结果文件/心跳
+    _hb = read_heartbeat("fund_recommend")
+    if _hb and _hb.get("phase") not in ("完成", "失败") and heartbeat_age("fund_recommend") < 600:
+        print("[recommend] 检测到其它推荐进程仍在运行，跳过本次启动", flush=True)
+        return False
     _err_f = None
     try:
         _si = subprocess.STARTUPINFO()
@@ -2147,6 +2153,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         else:
                             self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
                             return
+                # 跨 server 重启的孤儿进程检测：心跳新鲜且未完成 → 有其它 server 启动的推荐在跑
+                _hb2 = read_heartbeat("fund_recommend")
+                if _hb2 and _hb2.get("phase") not in ("完成", "失败") and heartbeat_age("fund_recommend") < 600:
+                    self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
+                    return
                 if _spawn_recommend():
                     self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
                 else:
