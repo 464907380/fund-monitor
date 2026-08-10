@@ -1001,6 +1001,9 @@ def main() -> None:
                     print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {ar_str:<8} {result['score']:<6.1f} {time.time()-_t4:<7.1f}s")
                 else:
                     print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'失败':<8} {'':6} {time.time()-_t4:<7.1f}s")
+                # 定期把累积的净值走势写盘并清空，控制内存（候选多时避免OOM）
+                if i % 250 == 0 or i == total:
+                    _flush_trend_cache()
                 pct = i / total * 100
                 opct = 15 + i / total * 82
                 update_heartbeat("fund_recommend", progress=i, total=total,

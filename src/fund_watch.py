@@ -562,6 +562,12 @@ def get_scoring_data(code: str) -> dict:
         d["nav"] = []
 
     _scoring_cache[code] = (today, d)
+    # 限制缓存大小：推荐批量评分时内存会无限累积导致 OOM，最多保留最近 200 只
+    if len(_scoring_cache) > 200:
+        try:
+            _scoring_cache.pop(next(iter(_scoring_cache)))
+        except (StopIteration, KeyError):
+            pass
     return d
 
 
