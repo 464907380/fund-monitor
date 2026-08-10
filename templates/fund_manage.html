@@ -850,6 +850,16 @@ function updateHeartbeat() {
         el.style.display = 'none';
       }
     });
+    // 自动感知后台运行的推荐任务（页面加载后才启动/server重启后的孤儿任务）：
+    // 心跳存在、进程存活且未完成，且推荐按钮未被禁用（未在显示进度）→ 恢复进度条
+    var recHb = hb['fund_recommend'];
+    if (d.alive && d.alive.fund_recommend && recHb &&
+        recHb.phase !== '完成' && recHb.phase !== '失败' && (recHb.overall_pct || 0) < 100) {
+      var btn = document.getElementById('recFilterBtn');
+      if (btn && !btn.disabled) {
+        _resumeRecommendProgress();
+      }
+    }
   });
 }
 
