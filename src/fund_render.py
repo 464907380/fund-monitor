@@ -21,7 +21,7 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 
 def _est_err_badge(code: str) -> str:
-    """估算误差徽章：近10天平均绝对误差分档（准/中/偏差大），点击弹详情"""
+    """估算误差徽章：按近10天平均绝对误差显示单图标（✓准/~中/⚠偏差大），点击弹详情"""
     try:
         from fund_utils import get_est_error_summary
         s = get_est_error_summary(code)
@@ -31,14 +31,14 @@ def _est_err_badge(code: str) -> str:
         return ""
     mae = s.get("mae", 0)
     if mae < 1.0:
-        color, label = "#4caf50", "准"
+        color, icon, tip = "#4caf50", "✓", f"估算较准（±{mae}%）"
     elif mae <= 2.0:
-        color, label = "#ff9800", "中"
+        color, icon, tip = "#ff9800", "~", f"估算一般（±{mae}%）"
     else:
-        color, label = "#f44336", "偏差大"
-    return (f'<span onclick="showEstError(\'{code}\')" style="font-size:10px;color:{color};'
-            f'margin-left:3px;cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.2);" '
-            f'title="点击查看近10天估算 vs 实际差异">±{mae}% {label}</span>')
+        color, icon, tip = "#f44336", "⚠", f"估算偏差大（±{mae}%）"
+    return (f'<span onclick="showEstError(\'{code}\')" style="font-size:12px;color:{color};'
+            f'margin-left:3px;cursor:pointer;font-weight:bold;" '
+            f'title="{tip} · 点击查看近10天估算 vs 实际差异">{icon}</span>')
 
 
 def _web_rich_fund_table(rows: list[dict]) -> str:
