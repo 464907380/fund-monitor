@@ -402,26 +402,29 @@ def flush_td_cache() -> None:
 
 
 def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
-    """获取基金当日涨跌幅（带当天缓存：收盘后固定值命中缓存秒回，盘中不缓存估算会变）"""
+    """获取基金当日涨跌幅（带当天缓存）。
+
+    注意：盘中无真实当日涨跌（只有估算），收盘后每只基金不定时公布实际净值。
+    因此**只缓存实际净值(lsjz)** 作为当天固定值；估算(holdings)/昨日(fallback)不缓存，
+    未公布净值的基金每次重试，直到公布。"""
     import datetime as _dt
     _now = _dt.datetime.now()
     _today_str = _now.strftime("%Y-%m-%d")
-    # 进程内缓存（收盘后固定）
+    # 进程内缓存（仅 lsjz 实际净值，当天固定）
     _cached = _TD_PROC.get(code)
-    if _cached and _cached.get("date") == _today_str:
+    if _cached and _cached.get("date") == _today_str and _cached.get("src") == "lsjz":
         return (_get_fund_name(code) or code, _cached["td"], _cached["src"])
-    # 磁盘缓存（跨进程，收盘后固定）
-    if _now.hour >= 15:
-        try:
-            _disk = _load_td_cache().get(code)
-            if _disk and _disk.get("date") == _today_str:
-                _TD_PROC[code] = _disk
-                return (_get_fund_name(code) or code, _disk["td"], _disk["src"])
-        except Exception:
-            pass
+    # 磁盘缓存（跨进程，仅 lsjz）
+    try:
+        _disk = _load_td_cache().get(code)
+        if _disk and _disk.get("date") == _today_str and _disk.get("src") == "lsjz":
+            _TD_PROC[code] = _disk
+            return (_get_fund_name(code) or code, _disk["td"], _disk["src"])
+    except Exception:
+        pass
     _result = _fetch_fund_estimate_uncached(code)
-    # 收盘后（td 固定）写入进程内缓存，供 flush 落盘跨进程复用
-    if _result is not None and _result[1] is not None and _now.hour >= 15:
+    # 只缓存实际净值(lsjz)为当天固定值；holdings估算/fallback昨日不缓存
+    if _result is not None and _result[1] is not None and _result[2] == "lsjz":
         _TD_PROC[code] = {"date": _today_str, "td": _result[1], "src": _result[2]}
     return _result
 
