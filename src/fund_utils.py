@@ -494,28 +494,29 @@ def _fetch_actual_nav_pct(code: str, date: str) -> float | None:
 
 
 def settle_estimate_errors() -> None:
-    """结算估算误差：对 estimates 里早于今天的日期，拉实际净值算差异。
-    当天收盘后调用，当天即可看到当天差异。幂等：已结算日期会从 estimates 删除。"""
+    """结算估算误差：对已有估算记录的日期（含今天），拉实际净值算差异。
+    当天实际净值未出（如晚上才发布）的条目保留待下次；净值已出的当天即可结算，
+    当天就能看到当天差异。幂等：结算成功的日期会从 estimates 删除。"""
     try:
-        _today = datetime.datetime.now().strftime("%Y-%m-%d")
         with _EST_ERROR_LOCK:
             _cache = _load_est_error()
             _est_map = _cache.setdefault("estimates", {})
             _errors = _cache.setdefault("errors", {})
-            _pending = [d for d in _est_map if d < _today]
-            if not _pending:
-                return
+            _pending = sorted(_est_map.keys())
             for _d in _pending:
                 _day_map = _est_map.get(_d, {})
                 if not _day_map:
+                    _est_map.pop(_d, None)
                     continue
-                for _code, _est in _day_map.items():
+                for _code, _est in list(_day_map.items()):
                     _actual = _fetch_actual_nav_pct(_code, _d)
                     if _actual is None:
-                        continue
+                        continue  # 实际净值未出，保留待下次
                     _errors.setdefault(_code, {})[_d] = {
                         "est": _est, "actual": round(_actual, 2), "err": round(_est - _actual, 2)}
-                _est_map.pop(_d, None)
+                    _day_map.pop(_code, None)
+                if not _day_map:
+                    _est_map.pop(_d, None)
             _save_est_error(_cache)
     except Exception:
         pass
