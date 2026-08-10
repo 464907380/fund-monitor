@@ -21,7 +21,7 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 
 def _est_err_badge(code: str) -> str:
-    """估算误差圆点（纯展示，点击由整个涨跌列触发）"""
+    """估算差异箭头：颜色=差异大小(绿MAE<1%/黄1~2%/红>2%)，箭头方向=总体好坏(↑实际好于估算/↓差于估算)。纯展示，点击由涨跌列触发。"""
     try:
         from fund_utils import get_est_error_summary
         s = get_est_error_summary(code)
@@ -30,15 +30,24 @@ def _est_err_badge(code: str) -> str:
     if not s or not s.get("count"):
         return ""
     mae = s.get("mae", 0)
-    # 3档：MAE<1%绿，1~2%黄，>2%红（阈值放宽，避免大多红黄）
+    # 总体方向：平均偏差 Σerr/N（正=实际总体好于估算）
+    _detail = s.get("detail") or []
+    _mean = (sum(_d.get("err", 0) for _d in _detail) / len(_detail)) if _detail else 0.0
+    # 差异大小（颜色）：MAE<1%绿，1~2%黄，>2%红
     if mae < 1.0:
         color = "#4caf50"
     elif mae <= 2.0:
         color = "#ff9800"
     else:
         color = "#f44336"
-    return (f'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;'
-            f'background:{color};box-shadow:0 0 4px {color};vertical-align:middle;margin-left:4px;"></span>')
+    # 好坏方向（箭头）：总体好于估算 ↑，差于估算 ↓
+    _up = _mean >= 0
+    _path = "M8 2 L13 9 H10 V14 H6 V9 H3 Z" if _up else "M8 14 L13 7 H10 V2 H6 V7 H3 Z"
+    _tip = "实际总体好于估算" if _up else "实际总体差于估算"
+    return (f'<svg width="13" height="13" viewBox="0 0 16 16" '
+            f'style="vertical-align:middle;margin-left:3px;" '
+            f'title="{_tip} · 近10天平均绝对误差±{mae}% · 点击查看每日明细">'
+            f'<path d="{_path}" fill="{color}"/></svg>')
 
 
 def _web_rich_fund_table(rows: list[dict]) -> str:
