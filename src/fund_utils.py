@@ -547,7 +547,8 @@ def settle_estimate_errors() -> None:
             for (_d, _c), _actual in _settled.items():
                 _est = _tasks[(_d, _c)]
                 _errors.setdefault(_c, {})[_d] = {
-                    "est": _est, "actual": round(_actual, 2), "err": round(_est - _actual, 2)}
+                    "est": _est, "actual": round(_actual, 2),
+                    "err": round(_actual - _est, 2)}  # 实际-估算：正=实际好于估算
                 _day_map = _est_map.get(_d)
                 if _day_map is not None and _c in _day_map:
                     _day_map.pop(_c, None)
@@ -711,7 +712,7 @@ def backfill_estimate_errors(days: int = 10) -> int:
                     continue
                 _actual = _actual_days[_dt_str]
                 _err_map[_dt_str] = {"est": round(_est, 2), "actual": round(_actual, 2),
-                                     "err": round(_est - _actual, 2)}
+                                     "err": round(_actual - _est, 2)}  # 实际-估算：正=实际好于估算
                 _filled += 1
         if _filled:
             with _EST_ERROR_LOCK:

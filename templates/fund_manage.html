@@ -2716,12 +2716,12 @@ function showEstError(code) {
         + '<th style="padding:4px 8px;text-align:right;color:#888;border-bottom:1px solid #444;white-space:nowrap;">误差</th></tr></thead><tbody>';
       d.detail.forEach(function(it){
         var est = it.est, actual = it.actual, err = it.err;
-        var errAbs = Math.abs(err);
-        var errColor = errAbs < 1.0 ? '#888' : (errAbs <= 2.0 ? '#ffa726' : '#ef5350');
+        // 误差 = 实际 - 估算：实际比估算涨得多/跌得少 → 绿(好)；实际比估算涨得少/跌得多 → 红(差)
+        var errColor = err >= 0 ? '#4caf50' : '#ef5350';
         html += '<tr><td style="padding:3px 8px;border-bottom:1px solid #333;color:#888;font-family:Consolas;white-space:nowrap;">' + it.date + '</td>'
           + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#ccc;white-space:nowrap;">' + (est != null ? est.toFixed(2) + '%' : '-') + '</td>'
           + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#ccc;white-space:nowrap;">' + (actual != null ? actual.toFixed(2) + '%' : '-') + '</td>'
-          + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;font-weight:600;color:' + errColor + ';white-space:nowrap;">' + (err >= 0 ? '+' : '') + err.toFixed(2) + '%</td></tr>';
+          + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;font-weight:600;color:' + errColor + ';white-space:nowrap;" title="正=实际好于估算，负=实际差于估算">' + (err >= 0 ? '+' : '') + err.toFixed(2) + '%</td></tr>';
       });
       html += '</tbody></table>';
       content.innerHTML = html;
