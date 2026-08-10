@@ -2690,7 +2690,7 @@ function showEstError(code) {
   }
   el.innerHTML = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:14px 16px;font-size:12px;color:#ccc;max-width:560px;width:92%;">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;white-space:nowrap;">'
-    + '<div style="display:flex;align-items:baseline;gap:8px;min-width:0;"><span style="font-size:13px;font-weight:600;color:#e0e0e0;white-space:nowrap;">📈 持仓估算 vs 实际净值差异</span> <span style="color:#666;font-size:11px;font-family:Consolas;white-space:nowrap;">' + code + '</span></div>'
+    + '<div style="display:flex;align-items:baseline;gap:8px;min-width:0;"><span style="font-size:13px;font-weight:600;color:#e0e0e0;white-space:nowrap;">📈 持仓估算 vs 实际净值差异</span> <span id="estErrorTitle" style="color:#666;font-size:11px;font-family:Consolas;white-space:nowrap;">' + code + '</span></div>'
     + '<span onclick="document.getElementById(\'estErrorModal\').style.display=\'none\'" style="cursor:pointer;color:#555;font-size:16px;margin-left:8px;flex-shrink:0;white-space:nowrap;">&times;</span></div>'
     + '<div id="estErrorContent" style="padding:4px 0;color:#888;">⏳ 加载中...</div>'
     + '</div>';
@@ -2700,6 +2700,9 @@ function showEstError(code) {
     .then(function(d){
       var content = document.getElementById('estErrorContent');
       if (!content) return;
+      // 标题显示基金名称（代码）
+      var titleEl = document.getElementById('estErrorTitle');
+      if (titleEl && d.name) titleEl.textContent = d.name + '（' + code + '）';
       if (!d.ok) { content.innerHTML = '<span style="color:#ef5350;">' + (d.error || '获取失败') + '</span>'; return; }
       if (!d.detail || d.detail.length === 0) {
         content.innerHTML = '<span style="color:#666;">暂无数据（盘中显示估算，收盘后结算即可查看差异）</span>';

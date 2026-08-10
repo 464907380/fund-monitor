@@ -1562,12 +1562,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not _code:
                 self._send(*_json_response({"ok": False, "error": "缺少 code"}, 400))
                 return
-            from fund_utils import get_est_error_summary
+            from fund_utils import get_est_error_summary, _get_fund_name
             s = get_est_error_summary(_code)
+            _name = _get_fund_name(_code) or _code
             if s:
-                self._send(*_json_response({"ok": True, "code": _code, "mae": s["mae"], "count": s["count"], "detail": s["detail"]}))
+                self._send(*_json_response({"ok": True, "code": _code, "name": _name, "mae": s["mae"], "count": s["count"], "detail": s["detail"]}))
             else:
-                self._send(*_json_response({"ok": True, "code": _code, "mae": None, "count": 0, "detail": []}))
+                self._send(*_json_response({"ok": True, "code": _code, "name": _name, "mae": None, "count": 0, "detail": []}))
             return
 
         if parsed.path == "/api/recommend":
