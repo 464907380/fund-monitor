@@ -516,8 +516,9 @@ def _probe_latest_nav_date(code: str) -> str | None:
 
 
 def settle_estimate_errors() -> None:
-    """结算估算误差：先探测最新净值日期，只结算净值已发布的日期（含今天，若已发布）。
-    当天净值未出时秒级完成（不做无效拉取）；净值发布后并行结算当天。幂等。"""
+    """结算估算误差：对已有估算记录的日期（含今天）每只基金独立并行拉实际净值算差异。
+    净值已出的基金结算，未出的保留待下次——每只独立判断，
+    不会因某只基金净值未发布而耽误其它已发布的基金（如不同基金发布时间不同）。幂等。"""
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         with _EST_ERROR_LOCK:
@@ -531,22 +532,17 @@ def settle_estimate_errors() -> None:
                     _tasks[(_d, _code)] = _est
             if not _tasks:
                 return
-            # 探测最新净值日期：只结算日期 <= 最新净值日期的（该日净值已出）
-            _probe_code = next(iter(_tasks))[1]
-            _latest = _probe_latest_nav_date(_probe_code)
             _settled: dict[tuple[str, str], float] = {}
-            _do_tasks = {k: v for k, v in _tasks.items() if _latest is not None and k[0] <= _latest}
-            if _do_tasks:
-                with ThreadPoolExecutor(max_workers=20) as _ex:
-                    _futs = {_ex.submit(_fetch_actual_nav_pct, _c, _d): (_d, _c) for (_d, _c) in _do_tasks}
-                    for _f in as_completed(_futs):
-                        _d, _c = _futs[_f]
-                        try:
-                            _actual = _f.result()
-                        except Exception:
-                            _actual = None
-                        if _actual is not None:
-                            _settled[(_d, _c)] = _actual
+            with ThreadPoolExecutor(max_workers=20) as _ex:
+                _futs = {_ex.submit(_fetch_actual_nav_pct, _c, _d): (_d, _c) for (_d, _c) in _tasks}
+                for _f in as_completed(_futs):
+                    _d, _c = _futs[_f]
+                    try:
+                        _actual = _f.result()
+                    except Exception:
+                        _actual = None
+                    if _actual is not None:
+                        _settled[(_d, _c)] = _actual
             # 写入 errors + 从 estimates 移除已结算条目
             for (_d, _c), _actual in _settled.items():
                 _est = _tasks[(_d, _c)]
