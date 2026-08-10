@@ -2724,12 +2724,13 @@ function showEstError(code) {
         + '<th style="padding:4px 8px;text-align:right;color:#888;border-bottom:1px solid #444;white-space:nowrap;">误差</th></tr></thead><tbody>';
       d.detail.forEach(function(it){
         var est = it.est, actual = it.actual, err = it.err;
-        // 绝对误差 > 0.5% → 黄（估算偏差大）；否则绿（估算接近实际）
-        var errColor = Math.abs(err) > 0.5 ? '#ff9800' : '#4caf50';
+        // 3档：|误差|<0.5%绿，0.5~1%黄，>1%红
+        var errAbs = Math.abs(err);
+        var errColor = errAbs < 0.5 ? '#4caf50' : (errAbs <= 1.0 ? '#ff9800' : '#ef5350');
         html += '<tr><td style="padding:3px 8px;border-bottom:1px solid #333;color:#888;font-family:Consolas;white-space:nowrap;">' + it.date + '</td>'
           + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#ccc;white-space:nowrap;">' + (est != null ? est.toFixed(2) + '%' : '-') + '</td>'
           + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;color:#ccc;white-space:nowrap;">' + (actual != null ? actual.toFixed(2) + '%' : '-') + '</td>'
-          + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;font-weight:600;color:' + errColor + ';white-space:nowrap;" title="绝对误差>0.5%为黄色(估算偏差大)">' + (err >= 0 ? '+' : '') + err.toFixed(2) + '%</td></tr>';
+          + '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #333;font-family:Consolas;font-weight:600;color:' + errColor + ';white-space:nowrap;" title="绝对误差<0.5%绿,0.5~1%黄,>1%红">' + (err >= 0 ? '+' : '') + err.toFixed(2) + '%</td></tr>';
       });
       html += '</tbody></table>';
       content.innerHTML = html;

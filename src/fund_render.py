@@ -30,9 +30,10 @@ def _est_err_badge(code: str) -> str:
     if not s or not s.get("count"):
         return ""
     mae = s.get("mae", 0)
-    if mae < 1.0:
+    # 3档：MAE<0.5%绿，0.5~1%黄，>1%红
+    if mae < 0.5:
         color = "#4caf50"
-    elif mae <= 2.0:
+    elif mae <= 1.0:
         color = "#ff9800"
     else:
         color = "#f44336"
