@@ -296,6 +296,9 @@ def _curve_color(dim_name: str, raw_val) -> str:
     # dim_name → curve_key（部分维度的数据key和曲线key不同）
     _CURVE_KEY_MAP = {"基金规模": "scale"}
     curve_key = _CURVE_KEY_MAP.get(dim_name) or _dim_value_to_key(dim_name)
+    # 窗口维度：数据键带窗口后缀(max_dd_1y)，但曲线按基础键(max_dd)存储，需回退
+    if curve_key and curve_key.rsplit("_", 1)[-1] in ("1y", "2y", "3y"):
+        curve_key = curve_key.rsplit("_", 1)[0]
     curves = _sys.modules.get("fund_scoring")
     if curves is None:
         return "#bbb"
