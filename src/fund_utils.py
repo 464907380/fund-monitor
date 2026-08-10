@@ -722,7 +722,7 @@ def backfill_estimate_errors(days: int = 10) -> int:
         with _EST_ERROR_LOCK:
             _cache = _load_est_error()
             _errors = _cache.setdefault("errors", {})
-        # 待回填基金：所有自选基金（不限当天估算记录，已结算移出 estimates 的也能补历史）
+        # 待回填基金：所有自选基金 + 市场优选(推荐结果)按评分前 N 只（不限当天估算记录）
         _codes: list[str] = []
         try:
             _fl_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -733,6 +733,22 @@ def backfill_estimate_errors(days: int = 10) -> int:
                         _c = _item.get("code")
                         if _c:
                             _codes.append(_c)
+        except Exception:
+            pass
+        # 市场优选：推荐结果按评分降序取前 N（覆盖市场优选表显示范围）
+        try:
+            _res_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                     ".fund_recommend_result.json")
+            if os.path.exists(_res_path):
+                with open(_res_path, encoding="utf-8") as _f:
+                    _res = json.load(_f)
+                _top_n = 100
+                _res_sorted = sorted(_res.get("results", []),
+                                     key=lambda x: x.get("score", 0), reverse=True)[:_top_n]
+                for _r in _res_sorted:
+                    _c = _r.get("code")
+                    if _c and _c not in _codes:
+                        _codes.append(_c)
         except Exception:
             pass
         if not _codes:
