@@ -21,7 +21,8 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 
 def _est_err_badge(code: str) -> str:
-    """估算差异图标：勾✓=实际总体好于估算，叉✗=实际总体差于估算；颜色=差异大小(绿MAE<1%/黄1~2%/红>2%)。纯展示，点击由涨跌列触发。"""
+    """估算差异图标：好坏与大小都基于总体误差（平均偏差 Σerr/N，正=实际总体好于估算）。
+    勾✓=好、叉✗=差；颜色=|总体误差|分档(绿<0.5%/黄0.5~1%/红>1%)。纯展示，点击由涨跌列触发。"""
     try:
         from fund_utils import get_est_error_summary
         s = get_est_error_summary(code)
@@ -29,14 +30,14 @@ def _est_err_badge(code: str) -> str:
         return ""
     if not s or not s.get("count"):
         return ""
-    mae = s.get("mae", 0)
-    # 总体方向：平均偏差 Σerr/N（正=实际总体好于估算）
+    # 总体误差：平均偏差 Σerr/N（正=实际总体好于估算，负=差于估算）
     _detail = s.get("detail") or []
     _mean = (sum(_d.get("err", 0) for _d in _detail) / len(_detail)) if _detail else 0.0
-    # 差异大小（颜色）：MAE<1%绿，1~2%黄，>2%红
-    if mae < 1.0:
+    _abs = abs(_mean)
+    # 颜色 = |总体误差|：<0.5%绿，0.5~1%黄，>1%红
+    if _abs < 0.5:
         color = "#4caf50"
-    elif mae <= 2.0:
+    elif _abs <= 1.0:
         color = "#ff9800"
     else:
         color = "#f44336"
@@ -51,7 +52,7 @@ def _est_err_badge(code: str) -> str:
                   f'stroke-linecap="round"/>')
     return (f'<svg width="13" height="13" viewBox="0 0 16 16" '
             f'style="vertical-align:middle;margin-left:3px;" '
-            f'title="{_tip} · 近10天平均绝对误差±{mae}% · 点击查看每日明细">{_inner}</svg>')
+            f'title="{_tip} · 总体平均偏差 {_mean:+.2f}% · 点击查看每日明细">{_inner}</svg>')
 
 
 def _web_rich_fund_table(rows: list[dict]) -> str:
