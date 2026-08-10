@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+import threading
 import datetime
 from config import CFG, api_url, get_timeout
 from config import get_secret as _get_secret
@@ -268,9 +269,65 @@ def _parse_holdings_meta(code: str) -> dict:
         return {"date": "", "quarter": ""}
 
 
+# ── 持仓缓存（季报披露，30天TTL避免推荐/监控/自选重复拉取）──
+_HOLDINGS_CACHE_PATH = os.path.join(HISTORY_DIR, "data", "fund_holdings_cache.json")
+_HOLDINGS_TTL = 30 * 24 * 3600  # 30天（季报约90天更新一次）
+_HOLDINGS_LOCK = threading.Lock()
+_HOLDINGS_MEM: dict | None = None
+_HOLDINGS_MTIME: float = -1.0
+_HOLDINGS_PROC: dict[str, tuple[float, list | None]] = {}  # code -> (ts, holds) 进程内
+
+
+def _load_holdings_cache() -> dict:
+    """读取持仓磁盘缓存 {code: {ts, holds}}（进程内缓存+mtime检测）"""
+    global _HOLDINGS_MEM, _HOLDINGS_MTIME
+    try:
+        if os.path.exists(_HOLDINGS_CACHE_PATH):
+            _mtime = os.path.getmtime(_HOLDINGS_CACHE_PATH)
+            if _HOLDINGS_MEM is not None and _mtime == _HOLDINGS_MTIME:
+                return _HOLDINGS_MEM
+            with open(_HOLDINGS_CACHE_PATH, encoding="utf-8") as f:
+                _HOLDINGS_MEM = json.load(f)
+            _HOLDINGS_MTIME = _mtime
+            return _HOLDINGS_MEM
+    except Exception:
+        pass
+    return {}
+
+
+def _save_holdings_cache(cache: dict) -> None:
+    """原子写入持仓缓存并同步进程内缓存"""
+    global _HOLDINGS_MEM, _HOLDINGS_MTIME
+    try:
+        os.makedirs(os.path.dirname(_HOLDINGS_CACHE_PATH), exist_ok=True)
+        _tmp = _HOLDINGS_CACHE_PATH + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+        os.replace(_tmp, _HOLDINGS_CACHE_PATH)
+        _HOLDINGS_MEM = cache
+        _HOLDINGS_MTIME = os.path.getmtime(_HOLDINGS_CACHE_PATH)
+    except Exception:
+        pass
+
+
 def _parse_holdings(code: str) -> list[dict] | None:
-    """获取前10大持仓明细（含股票名称/代码/占比），同时返回实时涨跌幅"""
+    """获取前10大持仓明细（含股票名称/代码/占比）。
+    持仓按季度披露（季报/半年报/年报），TTL缓存(30天)避免每次重复拉取。
+    失败不缓存（避免把失败状态缓存30天导致后续一直拿不到）。"""
     import html as _html
+    _now = time.time()
+    # 1. 进程内缓存
+    if code in _HOLDINGS_PROC and _now - _HOLDINGS_PROC[code][0] < _HOLDINGS_TTL:
+        return _HOLDINGS_PROC[code][1]
+    # 2. 磁盘缓存
+    try:
+        _entry = _load_holdings_cache().get(code)
+        if _entry and _entry.get("holds") is not None and _now - _entry.get("ts", 0) < _HOLDINGS_TTL:
+            _HOLDINGS_PROC[code] = (_now, _entry["holds"])
+            return _entry["holds"]
+    except Exception:
+        pass
+    # 3. 网络拉取
     url = api_url("fund_holdings", code=code)
     try:
         jj = fetch(url, headers={"Referer": "https://fundf10.eastmoney.com/"})
@@ -310,7 +367,18 @@ def _parse_holdings(code: str) -> list[dict] | None:
             holds.append({"n": name, "c": code_s, "p": pct, "m": market})
         # 只取前十大持仓：fund_holdings 接口返回两个表格（第2组列结构不同、
         # 无占比数据且与第1组重复），避免解析出占比为0的无效条目
-        return (holds[:10] if holds else None)
+        result = holds[:10] if holds else None
+        # 4. 写缓存（仅成功时）
+        if result is not None:
+            _HOLDINGS_PROC[code] = (_now, result)
+            try:
+                with _HOLDINGS_LOCK:
+                    _disk = _load_holdings_cache()
+                    _disk[code] = {"ts": _now, "holds": result}
+                    _save_holdings_cache(_disk)
+            except Exception:
+                pass
+        return result
     except Exception as e:
         log.debug("拉取重仓股失败 %s: %s", code, e)
         return None
