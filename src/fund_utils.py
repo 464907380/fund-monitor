@@ -580,6 +580,147 @@ def get_est_error_summary(code: str, history_days: int = 10) -> dict | None:
         return None
 
 
+# ── 历史股票日K线缓存（回填估算差异用，1小时TTL）──
+_KLINE_CACHE: dict[str, tuple[float, dict[str, float]]] = {}
+_KLINE_TTL = 3600
+
+
+def _fetch_stock_kline_chg(secid: str, days: int = 12) -> dict[str, float]:
+    """拉股票最近 days 个交易日涨跌幅 {date: chg%}（新浪日K线，1小时缓存）。
+    secid 格式: sh600000 / sz000001（东财历史K线接口限频，改用新浪）"""
+    import urllib.request
+    _now = time.time()
+    _c = _KLINE_CACHE.get(secid)
+    if _c and _now - _c[0] < _KLINE_TTL:
+        return _c[1]
+    result: dict[str, float] = {}
+    try:
+        _url = (f"https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_k=/CN_MarketDataService.getKLineData"
+                f"?symbol={secid}&scale=240&ma=no&datalen={days + 2}")
+        _req = urllib.request.Request(_url, headers={
+            "User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/"})
+        with urllib.request.urlopen(_req, timeout=10) as _r:
+            _raw = _r.read().decode("utf-8", errors="ignore")
+        _m = re.search(r"\((\[.*\])\)", _raw, re.DOTALL)
+        if _m:
+            _arr = json.loads(_m.group(1))
+            _prev = None
+            for _it in _arr:
+                try:
+                    _close = float(_it.get("close"))
+                except (TypeError, ValueError):
+                    _prev = None
+                    continue
+                if _prev is not None and _prev:
+                    result[_it.get("day", "")] = round((_close - _prev) / _prev * 100, 2)
+                _prev = _close
+    except Exception:
+        pass
+    _KLINE_CACHE[secid] = (_now, result)
+    return result
+
+
+def backfill_estimate_errors(days: int = 10) -> int:
+    """用当前持仓 + 历史股票行情回填最近 days 天估算差异（只补没有差异记录的**历史**日期）。
+    基于当前季报持仓近似回算历史每日估算，对比实际净值。今天交给 settle 真实采集结算。
+    返回本次回填条数。"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    _filled = 0
+    try:
+        from fund_watch import _parse_holdings, _fetch_nav_from_lsjz
+    except Exception:
+        return 0
+    try:
+        with _EST_ERROR_LOCK:
+            _cache = _load_est_error()
+            _errors = _cache.setdefault("errors", {})
+        # 待回填基金：所有自选基金（不限当天估算记录，已结算移出 estimates 的也能补历史）
+        _codes: list[str] = []
+        try:
+            _fl_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                    "data", "fund_list.json")
+            if os.path.exists(_fl_path):
+                with open(_fl_path, encoding="utf-8") as _f:
+                    for _item in json.load(_f):
+                        _c = _item.get("code")
+                        if _c:
+                            _codes.append(_c)
+        except Exception:
+            pass
+        if not _codes:
+            return 0
+        _today = datetime.date.today().isoformat()
+        # 1. 收集每只基金持仓股票 secid
+        _holdings: dict[str, list] = {}
+        _stock_map: dict[str, set[str]] = {}
+        for _c in _codes:
+            try:
+                _h = _parse_holdings(_c)
+                if _h:
+                    _holdings[_c] = _h
+                    _stock_map[_c] = {("sh" if _hh.get("m") == "sh" else "sz") + _hh["c"]
+                                      for _hh in _h if _hh.get("c") and _hh.get("p")}
+            except Exception:
+                pass
+        # 2. 并行拉所有股票历史日K线（含涨跌幅）
+        _all_secids = set()
+        for _s in _stock_map.values():
+            _all_secids |= _s
+        _kline: dict[str, dict[str, float]] = {}
+        with ThreadPoolExecutor(max_workers=20) as _ex:
+            _futs = {_ex.submit(_fetch_stock_kline_chg, _sid, days): _sid for _sid in _all_secids}
+            for _f in as_completed(_futs):
+                try:
+                    _kline[_futs[_f]] = _f.result()
+                except Exception:
+                    pass
+        # 3. 每只基金：回算历史每日估算，对比实际净值写入
+        for _c, _h in _holdings.items():
+            _est_days: dict[str, float] = {}
+            _date_set: set[str] = set()
+            for _secid in _stock_map.get(_c, ()):
+                _date_set |= set(_kline.get(_secid, {}).keys())
+            for _dt_str in _date_set:
+                _tw = 0.0
+                _ws = 0.0
+                for _hh in _h:
+                    if not _hh.get("c") or not _hh.get("p"):
+                        continue
+                    _secid = ("sh" if _hh.get("m") == "sh" else "sz") + _hh["c"]
+                    _chg = _kline.get(_secid, {}).get(_dt_str)
+                    if _chg is None:
+                        continue
+                    _tw += _hh["p"]
+                    _ws += _chg * _hh["p"]
+                if _tw >= 5:
+                    _est_days[_dt_str] = _ws / _tw
+            # 实际净值涨跌（最近1页20条，升序）
+            try:
+                _navs = _fetch_nav_from_lsjz(_c, max_pages=1)
+            except Exception:
+                _navs = None
+            _actual_days: dict[str, float] = {}
+            if _navs and len(_navs) >= 2:
+                for _i in range(1, len(_navs)):
+                    _pv = _navs[_i - 1]["v"]
+                    if _pv:
+                        _actual_days[_navs[_i]["d"]] = (_navs[_i]["v"] - _pv) / _pv * 100
+            _err_map = _errors.setdefault(_c, {})
+            for _dt_str, _est in _est_days.items():
+                if _dt_str >= _today or _dt_str in _err_map or _dt_str not in _actual_days:
+                    continue
+                _actual = _actual_days[_dt_str]
+                _err_map[_dt_str] = {"est": round(_est, 2), "actual": round(_actual, 2),
+                                     "err": round(_est - _actual, 2)}
+                _filled += 1
+        if _filled:
+            with _EST_ERROR_LOCK:
+                _save_est_error(_cache)
+    except Exception:
+        pass
+    return _filled
+
+
 # ── 推送 ──────────────────────────────────────
 
 def _send_smtp(msg: MIMEText) -> None:

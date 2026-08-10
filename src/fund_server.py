@@ -53,8 +53,35 @@ def _trigger_settle_estimates() -> None:
             global _est_settling
             with _est_settle_lock:
                 _est_settling = False
+        # 结算完成后低频回填历史差异（每天最多一次，补齐前几天的估算 vs 实际）
+        _trigger_backfill_estimates()
 
     threading.Thread(target=_run, daemon=True).start()
+
+
+# ── 历史估算差异回填（用当前持仓+历史股票行情补齐前几天的差异，每天最多一次）──
+_backfill_lock = threading.Lock()
+_backfill_last_ts: float = 0.0
+
+
+def _trigger_backfill_estimates() -> None:
+    """后台回填历史估算差异（每天最多一次），新加自选基金时自动补前几天的差异"""
+    global _backfill_last_ts
+    with _backfill_lock:
+        _now = time.time()
+        if _now - _backfill_last_ts < 86400:
+            return
+        _backfill_last_ts = _now
+
+    def _run() -> None:
+        try:
+            from fund_utils import backfill_estimate_errors
+            backfill_estimate_errors(days=10)
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, daemon=True).start()
+
 
 # 通用任务进程跟踪（供启停控制使用）
 _task_procs: dict[str, subprocess.Popen] = {}
