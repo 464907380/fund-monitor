@@ -1030,6 +1030,12 @@ def main() -> None:
         _final_count = len(scored)
         # 把评分时拉取的净值走势批量写入共享缓存，供前端折线图直接复用
         _flush_trend_cache()
+        # 把当日涨跌(td)固定值落盘，供同一天跨进程（重复推荐/页面）复用
+        try:
+            from fund_utils import flush_td_cache
+            flush_td_cache()
+        except Exception:
+            pass
         update_heartbeat("fund_recommend", progress=_final_count, total=_final_count,
                          overall_pct=97, phase="保存",
                          detail=f"保存 {_final_count} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())

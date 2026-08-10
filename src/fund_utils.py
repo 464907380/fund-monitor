@@ -342,8 +342,92 @@ def _get_fund_name(code: str) -> str:
                     _FUND_NAME_MAP_LAST_FAIL = now
     return _FUND_NAME_MAP.get(code, "")
 
+# ── 当日涨跌(td)缓存：收盘后是固定值，缓存当天供同一天跨进程复用（推荐评分每只都调）──
+_TD_CACHE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "data", "fund_td_cache.json")
+_TD_CACHE_LOCK = threading.Lock()
+_TD_MEM: dict | None = None
+_TD_MTIME: float = -1.0
+_TD_PROC: dict[str, dict] = {}  # code -> {date, td, src}
+
+
+def _load_td_cache() -> dict:
+    """读取当日涨跌磁盘缓存 {code: {date, td, src}}（mtime 缓存）"""
+    global _TD_MEM, _TD_MTIME
+    try:
+        if os.path.exists(_TD_CACHE_PATH):
+            _m = os.path.getmtime(_TD_CACHE_PATH)
+            if _TD_MEM is not None and _m == _TD_MTIME:
+                return _TD_MEM
+            with open(_TD_CACHE_PATH, encoding="utf-8") as f:
+                _TD_MEM = json.load(f)
+            _TD_MTIME = _m
+            return _TD_MEM
+    except Exception:
+        pass
+    return {}
+
+
+def _save_td_cache(cache: dict) -> None:
+    global _TD_MEM, _TD_MTIME
+    try:
+        os.makedirs(os.path.dirname(_TD_CACHE_PATH), exist_ok=True)
+        _tmp = _TD_CACHE_PATH + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+        os.replace(_tmp, _TD_CACHE_PATH)
+        _TD_MEM = cache
+        _TD_MTIME = os.path.getmtime(_TD_CACHE_PATH)
+    except Exception:
+        pass
+
+
+def flush_td_cache() -> None:
+    """把进程内当日涨跌缓存落盘（收盘后固定值，供同一天跨进程复用）"""
+    try:
+        with _TD_CACHE_LOCK:
+            if not _TD_PROC:
+                return
+            _today = datetime.date.today().isoformat()
+            _disk = _load_td_cache()
+            _changed = False
+            for _c, _e in _TD_PROC.items():
+                if _e.get("date") == _today and _disk.get(_c) != _e:
+                    _disk[_c] = _e
+                    _changed = True
+            if _changed:
+                _save_td_cache(_disk)
+    except Exception:
+        pass
+
+
 def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
-    """获取基金当日涨跌幅，优先返回实际净值，降级到实时估算。
+    """获取基金当日涨跌幅（带当天缓存：收盘后固定值命中缓存秒回，盘中不缓存估算会变）"""
+    import datetime as _dt
+    _now = _dt.datetime.now()
+    _today_str = _now.strftime("%Y-%m-%d")
+    # 进程内缓存（收盘后固定）
+    _cached = _TD_PROC.get(code)
+    if _cached and _cached.get("date") == _today_str:
+        return (_get_fund_name(code) or code, _cached["td"], _cached["src"])
+    # 磁盘缓存（跨进程，收盘后固定）
+    if _now.hour >= 15:
+        try:
+            _disk = _load_td_cache().get(code)
+            if _disk and _disk.get("date") == _today_str:
+                _TD_PROC[code] = _disk
+                return (_get_fund_name(code) or code, _disk["td"], _disk["src"])
+        except Exception:
+            pass
+    _result = _fetch_fund_estimate_uncached(code)
+    # 收盘后（td 固定）写入进程内缓存，供 flush 落盘跨进程复用
+    if _result is not None and _result[1] is not None and _now.hour >= 15:
+        _TD_PROC[code] = {"date": _today_str, "td": _result[1], "src": _result[2]}
+    return _result
+
+
+def _fetch_fund_estimate_uncached(code: str) -> tuple[str, float, str] | None:
+    """获取基金当日涨跌幅（无缓存原逻辑），优先返回实际净值，降级到实时估算。
 
     优先级：
       1. 天天基金历史净值 API（实际净值，收盘后可用）
