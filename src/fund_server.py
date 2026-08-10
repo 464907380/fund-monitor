@@ -1783,7 +1783,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except Exception:
                     pass
                 write_heartbeat("fund-td-refresh", total=len(_fund_list_for_progress),
-                                progress=0, phase="刷新td",
+                                progress=0, phase="刷新涨跌",
                                 detail=f"0/{len(_fund_list_for_progress)} 只基金")
                 _last_hb_pct = -1
                 _fund_td_done = 0

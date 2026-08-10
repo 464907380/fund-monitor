@@ -922,7 +922,7 @@ function _resumeRecommendProgress() {
         var displayPct = recData.overall_pct != null ? Math.round(recData.overall_pct) : pct;
         if (prog) prog.style.width = Math.min(displayPct, 99) + '%';
         var phaseIcon = {'获取排行':'📥','初筛':'📊','限购':'🔒','评分':'🧮','保存':'💾','完成':'✅',
-                         '刷新td':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋','检查自选基金':'📋'};
+                         '刷新涨跌':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋','检查自选基金':'📋'};
         var icon = phaseIcon[recData.phase] || '⏳';
         var statusParts = [icon];
         if (recData.phase) statusParts.push(recData.phase);
@@ -934,7 +934,7 @@ function _resumeRecommendProgress() {
         clearInterval(poll);
         if (cancelBtn) cancelBtn.style.display = 'none';
         if (prog) prog.style.width = '100%';
-        if (statusEl) statusEl.textContent = '⏳ 刷新实时涨跌...';
+        if (statusEl) statusEl.textContent = '⏳ 获取当日涨跌...';
         if (btn) btn.textContent = '⏳ 刷新涨跌';
         var _tdStart = Date.now();
         poll = setInterval(async function() {
@@ -946,7 +946,7 @@ function _resumeRecommendProgress() {
             if (tdAlive && rec2) {
               var pct = rec2.total > 0 ? Math.round(rec2.progress / rec2.total * 100) : 0;
               if (prog) prog.style.width = Math.min(pct, 99) + '%';
-              if (statusEl) statusEl.textContent = '📋 刷新td ' + (rec2.detail || '') + ' | ' + pct + '%';
+              if (statusEl) statusEl.textContent = '📋 刷新涨跌 ' + (rec2.detail || '') + ' | ' + pct + '%';
               if (btn) btn.textContent = '⏳ ' + pct + '%';
             } else if (!tdAlive) {
               clearInterval(poll);
@@ -2010,7 +2010,7 @@ async function _refreshTablesWithProgress(progFill, progPct, progText, onDone) {
           var p = recHb.total > 0 ? Math.round(recHb.progress / recHb.total * 100) : 0;
           if (progFill) progFill.style.width = Math.min(p, 99) + '%';
           if (progPct) progPct.textContent = p + '%';
-          if (progText) progText.textContent = '📋 刷新td ' + (recHb.detail || '') + ' | ' + p + '%';
+          if (progText) progText.textContent = '📋 刷新涨跌 ' + (recHb.detail || '') + ' | ' + p + '%';
         }
       }).catch(function(){});
     }, 800);
@@ -2552,7 +2552,7 @@ async function runRecommendFromFilter() {
           if (prog) prog.style.width = Math.min(displayPct, 99) + '%';
           // 构建详细状态字符串
           var phaseIcon = {'获取排行':'📥','初筛':'📊','限购':'🔒','评分':'🧮','保存':'💾','完成':'✅',
-                           '刷新td':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋','检查自选基金':'📋'};
+                           '刷新涨跌':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋','检查自选基金':'📋'};
           var icon = phaseIcon[recData.phase] || '⏳';
           var statusParts = [icon];
           if (recData.phase) statusParts.push(recData.phase);

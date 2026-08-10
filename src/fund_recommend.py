@@ -186,8 +186,8 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
             if (_pct != _last_hb_pct and _done % 20 == 0) or _done == _total_gz:
                 _last_hb_pct = _pct
                 update_heartbeat("fund_recommend", progress=_done, total=_total_gz,
-                                 overall_pct=_pct, phase="刷新td",
-                                 detail=f"拉取实时估值 {_done}/{_total_gz} ({_pct}%)",
+                                 overall_pct=_pct, phase="刷新涨跌",
+                                 detail=f"获取当日涨跌 {_done}/{_total_gz} ({_pct}%)",
                                  elapsed=round(time.time() - _start_gz, 1))
     if _failed_codes:
         # 失败的逐个重试（_fetch_fund_estimate 有多层降级）
@@ -196,7 +196,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
         _retry_start = time.time()
         for _i, _code in enumerate(_failed_codes):
             if time.time() - _retry_start > _retry_max_dur:
-                log.warning("刷新td重试阶段超时(%ds)，跳过剩余 %d 只", _retry_max_dur, len(_failed_codes) - _i)
+                log.warning("刷新涨跌重试阶段超时(%ds)，跳过剩余 %d 只", _retry_max_dur, len(_failed_codes) - _i)
                 break
             _td = _fetch_fund_estimate(_code)
             if _td and _td[1] is not None:
@@ -205,7 +205,7 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
             _done2 = replaced_gz + (len(_failed_codes) - (_i + 1))
             if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
                 update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
-                                 overall_pct=int(_done2 / _total_gz * 100), phase="刷新td",
+                                 overall_pct=int(_done2 / _total_gz * 100), phase="刷新涨跌",
                                  detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
                                  elapsed=round(time.time() - _start_gz, 1))
 
@@ -258,7 +258,7 @@ SHOW_TOP = CFG.get("recommend", {}).get("show_top", 20)
 _SKIP_MISSING_PERF = CFG.get("recommend", {}).get("skip_missing_perf", False)
 _SKIP_LIMITED = CFG.get("recommend", {}).get("skip_limited", False)
 _HAS_TD = any(dim_name == "\u5f53\u65e5\u6da8\u8dcc" for dim_name, _, _, _ in SCORE_DIMS)
-"""当日涨跌维度是否开启：开启时缓存命中后仍需刷新td值重新评分"""
+"""当日涨跌维度是否开启：开启时缓存命中后仍需刷新当日涨跌值重新评分"""
 _RANK_SORT = CFG.get("recommend", {}).get("rank_sort", "1n")
 """排行排序方式：1n=近1年收益, 6n=近6月收益, 3y=近3月收益, 1y=近1月收益"""
 # 筛选条件（多条件组合）
@@ -658,8 +658,8 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
         _t2 = time.time()
         print(f"📋 当日涨跌维度开启，刷新 {total} 只基金td值...")
         update_heartbeat("fund_recommend", progress=0, total=total, overall_pct=85,
-                         phase="刷新td",
-                         detail=f"批量获取 {total} 只基金实时涨跌", elapsed=round(time.time() - _t, 1))
+                         phase="刷新涨跌",
+                         detail=f"获取 {total} 只基金当日涨跌", elapsed=round(time.time() - _t, 1))
         all_codes = [r.get("code", "") for r in cached_results]
         td_map = _batch_fetch_estimates([c for c in all_codes if c])
         print(f"  td刷新完成 ({time.time()-_t2:.1f}s), 获取到 {len(td_map)} 只")
@@ -858,8 +858,8 @@ def main() -> None:
                     _t1 = time.time()
                     print(f"\n📋 当日涨跌维度开启，刷新 {total_candidates} 只基金td值...")
                     update_heartbeat("fund_recommend", progress=0, total=total_candidates,
-                                     overall_pct=0, phase="刷新td",
-                                     detail=f"批量获取 {total_candidates} 只实时涨跌", elapsed=_elapsed())
+                                     overall_pct=0, phase="刷新涨跌",
+                                     detail=f"获取 {total_candidates} 只基金当日涨跌", elapsed=_elapsed())
                     from fund_scoring import _calc_score as _calc_score2
 
                     all_codes = [r.get("code", "") for r in cached_results]
