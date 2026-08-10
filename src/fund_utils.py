@@ -395,6 +395,7 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
             from fund_watch import _estimate_from_holdings
             est = _estimate_from_holdings(code)
             if est is not None:
+                record_estimate(code, est)  # 记录盘中估算，供收盘后对比实际净值
                 return (_get_fund_name(code) or code, est, "holdings")
         except Exception:
             pass
@@ -412,6 +413,134 @@ def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
         pass
 
     return None
+
+
+# ── 持仓估算误差（盘中估算 vs 收盘实际净值，供界面分辨估算不准的基金）──
+_EST_ERROR_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               "data", "fund_est_error.json")
+_EST_ERROR_LOCK = threading.Lock()
+_EST_ERROR_MEM: dict | None = None
+_EST_ERROR_MTIME: float = -1.0
+
+
+def _load_est_error() -> dict:
+    """读取估算误差文件 {estimates:{date:{code:est}}, errors:{code:{date:{est,actual,err}}}}（mtime 缓存）"""
+    global _EST_ERROR_MEM, _EST_ERROR_MTIME
+    try:
+        if os.path.exists(_EST_ERROR_PATH):
+            _mtime = os.path.getmtime(_EST_ERROR_PATH)
+            if _EST_ERROR_MEM is not None and _mtime == _EST_ERROR_MTIME:
+                return _EST_ERROR_MEM
+            with open(_EST_ERROR_PATH, encoding="utf-8") as f:
+                _EST_ERROR_MEM = json.load(f)
+            _EST_ERROR_MTIME = _mtime
+            return _EST_ERROR_MEM
+    except Exception:
+        pass
+    return {}
+
+
+def _save_est_error(cache: dict) -> None:
+    """原子写入估算误差文件并同步进程内缓存"""
+    global _EST_ERROR_MEM, _EST_ERROR_MTIME
+    try:
+        os.makedirs(os.path.dirname(_EST_ERROR_PATH), exist_ok=True)
+        _tmp = _EST_ERROR_PATH + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+        os.replace(_tmp, _EST_ERROR_PATH)
+        _EST_ERROR_MEM = cache
+        _EST_ERROR_MTIME = os.path.getmtime(_EST_ERROR_PATH)
+    except Exception:
+        pass
+
+
+def record_estimate(code: str, est_pct: float) -> None:
+    """盘中记录持仓估算涨跌(%)，供收盘后与实际净值对比"""
+    if est_pct is None:
+        return
+    try:
+        _today = datetime.datetime.now().strftime("%Y-%m-%d")
+        with _EST_ERROR_LOCK:
+            _cache = _load_est_error()
+            _est_map = _cache.setdefault("estimates", {})
+            _day = _est_map.setdefault(_today, {})
+            _day[code] = round(float(est_pct), 2)
+            _save_est_error(_cache)
+    except Exception:
+        pass
+
+
+def _fetch_actual_nav_pct(code: str, date: str) -> float | None:
+    """拉取基金指定交易日的实际净值涨跌幅(%)，LSJZ 接口（查最近 3 页）"""
+    for _page in range(1, 4):
+        _url = (f"https://api.fund.eastmoney.com/f10/lsjz"
+                f"?callback=j&fundCode={code}&pageIndex={_page}&pageSize=20")
+        try:
+            _req = urllib.request.Request(_url, headers={
+                "User-Agent": "Mozilla/5.0", "Referer": "https://fund.eastmoney.com/"})
+            with urllib.request.urlopen(_req, timeout=get_timeout("default", 10)) as _r:
+                _text = _r.read().decode("utf-8")
+            _m = re.search(r"j\((.+)\)", _text)
+            if not _m:
+                continue
+            _data = json.loads(_m.group(1))
+            for _it in _data.get("Data", {}).get("LSJZList", []):
+                if _it.get("FSRQ") == date and _it.get("JZZZL"):
+                    return float(_it["JZZZL"])
+        except Exception:
+            continue
+    return None
+
+
+def settle_estimate_errors() -> None:
+    """结算估算误差：对 estimates 里早于今天的日期，拉实际净值算差异。
+    当天收盘后调用，当天即可看到当天差异。幂等：已结算日期会从 estimates 删除。"""
+    try:
+        _today = datetime.datetime.now().strftime("%Y-%m-%d")
+        with _EST_ERROR_LOCK:
+            _cache = _load_est_error()
+            _est_map = _cache.setdefault("estimates", {})
+            _errors = _cache.setdefault("errors", {})
+            _pending = [d for d in _est_map if d < _today]
+            if not _pending:
+                return
+            for _d in _pending:
+                _day_map = _est_map.get(_d, {})
+                if not _day_map:
+                    continue
+                for _code, _est in _day_map.items():
+                    _actual = _fetch_actual_nav_pct(_code, _d)
+                    if _actual is None:
+                        continue
+                    _errors.setdefault(_code, {})[_d] = {
+                        "est": _est, "actual": round(_actual, 2), "err": round(_est - _actual, 2)}
+                _est_map.pop(_d, None)
+            _save_est_error(_cache)
+    except Exception:
+        pass
+
+
+def get_est_error_summary(code: str, history_days: int = 10) -> dict | None:
+    """返回基金最近 history_days 天估算误差汇总 {mae, count, detail:[{date,est,actual,err},...]}
+    detail 按日期倒序（最新在前）。无数据返回 None。"""
+    try:
+        _errors = _load_est_error().get("errors", {}).get(code, {})
+        if not _errors:
+            return None
+        _dates = sorted(_errors.keys())[-history_days:]
+        _detail = []
+        _abs_errs = []
+        for _d in _dates:
+            _e = _errors[_d]
+            _abs_errs.append(abs(_e.get("err", 0)))
+            _detail.append({"date": _d, "est": _e.get("est"), "actual": _e.get("actual"), "err": _e.get("err")})
+        if not _abs_errs:
+            return None
+        _detail.sort(key=lambda x: x["date"], reverse=True)
+        return {"mae": round(sum(_abs_errs) / len(_abs_errs), 2), "count": len(_detail), "detail": _detail}
+    except Exception:
+        return None
 
 
 # ── 推送 ──────────────────────────────────────

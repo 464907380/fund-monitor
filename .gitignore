@@ -42,6 +42,9 @@ fund_trend_cache.json
 # 基金持仓缓存（自动生成，季报披露30天TTL）
 fund_holdings_cache.json
 
+# 持仓估算误差缓存（自动生成，盘中估算 vs 收盘实际净值）
+fund_est_error.json
+
 # 评分历史（自动生成）
 .score_history.json
 

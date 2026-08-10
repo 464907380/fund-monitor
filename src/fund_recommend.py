@@ -134,8 +134,10 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
         if (9, 30) <= (_now2.hour, _now2.minute) < (15, 0):
             try:
                 from fund_watch import _estimate_from_holdings
+                from fund_utils import record_estimate
                 _est = _estimate_from_holdings(code)
                 if _est is not None:
+                    record_estimate(code, _est)  # 记录盘中估算，供收盘后对比实际净值
                     return (code, _est, "holdings")
             except Exception:
                 pass

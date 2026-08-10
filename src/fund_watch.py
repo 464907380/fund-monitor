@@ -9,7 +9,7 @@ import threading
 import datetime
 from config import CFG, api_url, get_timeout
 from config import get_secret as _get_secret
-from fund_utils import fetch, fetch_bytes, log, HISTORY_DIR, _fetch_fund_estimate
+from fund_utils import fetch, fetch_bytes, log, HISTORY_DIR, _fetch_fund_estimate, record_estimate
 from fund_scoring import SCORE_DIMS, calc_score_detail
 from fund_metrics import _calc_nav_metrics
 
@@ -178,6 +178,7 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
         try:
             est = _estimate_from_holdings(code)
             if est is not None:
+                record_estimate(code, est)  # 记录盘中估算，供收盘后对比实际净值
                 return (est, "holdings")
         except Exception:
             pass

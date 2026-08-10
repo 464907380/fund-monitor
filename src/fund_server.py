@@ -26,6 +26,30 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _recommend_state = {"proc": None}
 _proc_lock = threading.Lock()
 
+# ── 估算误差结算（盘中估算 vs 实际净值，后台幂等结算）──
+_est_settle_lock = threading.Lock()
+_est_settling = False
+
+
+def _trigger_settle_estimates() -> None:
+    """后台结算估算误差（幂等；只结算早于今天的日期，当天收盘后调用即可看到当天差异）"""
+    global _est_settling
+    with _est_settle_lock:
+        if _est_settling:
+            return
+        _est_settling = True
+
+    def _run() -> None:
+        try:
+            from fund_utils import settle_estimate_errors
+            settle_estimate_errors()
+        finally:
+            global _est_settling
+            with _est_settle_lock:
+                _est_settling = False
+
+    threading.Thread(target=_run, daemon=True).start()
+
 # 通用任务进程跟踪（供启停控制使用）
 _task_procs: dict[str, subprocess.Popen] = {}
 _task_scripts = {
@@ -520,7 +544,7 @@ def _backfill_window_metrics() -> None:
 class Handler(http.server.BaseHTTPRequestHandler):
 
     # 静默常规轮询请求和耗时批量API，减少终端刷屏
-    _quiet_paths = {"/api/heartbeat", "/api/tasks", "/api/fund-table", "/api/recommend-table"}
+    _quiet_paths = {"/api/heartbeat", "/api/tasks", "/api/fund-table", "/api/recommend-table", "/api/est-error"}
 
     def log_request(self, code: int | str = ..., size: int | str = ...) -> None:
         # 去掉查询参数再匹配静默路径
@@ -1471,6 +1495,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/recommend-table":
             """返回市场优选全维度表格 HTML（实时拉取 TOP N 基金数据）"""
+            _trigger_settle_estimates()  # 后台结算估算误差（幂等）
             _rec_file = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
             _rt_now = time.time()
             # 检查文件修改时间，若文件比缓存新则强制重建
@@ -1498,6 +1523,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                            f"<p style=\"color:#ef5350;\">获取推荐表格失败: {e}</p>".encode("utf-8"))
             return
 
+        if parsed.path == "/api/est-error":
+            """返回某基金近10天估算误差明细（详情弹窗用）"""
+            _code = params.get("code", [""])[0]
+            if not _code:
+                self._send(*_json_response({"ok": False, "error": "缺少 code"}, 400))
+                return
+            from fund_utils import get_est_error_summary
+            s = get_est_error_summary(_code)
+            if s:
+                self._send(*_json_response({"ok": True, "code": _code, "mae": s["mae"], "count": s["count"], "detail": s["detail"]}))
+            else:
+                self._send(*_json_response({"ok": True, "code": _code, "mae": None, "count": 0, "detail": []}))
+            return
+
         if parsed.path == "/api/recommend":
             path = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
             if os.path.exists(path):
@@ -1513,6 +1552,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/api/fund-table":
             """为自选基金生成完整数据富表格（含评分）—— 并行拉取数据"""
+            _trigger_settle_estimates()  # 后台结算估算误差（幂等）
             # 检查是否有 fresh=1 参数强制跳过缓存（自动刷新用）
             _skip_cache = params.get("fresh", [""])[0] == "1"
             global _fund_table_cache

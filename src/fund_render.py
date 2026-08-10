@@ -20,6 +20,27 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 # ── 数据获取 ──────────────────────────────────
 
 
+def _est_err_badge(code: str) -> str:
+    """估算误差徽章：近10天平均绝对误差分档（准/中/偏差大），点击弹详情"""
+    try:
+        from fund_utils import get_est_error_summary
+        s = get_est_error_summary(code)
+    except Exception:
+        return ""
+    if not s or not s.get("count"):
+        return ""
+    mae = s.get("mae", 0)
+    if mae < 1.0:
+        color, label = "#4caf50", "准"
+    elif mae <= 2.0:
+        color, label = "#ff9800", "中"
+    else:
+        color, label = "#f44336", "偏差大"
+    return (f'<span onclick="showEstError(\'{code}\')" style="font-size:10px;color:{color};'
+            f'margin-left:3px;cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.2);" '
+            f'title="点击查看近10天估算 vs 实际差异">±{mae}% {label}</span>')
+
+
 def _web_rich_fund_table(rows: list[dict]) -> str:
     """生成自选基金完整数据 HTML 表格（Web 版，维度列动态跟随 SCORE_DIMS）"""
     from fund_scoring import SCORE_DIMS
@@ -94,7 +115,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
             _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
         elif _src == "fallback" or not _src:
             _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}{_src_badge}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;white-space:nowrap;{_color_inline(_v)}">{_html.escape(str(_v))}{_src_badge}{_est_err_badge(_fcode)}</td>')
         # 评分（带明细弹窗）
         _v_detail = r.get("_score_detail", [])
         _detail_json = json.dumps(_v_detail, ensure_ascii=False) if _v_detail else "[]"
@@ -177,7 +198,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
             _src_badge = '<span style="font-size:10px;color:#ff9800;margin-left:3px;">估算</span>'
         elif _src == "fallback" or not _src:
             _src_badge = '<span style="font-size:10px;color:#888;margin-left:3px;">昨日</span>'
-        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};white-space:nowrap;">{_html.escape(day_raw)}{_src_badge}</td>')
+        parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;color:{day_color};white-space:nowrap;">{_html.escape(day_raw)}{_src_badge}{_est_err_badge(_fund_code)}</td>')
         parts.append(f"<td style=\"padding:3px 6px;border-bottom:1px solid #333;text-align:right;font-family:Consolas;font-weight:600;color:{_score_color(r.get('score',0))};cursor:pointer;font-size:13px;white-space:nowrap;\" onclick='showScoreDetail({detail_json})'>{r.get('score',0):.1f}</td>")
         for dim_name in dims_shown:
             val = _get_dim_value(r, dim_name)
