@@ -185,14 +185,31 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
     return (None, "")
 
 
+# ── 个股行情短期缓存（跨基金合并复用，减少新浪请求与域名限速排队）──
+_stock_quote_cache: dict[str, tuple[float, tuple[str, float]]] = {}  # sina_code -> (ts, (name, chg))
+_STOCK_QUOTE_TTL = 60  # 秒
+
+
 def _fetch_stock_quotes_batch(sina_codes: list[str]) -> dict[str, tuple[str, float]]:
-    """批量获取个股行情（新浪一次请求多代码，40个/块），返回 {sina_code: (name, chg)}"""
+    """批量获取个股行情（新浪一次请求多代码，40个/块），返回 {sina_code: (name, chg)}。
+    带 60s 按代码缓存：自选表多基金共享重仓股时只拉一次，且受域名限速影响小。"""
     result: dict[str, tuple[str, float]] = {}
     if not sina_codes:
         return result
+    _now = time.time()
     unique = list(dict.fromkeys(sina_codes))
-    for i in range(0, len(unique), 40):
-        chunk = unique[i:i + 40]
+    # 缓存命中部分直接复用；只拉未命中的
+    _miss: list[str] = []
+    for _c in unique:
+        _e = _stock_quote_cache.get(_c)
+        if _e and _now - _e[0] < _STOCK_QUOTE_TTL:
+            result[_c] = _e[1]
+        else:
+            _miss.append(_c)
+    if not _miss:
+        return result
+    for i in range(0, len(_miss), 40):
+        chunk = _miss[i:i + 40]
         url = api_url("sina_hq_batch", codes=",".join(chunk))
         try:
             raw = fetch_bytes(url, {"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
@@ -211,7 +228,9 @@ def _fetch_stock_quotes_batch(sina_codes: list[str]) -> dict[str, tuple[str, flo
                 current = float(fields[3]) if fields[3] else 0
                 if prev_close:
                     chg = round((current - prev_close) / prev_close * 100, 2)
-                    result[code] = (fields[0], chg)
+                    _item = (fields[0], chg)
+                    _stock_quote_cache[code] = (_now, _item)
+                    result[code] = _item
         except Exception:
             continue
     return result

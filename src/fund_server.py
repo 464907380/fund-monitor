@@ -1735,6 +1735,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
                 # 并行拉取所有基金数据
                 _fund_list_for_progress = list(fund_list)
+                # 预取合并行情：并行收集所有自选基金持仓，合并股票一次性批量拉取，
+                # 填行情缓存（_fetch_stock_quotes_batch 60s缓存），各基金估算命中缓存不再重复请求
+                try:
+                    from fund_watch import _parse_holdings, _fetch_stock_quotes_batch
+                    _all_sina: list[str] = []
+                    _all_codes = [f["code"] for f in _fund_list_for_progress]
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as _pe:
+                        _hfs = {_pe.submit(_parse_holdings, _c): _c for _c in _all_codes}
+                        for _hf in concurrent.futures.as_completed(_hfs):
+                            try:
+                                _hhs = _hf.result() or []
+                                for _hh in _hhs:
+                                    if _hh.get("c"):
+                                        _all_sina.append(("sh" if _hh.get("m") == "sh" else "sz") + _hh["c"])
+                            except Exception:
+                                pass
+                    if _all_sina:
+                        _fetch_stock_quotes_batch(_all_sina)
+                except Exception:
+                    pass
                 write_heartbeat("fund-td-refresh", total=len(_fund_list_for_progress),
                                 progress=0, phase="刷新td",
                                 detail=f"0/{len(_fund_list_for_progress)} 只基金")
