@@ -45,6 +45,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     """生成自选基金完整数据 HTML 表格（Web 版，维度列动态跟随 SCORE_DIMS）"""
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2]) if d[0] != "当日涨跌"]
+    _dim_desc = {d[0]: d[3] for d in SCORE_DIMS}
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
              '<thead><tr style="background:#2a2a2a;">'
@@ -53,9 +54,11 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
              '<th style="padding:4px 6px;text-align:center;color:#888;border-bottom:1px solid #333;white-space:nowrap;font-size:11px;">走势</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">涨跌</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">评分</th>']
-    # 动态维度列
+    # 动态维度列（带维度说明 title）
     for dn in dim_names:
-        parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
+        _d = _html.escape(_dim_desc.get(dn, ""))
+        _t = f' title="{_d}"' if _d else ''
+        parts.append(f'<th{_t} style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;cursor:help;">{_html.escape(dn)}</th>')
     parts.append('</tr></thead><tbody>')
     for r in rows:
         parts.append('<tr>')
@@ -163,6 +166,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2]) if d[0] != "当日涨跌"]
     dims_shown = dim_names
+    _dim_desc = {d[0]: d[3] for d in SCORE_DIMS}
     parts = ['<div style="margin-top:16px;padding:0 10px;">'
              f'<p style="margin:8px 0;font-size:13px;font-weight:600;color:#ccc;">\U0001f3c6 \u5e02\u573a\u4f18\u9009 TOP {_show_top} \uff08\u5168\u7ef4\u5ea6\uff09</p>'
              '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -171,8 +175,11 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
              '<th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #333;white-space:nowrap;">基金</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">涨跌</th>'
              '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">总分</th>']
+    # 动态维度列（带维度说明 title）
     for dn in dims_shown:
-        parts.append(f'<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;">{_html.escape(dn)}</th>')
+        _d = _html.escape(_dim_desc.get(dn, ""))
+        _t = f' title="{_d}"' if _d else ''
+        parts.append(f'<th{_t} style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #333;white-space:nowrap;cursor:help;">{_html.escape(dn)}</th>')
     parts.append('</tr></thead><tbody>')
     medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
     for i, r in enumerate(fresh[:_show_top]):
