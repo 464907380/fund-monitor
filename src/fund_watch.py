@@ -208,31 +208,46 @@ def _fetch_stock_quotes_batch(sina_codes: list[str]) -> dict[str, tuple[str, flo
             _miss.append(_c)
     if not _miss:
         return result
-    for i in range(0, len(_miss), 40):
-        chunk = _miss[i:i + 40]
-        url = api_url("sina_hq_batch", codes=",".join(chunk))
+    # 并发分块拉取（每块40只，urllib直连绕过0.3s域名限速锁；批量一次性可接受）
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _AC
+    _chunks = [_miss[i:i + 40] for i in range(0, len(_miss), 40)]
+
+    def _fetch_chunk(_chunk: list[str]) -> dict[str, tuple[str, float]]:
+        _out: dict[str, tuple[str, float]] = {}
+        _url = api_url("sina_hq_batch", codes=",".join(_chunk))
         try:
-            raw = fetch_bytes(url, {"Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
-            if not raw:
-                continue
-            text = raw.decode("gbk", errors="ignore")
-            for line in text.strip().split("\n"):
-                m = re.search(r'hq_str_(\w+)="(.*?)"', line)
-                if not m:
+            _req = urllib.request.Request(_url, headers={
+                "Referer": "https://finance.sina.com.cn/", "User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(_req, timeout=8) as _r:
+                _text = _r.read().decode("gbk", errors="ignore")
+            for _line in _text.strip().split("\n"):
+                _m = re.search(r'hq_str_(\w+)="(.*?)"', _line)
+                if not _m:
                     continue
-                code = m.group(1)
-                fields = m.group(2).split(",")
-                if len(fields) < 4 or not fields[2]:
+                _c = _m.group(1)
+                _fields = _m.group(2).split(",")
+                if len(_fields) < 4 or not _fields[2]:
                     continue
-                prev_close = float(fields[2])
-                current = float(fields[3]) if fields[3] else 0
-                if prev_close:
-                    chg = round((current - prev_close) / prev_close * 100, 2)
-                    _item = (fields[0], chg)
-                    _stock_quote_cache[code] = (_now, _item)
-                    result[code] = _item
+                _pc = float(_fields[2])
+                _cur = float(_fields[3]) if _fields[3] else 0
+                if _pc:
+                    _out[_c] = (_fields[0], round((_cur - _pc) / _pc * 100, 2))
         except Exception:
-            continue
+            pass
+        return _out
+
+    if len(_chunks) > 1:
+        with _TPE(max_workers=min(20, len(_chunks))) as _ex:
+            _futs = {_ex.submit(_fetch_chunk, _ch): _i for _i, _ch in enumerate(_chunks)}
+            for _f in _AC(_futs):
+                for _c, _item in _f.result().items():
+                    _stock_quote_cache[_c] = (_now, _item)
+                    result[_c] = _item
+    else:
+        for _c, _item in _fetch_chunk(_chunks[0]).items():
+            _stock_quote_cache[_c] = (_now, _item)
+            result[_c] = _item
     return result
 
 

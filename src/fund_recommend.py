@@ -172,6 +172,28 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
     _total_gz = len(codes)
     _start_gz = time.time()
     _last_hb_pct = -1
+    # 盘中预取合并行情：并行收集所有候选持仓，合并股票一次性批量拉行情填缓存，
+    # 之后各基金 _estimate_from_holdings 命中缓存（_fetch_stock_quotes_batch 60s缓存），
+    # 避免每只候选单独重复拉持仓/行情
+    _is_intraday = (9, 30) <= (now.hour, now.minute) < (15, 0)
+    if _is_intraday and codes:
+        try:
+            from fund_watch import _parse_holdings, _fetch_stock_quotes_batch
+            _all_sina: list[str] = []
+            with ThreadPoolExecutor(max_workers=30) as _pe:
+                _hfs = {_pe.submit(_parse_holdings, _c): _c for _c in codes}
+                for _hf in as_completed(_hfs):
+                    try:
+                        _hhs = _hf.result() or []
+                    except Exception:
+                        _hhs = []
+                    for _hh in _hhs:
+                        if _hh.get("c"):
+                            _all_sina.append(("sh" if _hh.get("m") == "sh" else "sz") + _hh["c"])
+            if _all_sina:
+                _fetch_stock_quotes_batch(_all_sina)
+        except Exception:
+            pass
     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
         _gfuts = {_ge.submit(_fetch_one_td, c): c for c in codes}
         for _gf in as_completed(_gfuts):
