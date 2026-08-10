@@ -2707,20 +2707,15 @@ function showEstError(code) {
       }
       var maeColor = d.mae < 1.0 ? '#66bb6a' : (d.mae <= 2.0 ? '#ffa726' : '#ef5350');
       var maeLabel = d.mae < 1.0 ? '准' : (d.mae <= 2.0 ? '中' : '偏差大');
-      // 总体方向：平均偏差 = 实际平均 - 估算平均（正=实际整体好于估算，负=实际整体差于估算）
-      var sumErr = 0, sumPos = 0, sumNeg = 0;
-      for (var _i = 0; _i < d.detail.length; _i++) {
-        var _e = d.detail[_i].err;
-        sumErr += _e;
-        if (_e >= 0) { sumPos += _e; } else { sumNeg += _e; }
-      }
+      // 总计方向：净累计 = Σ(实际-估算)，正=总共好于估算，负=总共差于估算
+      var sumErr = 0;
+      for (var _i = 0; _i < d.detail.length; _i++) { sumErr += d.detail[_i].err; }
       var meanErr = sumErr / d.detail.length;
-      var dirColor = meanErr >= 0 ? '#66bb6a' : '#ef5350';
-      var dirText = meanErr >= 0 ? '好于' : '差于';
-      var html = '<div style="margin-bottom:10px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;text-align:center;white-space:nowrap;">'
-        + '总体：实际平均<span style="color:' + dirColor + ';font-weight:600;">' + dirText + '</span>估算 <span style="font-family:Consolas;font-weight:600;color:' + dirColor + ';">' + (meanErr >= 0 ? '+' : '') + meanErr.toFixed(2) + '%</span>（近' + d.count + '天）'
-        + '<span style="color:#666;font-size:10px;"> · 绝对误差 ±' + d.mae + '% ' + maeLabel + '</span>'
-        + '<div style="margin-top:6px;font-size:11px;white-space:nowrap;">累计：好于 <span style="font-family:Consolas;font-weight:600;color:#66bb6a;">+' + sumPos.toFixed(2) + '%</span> · 差于 <span style="font-family:Consolas;font-weight:600;color:#ef5350;">' + sumNeg.toFixed(2) + '%</span></div>'
+      var totalColor = sumErr >= 0 ? '#66bb6a' : '#ef5350';
+      var totalText = sumErr >= 0 ? '好' : '差';
+      var html = '<div style="margin-bottom:10px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;text-align:center;">'
+        + '<div style="white-space:nowrap;">近' + d.count + '天实际总共比估算<span style="color:' + totalColor + ';font-weight:600;">' + totalText + '</span> <span style="font-family:Consolas;font-weight:600;color:' + totalColor + ';">' + (sumErr >= 0 ? '+' : '') + sumErr.toFixed(2) + '%</span></div>'
+        + '<div style="margin-top:4px;font-size:11px;color:#888;white-space:nowrap;">平均每天 ' + (meanErr >= 0 ? '+' : '') + meanErr.toFixed(2) + '% · 绝对误差 ±' + d.mae + '% ' + maeLabel + '</div>'
         + '</div>'
         + '<table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">'
         + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 8px;text-align:left;color:#888;border-bottom:1px solid #444;white-space:nowrap;">日期</th>'
