@@ -21,8 +21,8 @@ _RECOMMEND_RESULT_FILE = os.path.join(HISTORY_DIR, ".fund_recommend_result.json"
 
 
 def _est_err_badge(code: str) -> str:
-    """估算差异图标：好坏与大小都基于总体误差（平均偏差 Σerr/N，正=实际总体好于估算）。
-    勾✓=好、叉✗=差；颜色=|总体误差|分档(绿<0.5%/黄0.5~1%/红>1%)。纯展示，点击由涨跌列触发。"""
+    """估算差异图标：好坏与大小都基于总体误差（累计 Σerr=“总共好/差多少”，正=实际总体好于估算）。
+    勾✓=好、叉✗=差；颜色=|累计误差|分档(绿<1%/黄1~3%/红>3%)。纯展示，点击由涨跌列触发。"""
     try:
         from fund_utils import get_est_error_summary
         s = get_est_error_summary(code)
@@ -30,20 +30,22 @@ def _est_err_badge(code: str) -> str:
         return ""
     if not s or not s.get("count"):
         return ""
-    # 总体误差：平均偏差 Σerr/N（正=实际总体好于估算，负=差于估算）
+    # 总体误差：累计 Σerr（正=实际总体好于估算，负=差于估算）+ 平均每天
     _detail = s.get("detail") or []
-    _mean = (sum(_d.get("err", 0) for _d in _detail) / len(_detail)) if _detail else 0.0
-    _abs = abs(_mean)
-    # 颜色 = |总体误差|：<0.5%绿，0.5~1%黄，>1%红
-    if _abs < 0.5:
+    _total = sum(_d.get("err", 0) for _d in _detail)
+    _n = len(_detail)
+    _mean = _total / _n if _n else 0.0
+    _abs = abs(_total)
+    # 颜色 = |累计误差(总共好/差多少)|：<1%绿，1~3%黄，>3%红
+    if _abs < 1.0:
         color = "#4caf50"
-    elif _abs <= 1.0:
+    elif _abs <= 3.0:
         color = "#ff9800"
     else:
         color = "#f44336"
     # 好坏（勾/叉）
-    _good = _mean >= 0
-    _tip = "实际总体好于估算" if _good else "实际总体差于估算"
+    _good = _total >= 0
+    _tip = f"近{_n}天实际总体好于估算" if _good else f"近{_n}天实际总体差于估算"
     if _good:
         _inner = (f'<path d="M3.5 8.5 L7 12.5 L12.5 4" stroke="{color}" stroke-width="2.6" '
                   f'fill="none" stroke-linecap="round" stroke-linejoin="round"/>')
@@ -52,7 +54,7 @@ def _est_err_badge(code: str) -> str:
                   f'stroke-linecap="round"/>')
     return (f'<svg width="13" height="13" viewBox="0 0 16 16" '
             f'style="vertical-align:middle;margin-left:3px;" '
-            f'title="{_tip} · 总体平均偏差 {_mean:+.2f}% · 点击查看每日明细">{_inner}</svg>')
+            f'title="{_tip} · 总共 {_total:+.2f}%（平均每天 {_mean:+.2f}%） · 点击查看每日明细">{_inner}</svg>')
 
 
 def _web_rich_fund_table(rows: list[dict]) -> str:
