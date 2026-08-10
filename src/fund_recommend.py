@@ -585,10 +585,12 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
                 log.debug("跳过 %s(%s): 缺失收益维度", name, code)
                 return None
         # 获取当日涨跌（供td维度评分）
+        td_src = ""
         td = _fetch_fund_estimate(code)
         if td is not None:
             d["td"] = round(td[1], 2)
             day_str = f"{td[1]:+.2f}%"
+            td_src = td[2]
         else:
             # 无实时数据时从净值算最近交易日涨跌
             navs_local = d.get("nav", [])
@@ -596,6 +598,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
                 td_val = (navs_local[-1]["v"] - navs_local[-2]["v"]) / navs_local[-2]["v"] * 100
                 d["td"] = td_val
                 day_str = f"{td_val:+.2f}%"
+                td_src = "lsjz"
             else:
                 day_str = ""
         score = _calc_score(d)  # 带td值重新评分
@@ -617,6 +620,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
             "volatility": d.get("volatility"), "calmar": d.get("calmar"),
             "max_loss_days": d.get("max_loss_days"), "sy6": d.get("sy6"),
             "td": d.get("td"),
+            "_td_src": td_src,
             "_trend": (lambda _n: [[_n[0]["d"], 0.0]] + [[_n[i]["d"], round((_n[i]["v"] - _n[i-1]["v"]) / _n[i-1]["v"] * 100, 2)] for i in range(1, len(_n))] if len(_n) >= 2 else None)(d.get("nav", [])[-66:]),
             "mgr": (d.get("mgr") or "")[:6],
             "day": day_str,
