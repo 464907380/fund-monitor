@@ -536,13 +536,33 @@ def get_scoring_data(code: str) -> dict:
     # 2. 获取净值历史（LSJZ API, 根据启用维度动态决定页数）
     max_pages = _required_nav_pages()
     full_nav = None
-    # 优先读当天磁盘净值缓存（推荐评分 _score_one / 折线图已写入），
-    # 命中则免去每只基金 38 页网络请求，评分阶段从数万次请求降到 O(1)
+    # 磁盘净值缓存三级策略（推荐评分 _score_one / 折线图已写入）：
+    #   ① 当天缓存 → 直接命中（O(1) 本地）
+    #   ② 跨天缓存 → 增量更新：只拉最新 1 页(20条)合并新增净值，免 38 页重拉
+    #   ③ 无缓存/缓存不足 → 全量拉取
     try:
-        from fund_utils import _get_fund_trend_navs
-        _cached_navs = _get_fund_trend_navs(code)
-        if _cached_navs and len(_cached_navs) >= 250:
-            full_nav = _cached_navs
+        from fund_utils import _load_fund_trend_cache
+        _cache_all = _load_fund_trend_cache()
+        _entry = _cache_all.get(code)
+        if _entry and _entry.get("navs"):
+            _old_navs = [{"d": _dd, "v": _vv} for _dd, _vv in _entry["navs"]]
+            if _entry.get("date") == today:
+                # ① 当天缓存直接命中
+                if len(_old_navs) >= 250:
+                    full_nav = _old_navs
+            elif len(_old_navs) >= 250:
+                # ② 跨天增量更新：只拉最新 1 页，合并比旧缓存更新的净值
+                _old_last = _old_navs[-1]["d"]
+                _new_page = _fetch_nav_from_lsjz(code, max_pages=1)
+                if _new_page:
+                    _added = [it for it in _new_page if it["d"] > _old_last]
+                    if not _added:
+                        # 无新增（今天净值未发布/非交易日）→ 旧缓存数据仍最新，直接复用
+                        full_nav = _old_navs
+                    elif len(_added) < 20:
+                        # 正常增量合并：保持升序，滚动窗口取最近 760 条
+                        full_nav = (_old_navs + _added)[-760:]
+                    # len(_added)>=20 → 长假后新增超过 1 页，走下方全量回退
     except Exception:
         pass
     if full_nav is None:
