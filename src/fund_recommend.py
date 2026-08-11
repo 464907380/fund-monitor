@@ -143,10 +143,14 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
                 _cached_td = _get_td_lsjz_cache(code)
                 if _cached_td is not None:
                     return (code, _cached_td, "lsjz")
-                # 净值未发布时，批量预取已写入 _TD_PROC(fallback=昨日)，直接命中
-                _pe = _TD_PROC.get(code)
-                if _pe and _pe.get("date") == today_str and _pe.get("src") == "fallback" and _pe.get("td") is not None:
-                    return (code, _pe["td"], "fallback")
+                # 批量预取的 fallback=昨日，仅当今日净值普遍未发布时才可命中；
+                # 若探测到今日已发布（_today_nav_ready），该基金可能也有今日净值，
+                # 不能用昨日 fallback 顶替（否则市场优选会显示"昨日"涨跌）——
+                # 下方统一走 LSJZ 逐只查询今日，查不到今日再回退 fallback。
+                if not _today_nav_ready:
+                    _pe = _TD_PROC.get(code)
+                    if _pe and _pe.get("date") == today_str and _pe.get("src") == "fallback" and _pe.get("td") is not None:
+                        return (code, _pe["td"], "fallback")
             except Exception:
                 pass
             # 今日净值普遍未发布 → 跳过 LSJZ 逐只查询，直接走新浪昨日（下方统一处理）
