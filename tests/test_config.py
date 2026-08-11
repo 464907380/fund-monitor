@@ -30,8 +30,8 @@ def test_load_config_with_json():
 
     # 验证默认值与 config.json 一致
     assert cfg["fund_watch"]["alert_drop_1m"] == -10
-    assert cfg["fund_monitor"]["poll_interval_seconds"] == 600
-    assert cfg["network"]["retry_max"] == 3
+    assert cfg["fund_monitor"]["poll_interval_seconds"] == 300  # 用户 config.json 配置值
+    assert cfg["network"]["retry_max"] == 2
 
 
 def test_cfg_module_singleton():
@@ -54,19 +54,14 @@ def test_deep_merge_override():
 
 def test_config_json_missing(tmp_path):
     """config.json 缺失时返回全套默认值"""
-    # 切换到临时目录（没有 config.json）
-    old_cwd = os.getcwd()
-    os.chdir(tmp_path)
-
-    # 需要重新加载模块以清除缓存
-    import importlib
+    from unittest.mock import patch
     import config as cfg_mod
 
-    importlib.reload(cfg_mod)
-    reloaded = cfg_mod.load_config()
+    # _CONFIG_PATH 基于项目根绝对路径，chdir 无效 → 用 patch 指向不存在的路径
+    missing = str(tmp_path / "no_config.json")
+    with patch("config._CONFIG_PATH", missing):
+        reloaded = cfg_mod.load_config()
 
     assert reloaded["fund_watch"]["alert_drop_1m"] == -10
-    assert reloaded["fund_monitor"]["poll_interval_seconds"] == 600
-    assert reloaded["network"]["retry_max"] == 3
-
-    os.chdir(old_cwd)
+    assert reloaded["fund_monitor"]["poll_interval_seconds"] == 600  # 内置默认值
+    assert reloaded["network"]["retry_max"] == 2

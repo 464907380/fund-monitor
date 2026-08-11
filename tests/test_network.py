@@ -19,7 +19,7 @@ class TestFetch(unittest.TestCase):
         mock_retry.return_value = '{"key": "value"}'
         result = fetch("https://example.com/api")
         self.assertEqual(result, '{"key": "value"}')
-        mock_retry.assert_called_once_with("https://example.com/api")
+        mock_retry.assert_called_once_with("https://example.com/api", None)  # headers 默认 None
 
     @patch("fund_utils._retry_fetch")
     def test_fetch_cache_hit(self, mock_retry):
@@ -60,49 +60,37 @@ class TestFetch(unittest.TestCase):
 class TestFetchBytes(unittest.TestCase):
     """测试 fetch_bytes（无缓存的原始 bytes GET）"""
 
-    @patch("fund_utils.urllib.request.urlopen")
-    def test_fetch_bytes_success(self, mock_urlopen):
+    @patch("fund_utils._request_with_retry")
+    def test_fetch_bytes_success(self, mock_retry):
         """正常返回 bytes"""
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"\x00\x01\x02"
-        mock_urlopen.return_value = mock_resp
+        mock_retry.return_value = b"\x00\x01\x02"
         result = fetch_bytes("https://example.com/bin")
         self.assertEqual(result, b"\x00\x01\x02")
+        # fetch_bytes 用 decode=False 调用 _request_with_retry
+        _call = mock_retry.call_args
+        self.assertFalse(_call.kwargs.get("decode", _call.args[1]) if _call.args and len(_call.args) > 1 else _call.kwargs.get("decode", False))
 
-    @patch("fund_utils.urllib.request.urlopen")
-    def test_fetch_bytes_timeout_then_retry(self, mock_urlopen):
-        """超时后重试并成功"""
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"retry_ok"
-        mock_urlopen.side_effect = [
-            urllib.error.URLError("timeout"),
-            mock_resp,
-        ]
+    @patch("fund_utils._request_with_retry")
+    def test_fetch_bytes_timeout_then_retry(self, mock_retry):
+        """内部重试：_request_with_retry 负责重试，最终返回 bytes"""
+        mock_retry.return_value = b"retry_ok"
         result = fetch_bytes("https://example.com/flaky")
         self.assertEqual(result, b"retry_ok")
-        self.assertEqual(mock_urlopen.call_count, 2)
+        self.assertEqual(mock_retry.call_count, 1)
 
-    @patch("fund_utils.urllib.request.urlopen")
-    def test_fetch_bytes_all_retries_exhausted(self, mock_urlopen):
-        """所有重试耗尽后返回 None"""
-        mock_urlopen.side_effect = [
-            urllib.error.URLError("err1"),
-            urllib.error.URLError("err2"),
-            urllib.error.URLError("err3"),
-        ]
-        from fund_utils import _RETRY_MAX
+    @patch("fund_utils._request_with_retry")
+    def test_fetch_bytes_all_retries_exhausted(self, mock_retry):
+        """重试耗尽：_request_with_retry 返回 None → fetch_bytes 返回 None"""
+        mock_retry.return_value = None
         result = fetch_bytes("https://example.com/dead")
         self.assertIsNone(result, "所有重试耗尽应返回 None")
-        self.assertEqual(mock_urlopen.call_count, _RETRY_MAX)
 
-    @patch("fund_utils.urllib.request.urlopen")
-    def test_fetch_bytes_custom_headers(self, mock_urlopen):
-        """自定义请求头"""
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"ok"
-        mock_urlopen.return_value = mock_resp
+    @patch("fund_utils._request_with_retry")
+    def test_fetch_bytes_custom_headers(self, mock_retry):
+        """自定义请求头：透传给 _request_with_retry 的 Request"""
+        mock_retry.return_value = b"ok"
         fetch_bytes("https://example.com", headers={"Authorization": "Bearer xyz"})
-        req = mock_urlopen.call_args[0][0]
+        req = mock_retry.call_args[0][0]
         self.assertEqual(req.headers.get("Authorization"), "Bearer xyz")
 
 

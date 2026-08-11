@@ -1,11 +1,18 @@
 """
-global_briefing.py 构建函数测试 — mock 网络请求
+global_briefing.py 构建函数测试（⚠️ 已废弃）
+
+global_briefing 模块已从项目移除（全球简报功能下线），
+本文件 import 的 build_briefing_md / build_briefing_html 等均不存在，
+整体标记 skip 保留历史记录。
 """
 import unittest
 from unittest.mock import patch, MagicMock
 import os, sys
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+pytestmark = pytest.mark.skip(reason="global_briefing 模块已从项目移除，本文件测的功能已下线")
 
 
 MOCK_A_SHARES = [

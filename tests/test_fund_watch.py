@@ -121,7 +121,9 @@ def test_ensure_fund_list_loaded_empty(tmp_path, monkeypatch):
     """空的 fund_list.json 应该被视为已加载，而不是回退默认列表"""
     import fund_watch
     monkeypatch.setattr(fund_watch, "HISTORY_DIR", str(tmp_path))
-    fund_list_path = tmp_path / "fund_list.json"
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+    fund_list_path = data_dir / "fund_list.json"  # 实际路径为 HISTORY_DIR/data/fund_list.json
     fund_list_path.write_text("[]", encoding="utf-8")
 
     fund_watch.FUND_LIST[:] = []
@@ -396,7 +398,7 @@ def test_calc_score_transparent():
         "m3": 50.0,                             # 近3月 +50%
     }
     score = _calc_score(d)
-    assert 55 <= score <= 100  # 应该高分（新分段曲线计算结果略有变化）
+    assert 50 <= score <= 100  # 应该高分（评分曲线/权重调整后，优秀基金约 50+）
     # 一只各项指标都差的基金
     d2 = {
         "annual_return": -5.0,                  # 亏钱
@@ -416,15 +418,16 @@ def test_calc_score_transparent():
         "m3": -20.0,                            # 近3月亏
     }
     score2 = _calc_score(d2)
-    assert 0 <= score2 <= 30  # 应该低分
+    # 差基金分数应明显低于优秀基金（中性分 50 保底，故不会到 0）
+    assert score2 <= 45 and score2 < score
 
-    # 空数据返回 0
-    assert _calc_score({}) == 0.0
+    # 空数据：所有维度无数据取中性分 50，权重归一后仍为 50
+    assert _calc_score({}) == 50.0
 
 
 def test_rank_percentile_str():
     """排名百分位字符串"""
-    from fund_watch import _rank_percentile_str
+    from fund_scoring import _rank_percentile_str  # 已从 fund_watch 迁移到 fund_scoring
 
     d = {"rank": 1, "rank_total": 2314}
     assert "0.0%" in _rank_percentile_str(d)

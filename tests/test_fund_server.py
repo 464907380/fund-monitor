@@ -69,7 +69,8 @@ class TestFundServerRoutes(unittest.TestCase):
             self.assertEqual(args[0], 200)
             resp = json.loads(args[2])
             self.assertTrue(resp["ok"])
-            self.assertIn("000001", resp["added"])
+            # added 返回"名称(代码)"格式（前端展示友好）
+            self.assertEqual(resp["added"], ["测试基金(000001)"])
 
     @patch("fund_server._load")
     @patch("fund_server._save")

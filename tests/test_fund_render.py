@@ -1,13 +1,21 @@
 """
-fund_render.py 推送/保存/渲染逻辑测试
+fund_render.py 推送/保存/渲染逻辑测试（⚠️ 已废弃）
+
+fund_render.py 已被完全重写为 _web_rich_* 新实现，旧函数
+(_pipe_table_to_html / md_content / _build_briefing_html /
+_format_recommend_rankings / _save_briefing) 均已删除。
+本文件测试的旧功能已不存在，整体标记 skip 保留历史记录。
 """
 import json
 import os
 import unittest
 from unittest.mock import patch, MagicMock, mock_open
 import sys
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+pytestmark = pytest.mark.skip(reason="fund_render.py 已重写为 _web_rich_*，本文件测的旧函数均已删除")
 
 
 class TestPipeTableToHtml(unittest.TestCase):
