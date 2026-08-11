@@ -671,7 +671,9 @@ def settle_estimate_errors() -> None:
     净值已出的基金结算，未出的保留待下次——每只独立判断，
     不会因某只基金净值未发布而耽误其它已发布的基金（如不同基金发布时间不同）。幂等。
     优化：结算前先探测今日净值是否发布——收盘后净值通常晚上才出，若未发布则跳过
-    今日全部结算（避免对数千只基金无效请求占满网络，拖慢 fund-table 首屏）。"""
+    今日全部结算（避免对数千只基金无效请求占满网络，拖慢 fund-table 首屏）。
+    过滤：只结算"相关基金"（自选基金 ∪ 当前推荐结果）——徽章只在这两处展示，
+    estimates 里大量历史候选（多次运行累加、已不再符合当前筛选条件）不再白白请求。"""
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         with _EST_ERROR_LOCK:
@@ -685,6 +687,30 @@ def settle_estimate_errors() -> None:
                     _tasks[(_d, _code)] = _est
             if not _tasks:
                 return
+            # 相关基金集合：自选基金 ∪ 当前推荐结果（估算误差徽章只在这两处展示）
+            _relevant: set[str] = set()
+            try:
+                _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                _fl_path = os.path.join(_root, "data", "fund_list.json")
+                if os.path.exists(_fl_path):
+                    with open(_fl_path, encoding="utf-8") as _f:
+                        for _item in json.load(_f):
+                            if _item.get("code"):
+                                _relevant.add(_item["code"])
+                _res_path = os.path.join(_root, ".fund_recommend_result.json")
+                if os.path.exists(_res_path):
+                    with open(_res_path, encoding="utf-8") as _f:
+                        _res = json.load(_f)
+                    for _r in _res.get("results", []):
+                        if _r.get("code"):
+                            _relevant.add(_r["code"])
+            except Exception:
+                pass
+            # 过滤：只结算相关基金（文件读取失败则保留全量，避免过度限制）
+            if _relevant:
+                _tasks = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _c in _relevant}
+                if not _tasks:
+                    return
             # 净值日期探测：若今日净值普遍未发布（收盘后，最新净值日期 < 今天），
             # 跳过今日任务的结算，仅结算历史日期——避免数千无效请求占满网络。
             _today = datetime.date.today().isoformat()
