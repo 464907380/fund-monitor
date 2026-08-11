@@ -2594,8 +2594,8 @@ async function runRecommendFromFilter() {
           if (prog) prog.style.width = '100%';
           if (statusEl) statusEl.textContent = '⏳ 渲染表格...';
           if (btn) btn.textContent = '⏳ 渲染表格';
-          // 等一小会儿让 _supplement_self_selected 完成
-          await new Promise(function(r){ setTimeout(r, 1500); });
+          // 结果文件已保存完毕（_supplement_self_selected 在保存前已执行），仅稍等磁盘落盘后并行拉取两张表
+          await new Promise(function(r){ setTimeout(r, 300); });
           var rtPromise = fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
           var ftPromise = fetch(API + '/api/fund-table?fresh=1&_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; });
           var _tableOk = true;
