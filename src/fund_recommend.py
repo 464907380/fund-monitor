@@ -101,6 +101,8 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
         return result
     now = datetime.datetime.now()
     is_after_market = now.hour > 15 or (now.hour == 15 and now.minute >= 0)
+    _gz_t0 = time.time()
+    log.info("批量涨跌预取开始: %d 只, 收盘后=%s", len(codes), is_after_market)
 
     # 涨跌来源：收盘后=LSJZ当日净值，盘中(9:30-15:00)=持仓估算，其余=新浪昨日
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -303,6 +305,7 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
                                          phase="刷新涨跌",
                                          detail=f"批量获取昨日涨跌 {_done_batch}/{_total_gz}",
                                          elapsed=round(time.time() - _start_gz, 1))
+                log.info("批量预取昨日涨跌完成: %d/%d 只 (%.1fs)", _done_batch, len(codes), time.time() - _gz_t0)
         except Exception:
             pass
     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
@@ -404,6 +407,14 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
         if replaced:
             log.info("收盘后实际净值替换: %d/%d 只基金(%.1fs)", replaced, len(codes_list), time.time()-_start)
 
+    # 汇总来源分布日志，方便定位"为何显示昨日/今日"
+    try:
+        from collections import Counter
+        _src_cnt = Counter(v[1] for v in result.values())
+        _src_str = ", ".join(f"{k}={v}" for k, v in _src_cnt.items())
+        log.info("批量涨跌预取完成: %d/%d 只成功 (%.1fs) 来源分布[%s]", len(result), len(codes), time.time() - _gz_t0, _src_str)
+    except Exception:
+        pass
     return result
 
 # ── 配置 ──────────────────────────────────────
@@ -894,6 +905,7 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
     _t = time.time()
     total = total_candidates
     print(f"📋 重新评分 {total} 只基金（新权重）...")
+    log.info("rescore: 重新评分 %d 只（新权重）", total)
     update_heartbeat("fund_recommend", progress=0, total=total, overall_pct=50,
                      phase="重新评分",
                      detail=f"重新评分 {total} 只", elapsed=0)
@@ -907,6 +919,7 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
                              detail=f"重评 {i+1}/{total} ({pct:.0f}%)", elapsed=round(time.time() - _t, 1))
 
     print(f"  重评完成 ({time.time()-_t:.1f}s)")
+    log.info("rescore: 重评完成 %d 只 (%.1fs)", total, time.time() - _t)
     cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
     if _HAS_TD:
@@ -918,6 +931,7 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
         all_codes = [r.get("code", "") for r in cached_results]
         td_map = _batch_fetch_estimates([c for c in all_codes if c])
         print(f"  td刷新完成 ({time.time()-_t2:.1f}s), 获取到 {len(td_map)} 只")
+        log.info("rescore: td刷新完成 %d 只 (%.1fs)", len(td_map), time.time() - _t2)
         for r in cached_results:
             code = r.get("code", "")
             _td_item = td_map.get(code)
@@ -965,6 +979,7 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
 
     update_heartbeat("fund_recommend", progress=total_candidates, total=total_candidates, status="保存")
     _save_result(cached_results)
+    log.info("rescore 完成: 保存 %d 只, 总耗时%.1fs", len(cached_results), time.time() - _t)
     print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
     print("=" * 50)
     _print_results(cached_results)
@@ -1000,6 +1015,8 @@ def _supplement_self_selected(base_results: list | None = None, td_map: dict | N
         print(f"\n📋 补拉 {_total} 只自选基金数据...")
         _extra: list[dict] = []
         _done_supp = 0
+        log.info("补拉自选基金: 缺失 %d 只", _total)
+        _supp_t0 = time.time()
         # 预热净值走势磁盘缓存：首次全量读 SQLite(6332只) 若被并发 20 线程同时触发
         # 会造成 IO 风暴+连接争抢（冷启动极慢，实测并发20=243s vs 串行3s）。
         # 先串行加载一次进内存，后续 mtime 命中 O(1)
@@ -1048,11 +1065,13 @@ def _supplement_self_selected(base_results: list | None = None, td_map: dict | N
                 print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
             else:
                 print(f"  ⏭️ {_f['code']} {_f.get('name','')[:12]} — 跳过")
+                log.warning("补充自选跳过: %s %s", _f.get("code"), _f.get("name", "")[:12])
             # 逐只更新心跳：串行每只可能几秒（拉净值），每 1 只反馈更及时，避免"卡住"假象
             update_heartbeat("fund_recommend", progress=_done_supp, total=_total,
                              overall_pct=max(97, 97 + int(_done_supp / _total * 2)),
                              phase="检查自选基金",
                              detail=f"补充自选基金 {_done_supp}/{_total} {_f['code']} {_f.get('name','')[:10]}")
+        log.info("补拉自选基金完成: %d 只成功, %d 只跳过 (%.1fs)", len(_extra), _done_supp - len(_extra), time.time() - _supp_t0)
         if not _extra:
             return
         if base_results is not None:
@@ -1108,25 +1127,31 @@ def main() -> None:
                     if _fl_same and _sc_same:
                         print(f"✅ 筛选与评分配置均未变化 ({_elapsed()}s)")
                         print(f"   使用缓存结果（仅更新涨跌）")
+                        log.info("缓存模式: full（筛选/评分均未变，仅更新涨跌，缓存%d只）", n_cached)
                         cache_mode = "full"
                     elif _fl_same:
                         # 仅权重/维度变化 → 复用结果数据重新评分（无需重新拉净值/重筛）
                         print(f"🔄 评分配置已变化，筛选条件未变 ({_elapsed()}s)")
                         print(f"   复用 {n_cached} 只已评分数据重新评分")
+                        log.info("缓存模式: rescore（仅评分配置变，复用%d只重新评分）", n_cached)
                         cache_mode = "rescore"
                     elif _sc_same:
                         # 仅筛选条件变化、评分配置(权重/维度)未变 → 复用已评分结果重新过滤
                         print(f"🔄 筛选条件已变化，评分配置未变 ({_elapsed()}s)")
                         print(f"   复用已评分结果重新过滤，仅补充新增候选")
+                        log.info("缓存模式: refilter（仅筛选变，复用已评分重新过滤）")
                         cache_mode = "refilter"
                     else:
                         print(f"🔄 筛选条件与评分配置均已变化 ({_elapsed()}s)")
                         print(f"   全量重新拉取排行和评分")
+                        log.info("缓存模式: 全量（筛选/评分均变，全量重跑）")
                 else:
                     print(f"📅 缓存日期 ({saved_date}) ≠ 今天 ({datetime.date.today()})")
                     print(f"   跨日必须全量重新拉取排行和评分，确保使用最新数据")
+                    log.info("缓存模式: 全量（缓存日期 %s ≠ 今天 %s）", saved_date, datetime.date.today().isoformat())
             except Exception as e:
                 print(f"⚠️ 缓存读取失败: {e}，全量重新运行")
+                log.warning("缓存读取失败(%s)，全量重新运行", e)
 
         if cache_mode:
             cached_results = old["results"]
@@ -1142,6 +1167,7 @@ def main() -> None:
             if cache_mode == "refilter":
                 # 筛选条件变了但评分配置(权重/维度)没变 → 复用已评分结果重新过滤，只补充新增候选
                 print(f"\n🔄 重筛模式: 复用 {total_candidates} 只已评分基金...")
+                log.info("refilter: 复用 %d 只已评分基金重新筛选", total_candidates)
                 update_heartbeat("fund_recommend", progress=0, total=1, overall_pct=5,
                                  phase="重新筛选", detail=f"过滤 {total_candidates} 只已评分基金", elapsed=_elapsed())
                 _base = _filter_scored_results(cached_results)
@@ -1154,24 +1180,28 @@ def main() -> None:
                 print(f"   ✅ 排行初筛: {len(_cands)} 只 ({time.time()-_t2:.1f}s)")
                 _new_cands = [c for c in _cands if c["code"] not in _base_set]
                 print(f"   ➕ 新增需评分: {len(_new_cands)} 只 (复用已评分 {len(_base)} 只)")
+                log.info("refilter: 旧过滤%d只, 排行初筛%d只, 新增需评分%d只", len(_base), len(_cands), len(_new_cands))
                 _scored_new: list[dict] = []
                 if _new_cands:
                     _t3 = time.time()
                     update_heartbeat("fund_recommend", progress=0, total=len(_new_cands), overall_pct=30,
                                      phase="评分", detail=f"评分新增 {len(_new_cands)} 只", elapsed=_elapsed())
                     _td_prefetch = _batch_fetch_estimates([c["code"] for c in _new_cands], pct_base=30)
+                    log.info("refilter: 批量预取新增涨跌完成 %d 只", len(_td_prefetch))
                     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as _ex:
                         _futs = {_ex.submit(_score_one, c["code"], c["name"], c.get("_limit_amount"), _td_prefetch): c for c in _new_cands}
                         for _i, _f in enumerate(as_completed(_futs), 1):
                             _rr = _f.result()
                             if _rr:
                                 _scored_new.append(_rr)
-                            if _i % 20 == 0 or _i == len(_new_cands):
+                            if _i % 50 == 0 or _i == len(_new_cands):
                                 _pp = int(_i / len(_new_cands) * 100)
+                                log.info("refilter 评分进度 %d/%d (%d%%) 成功%d", _i, len(_new_cands), _pp, len(_scored_new))
                                 update_heartbeat("fund_recommend", progress=_i, total=len(_new_cands),
                                                  overall_pct=30 + int(_pp * 0.6), phase="评分",
                                                  detail=f"评分新增 {_i}/{len(_new_cands)} ({_pp}%)", elapsed=_elapsed())
                     print(f"   ✅ 新增评分完成: {len(_scored_new)} 只 ({time.time()-_t3:.1f}s)")
+                    log.info("refilter: 新增评分完成 %d 只 (%.1fs)", len(_scored_new), time.time() - _t3)
                 _combined = _base + _scored_new
                 _combined.sort(key=lambda x: x.get("score", 0), reverse=True)
                 update_heartbeat("fund_recommend", progress=0, total=1, overall_pct=95,
@@ -1179,6 +1209,7 @@ def main() -> None:
                 _supplement_self_selected(_combined)
                 _final_c = len(_combined)
                 _save_result(_combined)
+                log.info("refilter 完成: 复用%d + 新增%d = %d 只, 总耗时%.1fs", len(_base), len(_scored_new), _final_c, _elapsed())
                 update_heartbeat("fund_recommend", progress=_final_c, total=_final_c, overall_pct=100,
                                  phase="完成", detail="推荐完成", elapsed=_elapsed())
                 print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
@@ -1192,6 +1223,7 @@ def main() -> None:
                 if _HAS_TD:
                     _t1 = time.time()
                     print(f"\n📋 当日涨跌维度开启，刷新 {total_candidates} 只基金td值...")
+                    log.info("full 模式: 刷新 %d 只基金td值", total_candidates)
                     update_heartbeat("fund_recommend", progress=0, total=total_candidates,
                                      overall_pct=0, phase="刷新涨跌",
                                      detail=f"获取 {total_candidates} 只基金当日涨跌", elapsed=_elapsed())
@@ -1200,6 +1232,7 @@ def main() -> None:
                     all_codes = [r.get("code", "") for r in cached_results]
                     td_map = _batch_fetch_estimates([c for c in all_codes if c])
                     print(f"  td刷新完成 ({time.time()-_t1:.1f}s), 获取到 {len(td_map)} 只")
+                    log.info("full 模式: td刷新完成 %d 只 (%.1fs)", len(td_map), time.time() - _t1)
 
                     for idx, r in enumerate(cached_results):
                         code = r.get("code", "")
@@ -1223,6 +1256,7 @@ def main() -> None:
                     cached_results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
                 print(f"\n💾 保存缓存结果...")
+                log.info("full 模式: 保存 %d 只结果", len(cached_results))
                 # 先补充自选基金再保存，确保最终数量与评分阶段一致
                 _supplement_self_selected(cached_results, td_map=td_map if _HAS_TD else None)
                 _final_count = len(cached_results)
@@ -1246,26 +1280,33 @@ def main() -> None:
         # ── 全量运行 ──
         _t1 = time.time()
         print(f"\n📥 阶段1/5: 获取全市场基金排行 (TOP {_TOP})...")
+        log.info("阶段1/5 开始: 获取全市场基金排行 (TOP %d)", _TOP)
         update_heartbeat("fund_recommend", progress=0, total=_TOP,
                          overall_pct=0, phase="获取排行",
                          detail=f"拉取排行 API top {_TOP}", elapsed=_elapsed())
+        _rank_t0 = time.time()
         rows = _fetch_rank_list(_TOP)
         rows_count = len(rows)
         print(f"   ✅ API 返回 {rows_count} 只基金 ({time.time()-_t1:.1f}s)")
+        log.info("阶段1/5 完成: API 返回 %d 只基金 (%.1fs)", rows_count, time.time() - _rank_t0)
         update_heartbeat("fund_recommend", progress=_TOP, total=_TOP,
                          overall_pct=2, phase="获取排行",
                          detail=f"排行API返回 {rows_count} 只", elapsed=_elapsed())
 
         _t2 = time.time()
         print(f"\n📊 阶段2/5: 初筛 (多条件筛选)...")
+        log.info("阶段2/5 开始: 初筛 (%d 个条件, %d 只)", len(_FILTER_CONDITIONS), rows_count)
         update_heartbeat("fund_recommend", progress=0, total=rows_count,
                          overall_pct=2, phase="初筛",
                          detail=f"按 {len(_FILTER_CONDITIONS)} 个条件筛选 {rows_count} 只", elapsed=_elapsed())
+        _t2a = time.time()
         candidates = _filter_candidates(rows)
         candidates_count = len(candidates)
         print(f"   ✅ 多条件筛选后: {candidates_count} 只 ({time.time()-_t2:.1f}s)")
+        log.info("阶段2/5 完成: 初筛后 %d 只 (%.1fs)", candidates_count, time.time() - _t2a)
         if not candidates:
             print("   ⚠️ 无候选基金，请降低最低年化收益门槛")
+            log.warning("初筛无候选，退出")
             update_heartbeat("fund_recommend", progress=0, total=0,
                              overall_pct=100, phase="完成",
                              detail="无候选基金", elapsed=_elapsed())
@@ -1281,6 +1322,7 @@ def main() -> None:
         _t4 = time.time()
         print(f"\n🧮 阶段4/5: 并行评分 ({total} 只基金, 预计 ~{est_min} 分钟)")
         print(f"   数据来源: pingzhongdata (~400KB/只, 50线程)")
+        log.info("阶段4/5 开始: 并行评分 %d 只, 预计 ~%d 分钟, 50线程", total, est_min)
         update_heartbeat("fund_recommend", progress=0, total=total,
                          overall_pct=15, phase="评分",
                          detail=f"启动评分: {total} 只, {50}线程", elapsed=_elapsed())
@@ -1312,14 +1354,15 @@ def main() -> None:
                 result = fut.result()
                 if result:
                     scored.append(result)
-                    ar = result.get("annual_return")
-                    ar_str = f"{ar:.1f}%" if isinstance(ar, (int, float)) else "?"
-                    print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {ar_str:<8} {result['score']:<6.1f} {time.time()-_t4:<7.1f}s")
-                else:
-                    print(f"  {i}/{total:<4} {c['code']:<7} {c['name'][:18]:<20} {'失败':<8} {'':6} {time.time()-_t4:<7.1f}s")
                 # 定期把累积的净值走势写盘并清空，控制内存（候选多时避免OOM）
                 if i % 500 == 0 or i == total:
                     _flush_trend_cache()
+                # 日志：每 100 只记一次进度+失败数累计（print 被 server 丢弃，log 才是找问题的关键）
+                _fail_count = i - len(scored)
+                if i % 100 == 0 or i == total:
+                    log.info("评分进度 %d/%d (%.0f%%) 成功%d/失败%d 当前%s %s 已耗时%.1fs",
+                             i, total, i / total * 100, len(scored), _fail_count,
+                             c.get("code", ""), c.get("name", "")[:10], time.time() - _t4)
                 pct = i / total * 100
                 opct = 15 + i / total * 82
                 # 评分心跳：显示进度+当前基金代码/名称+耗时（区分"网络慢"与"卡住"）
@@ -1332,7 +1375,7 @@ def main() -> None:
                                  detail=f"评分 {i}/{total} ({pct:.0f}%) {_cur_code} {_cur_name[:10]} · {_cur_cost:.0f}s/{_rate:.1f}只/秒",
                                  elapsed=_elapsed())
 
-        print(f"\n   ✅ 评分完成: {len(scored)}/{total} 只成功 ({time.time()-_t4:.1f}s)")
+        log.info("阶段4/5 完成: 评分 %d/%d 成功 (%d 只无数据跳过) (%.1fs)", len(scored), total, total - len(scored), time.time() - _t4)
 
         # ── 排序保存 ──
         _t5 = time.time()
@@ -1399,7 +1442,9 @@ def main() -> None:
         update_heartbeat("fund_recommend", progress=_final_count, total=_final_count,
                          overall_pct=97, phase="保存",
                          detail=f"保存 {_final_count} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
+        log.info("阶段5/5 开始: 保存 %d 只结果 (%.1fs 排序/限购/补充自选)", _final_count, time.time() - _t5)
         _save_result(scored)
+        log.info("阶段5/5 完成: 结果已保存到 %s", _RESULT_FILE)
 
         # 保存后立即增量回填新进榜基金的估算差异（只补无记录基金，秒级），
         # 避免新基金进榜后当天市场优选表无差异徽章（默认异步回填赶不上前端渲染）
@@ -1409,6 +1454,7 @@ def main() -> None:
             _bf_n = backfill_estimate_errors(days=10)
             if _bf_n:
                 print(f"   └─ 差异回填: {_bf_n} 条 ({time.time()-_bf_t0:.1f}s)")
+                log.info("差异回填 %d 条 (%.1fs)", _bf_n, time.time() - _bf_t0)
         except Exception:
             pass
 
