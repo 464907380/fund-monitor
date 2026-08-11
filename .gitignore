@@ -48,6 +48,15 @@ fund_est_error.json
 # 当日涨跌(td)缓存（自动生成，收盘后固定值当天复用）
 fund_td_cache.json
 
+# 基金名称索引磁盘缓存（自动生成，7天TTL）
+data/fund_name_index.json
+
+# 排行接口当日磁盘缓存（自动生成，同一天复用）
+data/fund_rank_cache.json
+
+# 缓存原子写入的临时文件（自动生成，写完即重命名）
+data/*.tmp
+
 # 评分历史（自动生成）
 .score_history.json
 
