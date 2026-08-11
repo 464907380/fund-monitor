@@ -235,6 +235,36 @@ _FUND_TABLE_CACHE_TTL = 0  # 不缓存HTML，td始终实时获取
 _recommend_table_cache: dict[str, tuple[float, str]] = {"data": None}
 _recommend_cache_ttl = _FUND_TABLE_CACHE_TTL
 _FUND_LIST_PATH = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
+
+
+def _refresh_recommend_days(_saved: list[dict]) -> None:
+    """盘中刷新市场优选表涨跌为今日实时估算（推荐结果文件是静态快照）。
+    仅交易时段 9:00–15:00 生效，并发刷新 TOP N（show_top）只；
+    盘后/非交易日保持快照（推荐结果里的净值/昨日），不额外发请求。"""
+    try:
+        from fund_utils import is_trading_day
+        from fund_watch import _parse_real_time
+        _now = datetime.datetime.now()
+        if not (is_trading_day(_now.date()) and 9 <= _now.hour < 15):
+            return
+        _show_n = int(CFG.get("recommend", {}).get("show_top", 20))
+        _top = list(_saved)[:_show_n]
+
+        def _refresh_one(r: dict) -> None:
+            try:
+                _td, _td_src = _parse_real_time(r.get("code", ""))
+                if _td is not None:
+                    r["day"] = f"{_td:+.2f}%"
+                    r["td"] = _td
+                    r["_td_src"] = _td_src or r.get("_td_src", "")
+            except Exception:
+                pass
+
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=get_config("network", "max_workers", "server_recommend_table", default=20)) as _ex:
+            list(_ex.map(_refresh_one, _top))
+    except Exception:
+        pass
 _CONFIG_PATH = os.path.join(_PROJECT_ROOT, "data", "config.json")
 _PORT = get_config("server", "port", default=8080)
 
@@ -1543,6 +1573,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
                 _saved = _load_saved_recommend_data()
                 if _saved:
+                    _refresh_recommend_days(_saved)  # 盘中刷新涨跌为今日估算
                     html = _web_rich_recommend_table(_saved)
                 else:
                     html = ""
