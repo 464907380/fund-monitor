@@ -1288,13 +1288,17 @@ def main() -> None:
             def _check_limit(c: dict) -> dict | None:
                 try:
                     amount = _parse_purchase_limit(c["code"])
-                    if amount is not None and amount <= 2:
+                    # 网络失败/超时返回 None → 视为无限购，保留该基金（避免网络问题误杀）
+                    if amount is None:
+                        return c
+                    if amount <= 2:
                         return None
                     c["_limit_amount"] = amount
                     return c
                 except Exception:
-                    log.warning("限购检查失败: %s", c["code"])
-                    return None
+                    # 检查异常 → 保留基金，避免误杀
+                    log.warning("限购检查异常(保留): %s", c["code"])
+                    return c
 
             with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_limit_check", default=50)) as _le:
                 _lfuts = {_le.submit(_check_limit, c): c for c in candidates}

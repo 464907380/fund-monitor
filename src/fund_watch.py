@@ -750,6 +750,12 @@ def _parse_purchase_limit(code: str) -> float | None:
     now = time.time()
     if code in _limit_cache and now - _limit_cache[code][0] < 86400:
         return _limit_cache[code][1]
+    # 磁盘持久化缓存（24h 内复用）：避免每次推荐新进程都要重拉几千只详情页
+    _limit_disk = _load_limit_cache()
+    _le = _limit_disk.get(code)
+    if _le and now - _le.get("ts", 0) < 86400:
+        _limit_cache[code] = (_le["ts"], _le.get("amount"))
+        return _le.get("amount")
 
     result: float | None = None
     try:
@@ -758,7 +764,7 @@ def _parse_purchase_limit(code: str) -> float | None:
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://fund.eastmoney.com/",
         })
-        with urllib.request.urlopen(req, timeout=CFG.get("network",{}).get("timeout",{}).get("purchase_limit", 10)) as r:
+        with urllib.request.urlopen(req, timeout=get_timeout("purchase_limit", 4)) as r:
             html = r.read().decode("utf-8", errors="ignore")
         # 提取限购金额，支持"万元"和"元"两种单位
         m = re.search(r"单日累计购买上限\s*([\d.]+)\s*万元", html)
@@ -777,7 +783,49 @@ def _parse_purchase_limit(code: str) -> float | None:
     except Exception:
         pass
     _limit_cache[code] = (now, result)
+    _set_limit_cache(code, now, result)  # 落盘（失败静默，不影响本次）
     return result
+
+
+# ── 限购磁盘持久化缓存（24h TTL，跨进程复用）──
+_LIMIT_CACHE_PATH = os.path.join(HISTORY_DIR, "data", "fund_limit_cache.json")
+_LIMIT_DISK_MEM: dict | None = None
+_LIMIT_DISK_MTIME: float = -1.0
+
+
+def _load_limit_cache() -> dict:
+    """读取限购磁盘缓存 {code: {ts, amount}}（mtime 缓存）"""
+    global _LIMIT_DISK_MEM, _LIMIT_DISK_MTIME
+    try:
+        if os.path.exists(_LIMIT_CACHE_PATH):
+            _m = os.path.getmtime(_LIMIT_CACHE_PATH)
+            if _LIMIT_DISK_MEM is not None and _m == _LIMIT_DISK_MTIME:
+                return _LIMIT_DISK_MEM
+            with open(_LIMIT_CACHE_PATH, encoding="utf-8") as f:
+                _LIMIT_DISK_MEM = json.load(f)
+            _LIMIT_DISK_MTIME = _m
+            return _LIMIT_DISK_MEM
+    except Exception:
+        pass
+    return {}
+
+
+def _set_limit_cache(code: str, ts: float, amount: float | None) -> None:
+    """写入单条限购缓存到磁盘（合并式 + 跨进程锁，失败静默）"""
+    global _LIMIT_DISK_MEM, _LIMIT_DISK_MTIME
+    try:
+        os.makedirs(os.path.dirname(_LIMIT_CACHE_PATH), exist_ok=True)
+        with inter_process_lock(_LIMIT_CACHE_PATH):
+            _disk = _load_limit_cache()
+            _disk[code] = {"ts": ts, "amount": amount}
+            _tmp = _LIMIT_CACHE_PATH + ".tmp"
+            with open(_tmp, "w", encoding="utf-8") as f:
+                json.dump(_disk, f, ensure_ascii=False)
+            os.replace(_tmp, _LIMIT_CACHE_PATH)
+            _LIMIT_DISK_MEM = _disk
+            _LIMIT_DISK_MTIME = os.path.getmtime(_LIMIT_CACHE_PATH)
+    except Exception:
+        pass
 
 
 # ── 历史快照 ──────────────────────────────────

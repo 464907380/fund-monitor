@@ -120,3 +120,5 @@ data/config.json
 tmp_*
 # 调试脚本
 _*.py
+# 限购磁盘缓存（自动生成，24h TTL）
+data/fund_limit_cache.json
