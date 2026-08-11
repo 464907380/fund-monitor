@@ -870,30 +870,31 @@ setInterval(updateHeartbeat, 30000);
 
 /** 页面加载时恢复已保存的推荐/自选基金表格 */
 async function loadSavedTables() {
+  // 并行请求推荐表+自选表+心跳，避免串行等待(省约1.2s)
+  var rtHtml = null, ftHtml = null, hbR = null;
   try {
-    var rtResp = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
-    if (rtResp.ok) {
-      var rtHtml = await rtResp.text();
-      if (rtHtml.indexOf('<tbody>') > 0) {
-        var rtEl = document.getElementById('recommendFullTable');
-        if (rtEl) { rtEl.innerHTML = rtHtml; document.getElementById('recommendFullTableCard').style.display = ''; }
-      }
+    var results = await Promise.all([
+      fetch(API + '/api/recommend-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; }),
+      fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; }),
+      fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    ]);
+    rtHtml = results[0]; ftHtml = results[1]; hbR = results[2];
+  } catch(e) {}
+  try {
+    if (rtHtml && rtHtml.indexOf('<tbody>') > 0) {
+      var rtEl = document.getElementById('recommendFullTable');
+      if (rtEl) { rtEl.innerHTML = rtHtml; document.getElementById('recommendFullTableCard').style.display = ''; }
     }
   } catch(e) {}
   try {
-    var ftResp = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
-    if (ftResp.ok) {
-      var ftHtml = await ftResp.text();
-      if (ftHtml.indexOf('<tbody>') > 0) {
-        var ftEl = document.getElementById('fundFullTable');
-        if (ftEl) { ftEl.innerHTML = ftHtml; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); }
-      }
+    if (ftHtml && ftHtml.indexOf('<tbody>') > 0) {
+      var ftEl = document.getElementById('fundFullTable');
+      if (ftEl) { ftEl.innerHTML = ftHtml; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); }
     }
   } catch(e) {}
   // 检查是否有推荐任务正在后台运行，有则恢复进度显示
   try {
-    var hbR = await fetch(API + '/api/heartbeat?_t=' + Date.now()).then(function(r){ return r.json(); });
-    if (hbR.ok && hbR.alive && hbR.alive.fund_recommend && hbR.heartbeats && hbR.heartbeats.fund_recommend) {
+    if (hbR && hbR.ok && hbR.alive && hbR.alive.fund_recommend && hbR.heartbeats && hbR.heartbeats.fund_recommend) {
       _resumeRecommendProgress();
     }
   } catch(e) {}
@@ -2014,9 +2015,8 @@ async function _refreshTablesWithProgress(progFill, progPct, progText, onDone) {
         }
       }).catch(function(){});
     }, 800);
-    // 先刷新自选表（get_scoring_data 已含多窗口指标，立即生效）
-    var ftR = await fetch(API + '/api/fund-table' + '?_t=' + Date.now());
-    if (ftR.ok) { var ftH = await ftR.text(); if (ftH.indexOf('<tbody>') > 0) { var ftE = document.getElementById('fundFullTable'); if (ftE) { ftE.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else if (ftH) { var ftE2 = document.getElementById('fundFullTable'); if (ftE2) { ftE2.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } }
+    // 并发启动自选表请求（不阻塞下方补算轮询），就绪后渲染
+    var ftPromise = fetch(API + '/api/fund-table' + '?_t=' + Date.now()).then(function(r){ return r.ok ? r.text() : null; }).catch(function(){ return null; });
     // 等待后台补算窗口指标完成（改维度窗口时），再刷新推荐表
     var t0 = Date.now();
     while (Date.now() - t0 < 120000) {
@@ -2032,6 +2032,8 @@ async function _refreshTablesWithProgress(progFill, progPct, progText, onDone) {
       if (progText) progText.textContent = '🔧 补算窗口指标 ' + (bf.detail || '') + ' | ' + bp + '%';
       await new Promise(function(r){ setTimeout(r, 1200); });
     }
+    // 渲染自选表（已就绪）
+    try { var ftH = await ftPromise; if (ftH) { if (ftH.indexOf('<tbody>') > 0) { var ftE = document.getElementById('fundFullTable'); if (ftE) { ftE.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; setupDragSort(); } } else { var ftE2 = document.getElementById('fundFullTable'); if (ftE2) { ftE2.innerHTML = ftH; document.getElementById('fundFullTableCard').style.display = ''; } } } } catch(e) {}
     // 刷新推荐表（补算后按新窗口评分）
     var rtR = await fetch(API + '/api/recommend-table' + '?_t=' + Date.now());
     if (rtR.ok) { var rtH = await rtR.text(); if (rtH.indexOf('<tbody>') > 0) { var rtE = document.getElementById('recommendFullTable'); if (rtE) { rtE.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } else if (rtH) { var rtE2 = document.getElementById('recommendFullTable'); if (rtE2) { rtE2.innerHTML = rtH; document.getElementById('recommendFullTableCard').style.display = ''; } } }
