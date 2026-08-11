@@ -971,10 +971,14 @@ def settle_estimate_errors() -> None:
                     return
             # 净值日期探测：若今日净值普遍未发布（收盘后，最新净值日期 < 今天），
             # 跳过今日任务的结算，仅结算历史日期——避免数千无效请求占满网络。
+            # 仅当今日任务规模较大时启用该"一刀切"保护；规模小（自选/推荐等少量
+            # 基金）时逐只结算，靠 _fetch_actual_nav_pct 对未发布基金返回 None 自然
+            # 跳过（任务保留下次再结算）——避免漏掉已发布的基金（各基金净值发布
+            # 时间不同，如 007639 已发布但探测前 3 只恰好都未发布会被误伤）。
             _today = datetime.date.today().isoformat()
             _hist = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d < _today}
             _today_tasks = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d >= _today}
-            if _today_tasks:
+            if _today_tasks and len(_today_tasks) >= 100:
                 _probe_codes = list(dict.fromkeys(_c for (_d, _c) in _today_tasks))[:3]
                 _today_ready = False
                 for _pc in _probe_codes:
