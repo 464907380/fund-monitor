@@ -59,19 +59,27 @@ def _trigger_settle_estimates() -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-# ── 历史估算差异回填（用当前持仓+历史股票行情补齐前几天的差异，每天最多一次）──
+# ── 历史估算差异回填（用当前持仓+历史股票行情补齐前几天的差异）──
+# 默认每天最多一次；推荐结果文件更新后（新基金进榜）允许立即重跑——
+# backfill 已预过滤只处理无记录基金，增量秒级，不会拖慢。
 _backfill_lock = threading.Lock()
 _backfill_last_ts: float = 0.0
+_backfill_last_rec_mtime: float = 0.0
 
 
 def _trigger_backfill_estimates() -> None:
-    """后台回填历史估算差异（每天最多一次），新加自选基金时自动补前几天的差异"""
-    global _backfill_last_ts
+    """后台回填历史估算差异。推荐结果更新时立即重跑（增量），否则每天最多一次。"""
+    global _backfill_last_ts, _backfill_last_rec_mtime
     with _backfill_lock:
         _now = time.time()
-        if _now - _backfill_last_ts < 86400:
+        _rec_file = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
+        _rec_mtime = os.path.getmtime(_rec_file) if os.path.exists(_rec_file) else 0
+        # 推荐结果更新（新基金进榜）→ 允许重新回填；否则按 86400s 降频
+        _rec_changed = _rec_mtime > _backfill_last_rec_mtime
+        if not _rec_changed and _now - _backfill_last_ts < 86400:
             return
         _backfill_last_ts = _now
+        _backfill_last_rec_mtime = max(_backfill_last_rec_mtime, _rec_mtime)
 
     def _run() -> None:
         try:
@@ -1585,6 +1593,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/api/recommend-table":
             """返回市场优选全维度表格 HTML（实时拉取 TOP N 基金数据）"""
             _trigger_settle_estimates()  # 后台结算估算误差（幂等）
+            _trigger_backfill_estimates()  # 后台回填历史估算差异（推荐结果更新后增量补齐新基金）
             _rec_file = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
             _rt_now = time.time()
             # 检查文件修改时间，若文件比缓存新则强制重建

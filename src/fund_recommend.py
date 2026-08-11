@@ -1290,6 +1290,17 @@ def main() -> None:
                          detail=f"保存 {_final_count} 只结果到 {_RESULT_FILE}", elapsed=_elapsed())
         _save_result(scored)
 
+        # 保存后立即增量回填新进榜基金的估算差异（只补无记录基金，秒级），
+        # 避免新基金进榜后当天市场优选表无差异徽章（默认异步回填赶不上前端渲染）
+        try:
+            from fund_utils import backfill_estimate_errors
+            _bf_t0 = time.time()
+            _bf_n = backfill_estimate_errors(days=10)
+            if _bf_n:
+                print(f"   └─ 差异回填: {_bf_n} 条 ({time.time()-_bf_t0:.1f}s)")
+        except Exception:
+            pass
+
         print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
         print("=" * 50)
         _print_results(scored)

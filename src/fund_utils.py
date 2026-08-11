@@ -784,6 +784,15 @@ def backfill_estimate_errors(days: int = 10) -> int:
             pass
         if not _codes:
             return 0
+        # 预过滤：只处理完全无误差记录的基金（增量回填）。
+        # 推荐结果更新后新进榜基金无历史记录，立即补齐；已有记录的不重复解析持仓/拉行情，秒级完成。
+        _need = []
+        for _c in _codes:
+            if not _errors.get(_c):
+                _need.append(_c)
+        _codes = _need
+        if not _codes:
+            return 0
         _today = datetime.date.today().isoformat()
         # 1. 收集每只基金持仓股票 secid
         _holdings: dict[str, list] = {}
