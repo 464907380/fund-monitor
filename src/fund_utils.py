@@ -317,6 +317,33 @@ def _strip_html(text: str) -> str:
 _FUND_NAME_MAP: dict[str, str] | None = None
 _FUND_NAME_MAP_LOCK = threading.Lock()
 _FUND_NAME_MAP_LAST_FAIL: float = 0.0  # 上次索引加载失败时间戳（用于定时重试）
+_FUND_NAME_INDEX_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                     "data", "fund_name_index.json")
+_FUND_NAME_INDEX_TTL = 7 * 24 * 3600  # 索引7天刷新一次（新基金偶尔加入，可接受滞后）
+
+
+def _load_fund_name_index() -> dict:
+    """读取全市场基金名称索引磁盘缓存（跨进程复用，避免每进程重拉几MB索引）"""
+    try:
+        if os.path.exists(_FUND_NAME_INDEX_PATH):
+            with open(_FUND_NAME_INDEX_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            if time.time() - data.get("ts", 0) < _FUND_NAME_INDEX_TTL:
+                return data.get("index", {})
+    except Exception:
+        pass
+    return {}
+
+
+def _save_fund_name_index(index: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_FUND_NAME_INDEX_PATH), exist_ok=True)
+        _tmp = _FUND_NAME_INDEX_PATH + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump({"ts": time.time(), "index": index}, f, ensure_ascii=False)
+        os.replace(_tmp, _FUND_NAME_INDEX_PATH)
+    except Exception:
+        pass
 
 
 def _get_fund_name(code: str) -> str:
@@ -327,19 +354,23 @@ def _get_fund_name(code: str) -> str:
         with _FUND_NAME_MAP_LOCK:
             if _FUND_NAME_MAP is None or (not _FUND_NAME_MAP and now - _FUND_NAME_MAP_LAST_FAIL > 120):
                 _FUND_NAME_MAP = {}
-                try:
-                    url = api_url("fund_search_index")
-                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req, timeout=get_timeout("load_fund_index", 15)) as r:
-                        data = r.read().decode("utf-8")
-                    # 格式: var r = [["000001","HXCZHH","华夏成长混合","混合型-灵活",...], ...]
-                    m = re.search(r"var r\s*=\s*(\[.*?\]);", data, re.DOTALL)
-                    if m:
-                        raw = json.loads(m.group(1))
-                        _FUND_NAME_MAP = {item[0]: item[2] for item in raw}
-                    _FUND_NAME_MAP_LAST_FAIL = 0.0
-                except Exception:
-                    _FUND_NAME_MAP_LAST_FAIL = now
+                # 优先读磁盘索引缓存（跨进程复用，避免每进程重新拉几MB全市场索引）
+                _FUND_NAME_MAP = _load_fund_name_index()
+                if not _FUND_NAME_MAP:
+                    try:
+                        url = api_url("fund_search_index")
+                        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                        with urllib.request.urlopen(req, timeout=get_timeout("load_fund_index", 15)) as r:
+                            data = r.read().decode("utf-8")
+                        # 格式: var r = [["000001","HXCZHH","华夏成长混合","混合型-灵活",...], ...]
+                        m = re.search(r"var r\s*=\s*(\[.*?\]);", data, re.DOTALL)
+                        if m:
+                            raw = json.loads(m.group(1))
+                            _FUND_NAME_MAP = {item[0]: item[2] for item in raw}
+                            _save_fund_name_index(_FUND_NAME_MAP)
+                        _FUND_NAME_MAP_LAST_FAIL = 0.0
+                    except Exception:
+                        _FUND_NAME_MAP_LAST_FAIL = now
     return _FUND_NAME_MAP.get(code, "")
 
 # ── 当日涨跌(td)缓存：收盘后是固定值，缓存当天供同一天跨进程复用（推荐评分每只都调）──

@@ -671,9 +671,19 @@ def get_scoring_data(code: str) -> dict:
     if full_nav is None:
         # 优先 pingzhongdata（1次请求拉全量，比 LSJZ 38页快~1.5倍且数据全），截断到800条控制计算量；失败回退 LSJZ 分页
         try:
-            _pz = _parse_full_nav(fetch(api_url("fund_pingzhongdata", code=code)))
+            _pz_raw = fetch(api_url("fund_pingzhongdata", code=code))
+            _pz = _parse_full_nav(_pz_raw)
             if _pz:
                 full_nav = _pz[-800:]
+                # 顺带补全规模/费率/经理/机构占比（评分维度用，LSJZ路径缺失）
+                if _sc := _parse_scale(_pz_raw):
+                    d["sc"] = _sc
+                if _mgr := _parse_manager(_pz_raw):
+                    d["mgr"] = _mgr
+                if _inst := _parse_institutional_ratio(_pz_raw):
+                    d["inst"] = _inst
+                if _rate := _parse_fund_rate(_pz_raw):
+                    d["rate"] = _rate
         except Exception:
             pass
         if full_nav is None:
