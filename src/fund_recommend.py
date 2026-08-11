@@ -232,25 +232,44 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
                                  detail=f"获取当日涨跌 {_done}/{_total_gz} ({_pct}%)",
                                  elapsed=round(time.time() - _start_gz, 1))
     if _failed_codes:
-        # 失败的逐个重试（_fetch_fund_estimate 有多层降级）
+        # 并发重试失败基金（_fetch_fund_estimate 有多层降级）；串行重试在接口限频时会
+        # 卡在"获取当日涨跌 100%"很久不动，并发化大幅缩短重试耗时，心跳每5只更新一次
         from fund_utils import _fetch_fund_estimate
         _retry_max_dur = get_config("recommend", "td_retry_timeout", default=120)
         _retry_start = time.time()
-        for _i, _code in enumerate(_failed_codes):
-            if time.time() - _retry_start > _retry_max_dur:
-                log.warning("刷新涨跌重试阶段超时(%ds)，跳过剩余 %d 只", _retry_max_dur, len(_failed_codes) - _i)
-                break
-            _td = _fetch_fund_estimate(_code)
-            if _td and _td[1] is not None:
-                result[_code] = (round(_td[1], 2), _td[2])
-                replaced_gz += 1
-            _done2 = replaced_gz + (len(_failed_codes) - (_i + 1))
-            if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
-                update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
-                                 overall_pct=(int(_done2 / _total_gz * 100) if pct_base is None else pct_base),
-                                 phase="刷新涨跌",
-                                 detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
-                                 elapsed=round(time.time() - _start_gz, 1))
+        _retry_total = len(_failed_codes)
+        _retried = 0
+
+        def _retry_one(_c: str) -> tuple[str, float | None, str]:
+            try:
+                _td = _fetch_fund_estimate(_c)
+                if _td and _td[1] is not None:
+                    return (_c, round(_td[1], 2), _td[2])
+            except Exception:
+                pass
+            return (_c, None, "")
+
+        _re = ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=30))
+        try:
+            _rfuts = {_re.submit(_retry_one, _c): _c for _c in _failed_codes}
+            for _rf in as_completed(_rfuts):
+                if time.time() - _retry_start > _retry_max_dur:
+                    log.warning("刷新涨跌重试阶段超时(%ds)，跳过剩余 %d 只", _retry_max_dur, _retry_total - _retried)
+                    break
+                _rc, _rv, _rsrc = _rf.result()
+                _retried += 1
+                if _rv is not None:
+                    result[_rc] = (_rv, _rsrc)
+                    replaced_gz += 1
+                _done2 = replaced_gz + (_retry_total - _retried)
+                if _retried % 5 == 0 or _retried == _retry_total:
+                    update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
+                                     overall_pct=(int(_done2 / _total_gz * 100) if pct_base is None else pct_base),
+                                     phase="刷新涨跌",
+                                     detail=f"重试失败基金 {_retried}/{_retry_total}",
+                                     elapsed=round(time.time() - _start_gz, 1))
+        finally:
+            _re.shutdown(wait=False)
 
     # 收盘后尝试用实际净值替换估算值
     if is_after_market and result:
@@ -1054,6 +1073,10 @@ def main() -> None:
                              detail=f"批量预取 {total} 只当日涨跌", elapsed=_elapsed())
             _td_prefetch = _batch_fetch_estimates([c["code"] for c in candidates], pct_base=15)
             print(f"   ✅ 预取完成: {len(_td_prefetch)} 只 ({time.time()-_t4:.1f}s)", flush=True)
+            # 预取刚结束立即更新心跳，避免"获取当日涨跌 100%"后长时间无反馈的假卡顿
+            update_heartbeat("fund_recommend", progress=0, total=total,
+                             overall_pct=15, phase="评分",
+                             detail=f"开始评分 {total} 只", elapsed=_elapsed())
         except Exception as _pf_exc:
             print(f"   ⚠️ 预取失败(评分兜底重试): {_pf_exc}", flush=True)
 
