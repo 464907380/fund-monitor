@@ -1274,48 +1274,6 @@ def main() -> None:
                          overall_pct=3, phase="初筛",
                          detail=f"初筛通过 {candidates_count} 只", elapsed=_elapsed())
 
-        # ── 限购检查 ──
-        limit_before = candidates_count
-        if _SKIP_LIMITED and candidates:
-            _t3 = time.time()
-            print(f"\n🔒 阶段3/5: 限购检查 ({limit_before} 只)...")
-            update_heartbeat("fund_recommend", progress=0, total=limit_before,
-                             overall_pct=3, phase="限购",
-                             detail=f"检查 {limit_before} 只限购", elapsed=_elapsed())
-            from fund_watch import _parse_purchase_limit
-            limit_checked: list[dict] = []
-
-            def _check_limit(c: dict) -> dict | None:
-                try:
-                    amount = _parse_purchase_limit(c["code"])
-                    # 网络失败/超时返回 None → 视为无限购，保留该基金（避免网络问题误杀）
-                    if amount is None:
-                        return c
-                    if amount <= 2:
-                        return None
-                    c["_limit_amount"] = amount
-                    return c
-                except Exception:
-                    # 检查异常 → 保留基金，避免误杀
-                    log.warning("限购检查异常(保留): %s", c["code"])
-                    return c
-
-            with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_limit_check", default=50)) as _le:
-                _lfuts = {_le.submit(_check_limit, c): c for c in candidates}
-                for _j, _lf in enumerate(as_completed(_lfuts), 1):
-                    _r = _lf.result()
-                    if _r:
-                        limit_checked.append(_r)
-                    if _j % 50 == 0 or _j == limit_before:
-                        opct = 3 + _j / limit_before * 12
-                        update_heartbeat("fund_recommend", progress=_j, total=limit_before,
-                                         overall_pct=opct, phase="限购",
-                                         detail=f"限购检查 {_j}/{limit_before}",
-                                         elapsed=_elapsed())
-
-            candidates = limit_checked
-            print(f"   ✅ 限购筛掉 {limit_before - len(candidates)} 只, 剩余 {len(candidates)} 只 ({time.time()-_t3:.1f}s)")
-
         # ── 并行评分 ──
         scored: list[dict] = []
         total = len(candidates)
@@ -1386,6 +1344,47 @@ def main() -> None:
                          elapsed=_elapsed())
         print(f"\n💾 阶段5/5: 排序保存...")
         scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+        # 评分后限购检查：只检查排名靠前的候选（TOP 缓冲），避免对初筛后的
+        # 全部候选逐只拉详情页（勾选筛限购时从几千只 → 几百只，大幅提速）。
+        # 实测限购筛除率很低，TOP 候选基本都能入选；磁盘缓存 24h 复用二次更快。
+        if _SKIP_LIMITED and scored:
+            _t3 = time.time()
+            from fund_watch import _parse_purchase_limit
+            _limit_pool_size = max(SHOW_TOP * 10, 300)  # TOP 缓冲：展示数的 10 倍，至少 300
+            _limit_dropped = 0
+
+            def _check_limit_top(c: dict) -> dict:
+                """检查单只限购：≤2万 → 移除；无限购/异常 → 保留"""
+                try:
+                    amount = _parse_purchase_limit(c["code"])
+                    c["_limit_amount"] = amount
+                    # 明确限购≤2万才筛掉；None(网络失败/无限购) 与异常都保留，避免误杀
+                    if amount is not None and amount <= 2:
+                        return None
+                except Exception:
+                    log.warning("限购检查异常(保留): %s", c.get("code"))
+                return c
+
+            # 并发检查 TOP 缓冲（网络 IO 密集），串行 300 只会很慢
+            _top_pool = scored[:_limit_pool_size]
+            with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_limit_check", default=50)) as _le:
+                _lfuts = {_le.submit(_check_limit_top, _c): _c for _c in _top_pool}
+                _kept: list[dict] = []
+                for _j, _lf in enumerate(as_completed(_lfuts), 1):
+                    _r = _lf.result()
+                    if _r:
+                        _kept.append(_r)
+                    else:
+                        _limit_dropped += 1
+                    if _j % 100 == 0 or _j == len(_top_pool):
+                        update_heartbeat("fund_recommend", progress=_j, total=len(_top_pool),
+                                         overall_pct=97, phase="限购",
+                                         detail=f"限购检查 TOP {_j}/{len(_top_pool)}",
+                                         elapsed=_elapsed())
+            # 保留的 TOP 不限购候选 + 排名靠后未检查的候选（不影响展示，但保留完整结果）
+            scored = _kept + scored[_limit_pool_size:]
+            _t3b = time.time()
+            print(f"   ✅ 限购检查 TOP {len(_top_pool)} 只: 筛掉 {_limit_dropped} 只, 保留 {len(_kept)} 只 ({_t3b-_t3:.1f}s)")
         # 先补充自选基金再保存，确保最终数量与评分阶段一致
         _supplement_self_selected(scored)
         _final_count = len(scored)
@@ -1421,7 +1420,8 @@ def main() -> None:
         print(f"⏱ 总耗时: {_elapsed()}s")
         print(f"   ├─ 排行拉取: {_t2-_t1:.1f}s")
         if _SKIP_LIMITED:
-            print(f"   ├─ 限购检查: {_t4-_t3:.1f}s (如有此阶段)")
+            # 限购检查在评分后对 TOP 缓冲执行，_t3b 为其结束时间
+            print(f"   ├─ 限购检查(评分后TOP): {_t3b-_t3:.1f}s")
         print(f"   ├─ 评分阶段: {_t5-_t4:.1f}s")
         print(f"   └─ 保存结果: {time.time()-_t5:.1f}s")
         # 统计同时写日志（server 启动时 stdout 被丢弃，日志确保耗时可回溯）
