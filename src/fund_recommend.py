@@ -540,6 +540,54 @@ def _config_hash() -> str:
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
 
+def _score_hash() -> str:
+    """计算评分配置哈希（仅权重+维度，不含筛选条件）。
+    筛选条件变化不影响评分指标，故 score_hash 相同时可复用已评分结果重新过滤。"""
+    import hashlib
+    from fund_scoring import SCORE_DIMS
+    parts = [_CONFIG_VERSION]
+    for name, fn, weight, desc in SCORE_DIMS:
+        parts.append(f"{name}|{weight}|{desc}")
+    return hashlib.md5("|".join(parts).encode()).hexdigest()
+
+
+def _filter_scored_results(results: list[dict]) -> list[dict]:
+    """用当前筛选条件对已评分结果重新过滤（复用指标，无需重新拉数据/重评）。
+    f5 等字段是带 % 字符串，统一去符号/百分号再比较。"""
+    if not _FILTER_CONDITIONS:
+        return list(results)
+    out: list[dict] = []
+    for r in results:
+        ok = True
+        for cond in _FILTER_CONDITIONS:
+            field = cond.get("field", "")
+            op = cond.get("op", "gte")
+            val = cond.get("value")
+            if val is None or field not in _RANK_FIELD_MAP:
+                continue
+            raw = r.get(field)
+            if raw is None:
+                ok = False
+                break
+            try:
+                num = float(str(raw).replace("%", "").replace("+", ""))
+            except (ValueError, TypeError):
+                ok = False
+                break
+            if op == "gte" and not (num >= val):
+                ok = False
+                break
+            elif op == "lte" and not (num <= val):
+                ok = False
+                break
+            elif op == "eq" and not (abs(num - val) < 0.01):
+                ok = False
+                break
+        if ok:
+            out.append(r)
+    return out
+
+
 def _save_result(results: list[dict]) -> bool:
     """保存评分结果到文件"""
     if not results:
@@ -557,6 +605,7 @@ def _save_result(results: list[dict]) -> bool:
             "date": datetime.date.today().isoformat(),
             "config_hash": _config_hash(),
             "filter_hash": _filter_hash(),
+            "score_hash": _score_hash(),
             "results": results,
             "timeout_count": _timeout_count,
         }
@@ -917,8 +966,13 @@ def main() -> None:
                         print(f"✅ 筛选条件未变化 ({_elapsed()}s)")
                         print(f"   使用缓存结果（仅更新涨跌）")
                         cache_mode = "full"
+                    elif old.get("score_hash") == _score_hash():
+                        # 仅筛选条件变化、评分配置(权重/维度)未变 → 复用已评分结果重新过滤
+                        print(f"🔄 筛选条件已变化，评分配置未变 ({_elapsed()}s)")
+                        print(f"   复用已评分结果重新过滤，仅补充新增候选")
+                        cache_mode = "refilter"
                     else:
-                        print(f"🔄 筛选条件已变化 ({_elapsed()}s)")
+                        print(f"🔄 筛选条件与评分配置均已变化 ({_elapsed()}s)")
                         print(f"   全量重新拉取排行和评分")
                 else:
                     print(f"📅 缓存日期 ({saved_date}) ≠ 今天 ({datetime.date.today()})")
@@ -930,6 +984,55 @@ def main() -> None:
             cached_results = old["results"]
             total_candidates = len(cached_results)
             print(f"   候选基金: {total_candidates} 只")
+
+            if cache_mode == "refilter":
+                # 筛选条件变了但评分配置(权重/维度)没变 → 复用已评分结果重新过滤，只补充新增候选
+                print(f"\n🔄 重筛模式: 复用 {total_candidates} 只已评分基金...")
+                update_heartbeat("fund_recommend", progress=0, total=1, overall_pct=5,
+                                 phase="重新筛选", detail=f"过滤 {total_candidates} 只已评分基金", elapsed=_elapsed())
+                _base = _filter_scored_results(cached_results)
+                _base_set = {r["code"] for r in _base}
+                print(f"   ✅ 旧结果按新条件过滤: {len(_base)} 只 ({_elapsed()}s)")
+                # 从排行 API 初筛当前条件全部候选，找出需新增评分的
+                _t2 = time.time()
+                _rows = _fetch_rank_list(_TOP)
+                _cands = _filter_candidates(_rows)
+                print(f"   ✅ 排行初筛: {len(_cands)} 只 ({time.time()-_t2:.1f}s)")
+                _new_cands = [c for c in _cands if c["code"] not in _base_set]
+                print(f"   ➕ 新增需评分: {len(_new_cands)} 只 (复用已评分 {len(_base)} 只)")
+                _scored_new: list[dict] = []
+                if _new_cands:
+                    _t3 = time.time()
+                    update_heartbeat("fund_recommend", progress=0, total=len(_new_cands), overall_pct=30,
+                                     phase="评分", detail=f"评分新增 {len(_new_cands)} 只", elapsed=_elapsed())
+                    _td_prefetch = _batch_fetch_estimates([c["code"] for c in _new_cands], pct_base=30)
+                    with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as _ex:
+                        _futs = {_ex.submit(_score_one, c["code"], c["name"], c.get("_limit_amount"), _td_prefetch): c for c in _new_cands}
+                        for _i, _f in enumerate(as_completed(_futs), 1):
+                            _rr = _f.result()
+                            if _rr:
+                                _scored_new.append(_rr)
+                            if _i % 20 == 0 or _i == len(_new_cands):
+                                _pp = int(_i / len(_new_cands) * 100)
+                                update_heartbeat("fund_recommend", progress=_i, total=len(_new_cands),
+                                                 overall_pct=30 + int(_pp * 0.6), phase="评分",
+                                                 detail=f"评分新增 {_i}/{len(_new_cands)} ({_pp}%)", elapsed=_elapsed())
+                    print(f"   ✅ 新增评分完成: {len(_scored_new)} 只 ({time.time()-_t3:.1f}s)")
+                _combined = _base + _scored_new
+                _combined.sort(key=lambda x: x.get("score", 0), reverse=True)
+                update_heartbeat("fund_recommend", progress=0, total=1, overall_pct=95,
+                                 phase="保存", detail=f"合并保存 {len(_combined)} 只", elapsed=_elapsed())
+                _supplement_self_selected(_combined)
+                _final_c = len(_combined)
+                _save_result(_combined)
+                update_heartbeat("fund_recommend", progress=_final_c, total=_final_c, overall_pct=100,
+                                 phase="完成", detail="推荐完成", elapsed=_elapsed())
+                print(f"\n🏆 基金推荐 TOP {SHOW_TOP}")
+                print("=" * 50)
+                _print_results(_combined)
+                print(f"\n📊 统计: 复用已评分 {len(_base)}只 + 新增 {len(_scored_new)}只 → {_final_c}只")
+                print(f"⏱ 总耗时: {_elapsed()}s (重筛模式)")
+                return
 
             if cache_mode == "full":
                 if _HAS_TD:
