@@ -425,8 +425,44 @@ def _parse_rank_response(data: str) -> list[list[str]] | None:
         return None
 
 
+# ── 排行当日缓存（盘中净值不变，同一天多次运行复用；跨日自动失效）──
+_RANK_CACHE_PATH = os.path.join(_RECOMMEND_DIR, "data", "fund_rank_cache.json")
+_RANK_CACHE_MEM: dict | None = None
+
+
+def _load_rank_cache() -> dict | None:
+    global _RANK_CACHE_MEM
+    try:
+        if os.path.exists(_RANK_CACHE_PATH):
+            with open(_RANK_CACHE_PATH, encoding="utf-8") as f:
+                _RANK_CACHE_MEM = json.load(f)
+            if _RANK_CACHE_MEM.get("date") == datetime.date.today().isoformat():
+                return _RANK_CACHE_MEM
+    except Exception:
+        pass
+    return None
+
+
+def _save_rank_cache(pn: int, rows: list) -> None:
+    global _RANK_CACHE_MEM
+    try:
+        _RANK_CACHE_MEM = {"date": datetime.date.today().isoformat(), "pn": pn,
+                           "sort": _RANK_SORT, "rows": rows}
+        _tmp = _RANK_CACHE_PATH + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(_RANK_CACHE_MEM, f, ensure_ascii=False)
+        os.replace(_tmp, _RANK_CACHE_PATH)
+    except Exception:
+        pass
+
+
 def _fetch_rank_list(pn: int) -> list[list[str]]:
-    """从天天基金排行 API 获取全市场基金排行（并发多URL，走缓存）"""
+    """从天天基金排行 API 获取全市场基金排行（并发多URL + 当日磁盘缓存）"""
+    # 当日排行缓存：盘中净值不变，同一天多次运行(全量/重筛/刷新)复用，跨日自动失效
+    _c = _load_rank_cache()
+    if _c and _c.get("pn") == pn and _c.get("sort") == _RANK_SORT:
+        print(f"   💾 排行当日缓存命中: {len(_c['rows'])} 只")
+        return _c["rows"]
     # 根据排序方式决定日期范围
     sort_days = {"1n": 365, "6n": 180, "3y": 90, "1y": 30, "2n": 730, "3n": 1095}
     if _RANK_SORT == "zn":
@@ -459,11 +495,13 @@ def _fetch_rank_list(pn: int) -> list[list[str]]:
         for f in as_completed(futs):
             rows = f.result()
             if rows:
+                _save_rank_cache(pn, rows)
                 return rows
 
     for url in urls[2:]:
         rows = _try_one(url)
         if rows:
+            _save_rank_cache(pn, rows)
             return rows
     return []
 
@@ -962,11 +1000,18 @@ def main() -> None:
                 print(f"   缓存 config_hash={str(old.get('config_hash',''))[:12]}..  filter_hash={str(old.get('filter_hash',''))[:12]}..")
 
                 if saved_date == datetime.date.today().isoformat():
-                    if old.get("filter_hash") == cur_filter_hash:
-                        print(f"✅ 筛选条件未变化 ({_elapsed()}s)")
+                    _sc_same = old.get("score_hash") == _score_hash()
+                    _fl_same = old.get("filter_hash") == cur_filter_hash
+                    if _fl_same and _sc_same:
+                        print(f"✅ 筛选与评分配置均未变化 ({_elapsed()}s)")
                         print(f"   使用缓存结果（仅更新涨跌）")
                         cache_mode = "full"
-                    elif old.get("score_hash") == _score_hash():
+                    elif _fl_same:
+                        # 仅权重/维度变化 → 复用结果数据重新评分（无需重新拉净值/重筛）
+                        print(f"🔄 评分配置已变化，筛选条件未变 ({_elapsed()}s)")
+                        print(f"   复用 {n_cached} 只已评分数据重新评分")
+                        cache_mode = "rescore"
+                    elif _sc_same:
                         # 仅筛选条件变化、评分配置(权重/维度)未变 → 复用已评分结果重新过滤
                         print(f"🔄 筛选条件已变化，评分配置未变 ({_elapsed()}s)")
                         print(f"   复用已评分结果重新过滤，仅补充新增候选")
@@ -984,6 +1029,12 @@ def main() -> None:
             cached_results = old["results"]
             total_candidates = len(cached_results)
             print(f"   候选基金: {total_candidates} 只")
+
+            if cache_mode == "rescore":
+                # 仅权重/维度变化 → 复用结果数据按新权重重新评分（不重新拉净值/重筛）
+                _re_score_and_refresh(cached_results, total_candidates)
+                print(f"\n⏱ 总耗时: {_elapsed()}s (重评模式)")
+                return
 
             if cache_mode == "refilter":
                 # 筛选条件变了但评分配置(权重/维度)没变 → 复用已评分结果重新过滤，只补充新增候选
