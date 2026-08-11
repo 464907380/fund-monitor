@@ -669,7 +669,15 @@ def get_scoring_data(code: str) -> dict:
     except Exception:
         pass
     if full_nav is None:
-        full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages)
+        # 优先 pingzhongdata（1次请求拉全量，比 LSJZ 38页快~1.5倍且数据全），截断到800条控制计算量；失败回退 LSJZ 分页
+        try:
+            _pz = _parse_full_nav(fetch(api_url("fund_pingzhongdata", code=code)))
+            if _pz:
+                full_nav = _pz[-800:]
+        except Exception:
+            pass
+        if full_nav is None:
+            full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages)
     if full_nav:
         d["full_nav"] = full_nav
         d["nav"] = full_nav  # 完整净值数据
