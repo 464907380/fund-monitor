@@ -89,10 +89,12 @@ def _estimate_td_from_holdings(code: str) -> float | None:
     return None
 
 
-def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
+def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dict[str, tuple[float, str]]:
     """批量获取基金当日涨跌幅，返回 {code: (涨跌幅%, 来源), ...}
-    
+
     来源: lsjz=今日实际净值, holdings=持仓估算, fallback=降级
+    pct_base: 非 None 时整体进度固定在该百分比（全量评分预取阶段用，避免进度条
+    从 100 掉回评分阶段的低值）；None 时按 0-100 正常推进（缓存刷新涨跌用）。
     """
     result: dict[str, tuple[float, str]] = {}
     if not codes:
@@ -180,6 +182,9 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
         try:
             from fund_watch import _parse_holdings, _fetch_stock_quotes_batch
             _all_sina: list[str] = []
+            _total_h = len(codes)
+            _done_h = 0
+            _last_hb_h = -1
             with ThreadPoolExecutor(max_workers=30) as _pe:
                 _hfs = {_pe.submit(_parse_holdings, _c): _c for _c in codes}
                 for _hf in as_completed(_hfs):
@@ -190,7 +195,21 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
                     for _hh in _hhs:
                         if _hh.get("c"):
                             _all_sina.append(("sh" if _hh.get("m") == "sh" else "sz") + _hh["c"])
+                    _done_h += 1
+                    _pct_h = int(_done_h / _total_h * 100) if _total_h else 0
+                    if (_pct_h != _last_hb_h and _done_h % 50 == 0) or _done_h == _total_h:
+                        _last_hb_h = _pct_h
+                        update_heartbeat("fund_recommend", progress=_done_h, total=_total_h,
+                                         overall_pct=(pct_base if pct_base is not None else 15),
+                                         phase="预取持仓",
+                                         detail=f"预取持仓 {_done_h}/{_total_h} ({_pct_h}%)",
+                                         elapsed=round(time.time() - _start_gz, 1))
             if _all_sina:
+                update_heartbeat("fund_recommend", progress=0, total=0,
+                                 overall_pct=(pct_base if pct_base is not None else 15),
+                                 phase="预取行情",
+                                 detail=f"合并拉取 {len(_all_sina)} 只重仓股行情",
+                                 elapsed=round(time.time() - _start_gz, 1))
                 _fetch_stock_quotes_batch(_all_sina)
         except Exception:
             pass
@@ -208,7 +227,8 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
             if (_pct != _last_hb_pct and _done % 20 == 0) or _done == _total_gz:
                 _last_hb_pct = _pct
                 update_heartbeat("fund_recommend", progress=_done, total=_total_gz,
-                                 overall_pct=_pct, phase="刷新涨跌",
+                                 overall_pct=(_pct if pct_base is None else pct_base),
+                                 phase="刷新涨跌",
                                  detail=f"获取当日涨跌 {_done}/{_total_gz} ({_pct}%)",
                                  elapsed=round(time.time() - _start_gz, 1))
     if _failed_codes:
@@ -227,7 +247,8 @@ def _batch_fetch_estimates(codes: list[str]) -> dict[str, tuple[float, str]]:
             _done2 = replaced_gz + (len(_failed_codes) - (_i + 1))
             if (_i + 1) % 10 == 0 or _i + 1 == len(_failed_codes):
                 update_heartbeat("fund_recommend", progress=_done2, total=_total_gz,
-                                 overall_pct=int(_done2 / _total_gz * 100), phase="刷新涨跌",
+                                 overall_pct=(int(_done2 / _total_gz * 100) if pct_base is None else pct_base),
+                                 phase="刷新涨跌",
                                  detail=f"重试 {_i+1}/{len(_failed_codes)} 失败基金",
                                  elapsed=round(time.time() - _start_gz, 1))
 
@@ -1031,7 +1052,7 @@ def main() -> None:
             update_heartbeat("fund_recommend", progress=0, total=total,
                              overall_pct=15, phase="评分",
                              detail=f"批量预取 {total} 只当日涨跌", elapsed=_elapsed())
-            _td_prefetch = _batch_fetch_estimates([c["code"] for c in candidates])
+            _td_prefetch = _batch_fetch_estimates([c["code"] for c in candidates], pct_base=15)
             print(f"   ✅ 预取完成: {len(_td_prefetch)} 只 ({time.time()-_t4:.1f}s)", flush=True)
         except Exception as _pf_exc:
             print(f"   ⚠️ 预取失败(评分兜底重试): {_pf_exc}", flush=True)
