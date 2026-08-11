@@ -141,8 +141,10 @@ def _set_fund_trend_navs(code: str, navs: list) -> None:
 _handlers: list[logging.Handler] = [logging.StreamHandler()]
 _log_name = "fund_watch.log"
 
+
 def setup_log(name: str) -> None:
-    """设置日志文件名，不同进程用不同文件名避免冲突"""
+    """设置日志文件名，不同进程用不同文件名避免冲突。
+    格式带 模块/函数/行号，方便快速定位日志来源。"""
     global _log_name, _handlers
     _log_name = name
     _handlers = [logging.StreamHandler()]
@@ -155,7 +157,7 @@ def setup_log(name: str) -> None:
         pass
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
+        format="%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d | %(message)s",
         handlers=_handlers,
         force=True,
     )
@@ -169,7 +171,7 @@ except OSError:
     pass  # 日志目录不可写时只用控制台输出
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d | %(message)s",
     handlers=_handlers,
 )
 log = logging.getLogger(__name__)

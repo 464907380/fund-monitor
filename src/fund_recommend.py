@@ -1312,12 +1312,17 @@ def main() -> None:
             print(f"   ├─ 限购检查: {_t4-_t3:.1f}s (如有此阶段)")
         print(f"   ├─ 评分阶段: {_t5-_t4:.1f}s")
         print(f"   └─ 保存结果: {time.time()-_t5:.1f}s")
+        # 统计同时写日志（server 启动时 stdout 被丢弃，日志确保耗时可回溯）
+        log.info("推荐完成: 排行%d→初筛%d→评分%d→展示%d, 总耗时%.1fs (排行%.1fs/评分%.1fs/保存%.1fs)",
+                 _TOP, len(candidates), len(scored), SHOW_TOP, _elapsed(),
+                 _t2 - _t1, _t5 - _t4, time.time() - _t5)
     except Exception as _main_exc:
         _has_error = True
         import traceback
         _tb = traceback.format_exc()
         print(f"\n❌ 推荐过程异常: {_main_exc}", file=sys.stderr)
         print(_tb, file=sys.stderr)
+        log.error("推荐过程异常", exc_info=True)
         update_heartbeat("fund_recommend", progress=0, total=0, overall_pct=100,
                          phase="失败", detail=str(_main_exc)[:200], error=str(_main_exc)[:200])
         raise

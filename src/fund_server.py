@@ -14,11 +14,14 @@ import datetime
 import urllib.parse
 import concurrent.futures
 import urllib.request
+import logging
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, heartbeat_age, HISTORY_DIR, setup_log, _get_fund_name, _get_fund_trend_navs, _set_fund_trend_navs
 from config import CFG, api_url, get_timeout, get_config
+
+log = logging.getLogger("fund_server")
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -174,13 +177,13 @@ def _spawn_recommend() -> bool:
     with _proc_lock:
         _cur = _recommend_state.get("proc")
         if _cur and _cur.poll() is None:
-            print("[recommend] 已有推荐进程运行中，跳过本次启动", flush=True)
+            log.info("推荐进程已在运行，跳过本次启动")
             return False
     # 跨 server 重启的孤儿进程检测：心跳存在、新鲜(<10分钟)且未完成 → 说明有
     # 其它 server 启动的推荐仍在跑，拒绝启动避免并发写结果文件/心跳
     _hb = read_heartbeat("fund_recommend")
     if _hb and _hb.get("phase") not in ("完成", "失败") and heartbeat_age("fund_recommend") < 600:
-        print("[recommend] 检测到其它推荐进程仍在运行，跳过本次启动", flush=True)
+        log.info("检测到其它推荐进程仍在运行，跳过本次启动")
         return False
     _err_f = None
     try:
@@ -212,7 +215,7 @@ def _spawn_recommend() -> bool:
                 _err_msg = f"推荐进程异常退出(code={p.returncode})，请查看 recommend.log"
                 write_heartbeat("fund_recommend", progress=0, total=0, overall_pct=100,
                                 phase="失败", detail=_err_msg, error=_err_msg)
-                print(f"[recommend] {_err_msg}", flush=True)
+                log.error("推荐进程异常退出: %s", _err_msg)
                 # 保留 30 秒再清除，给前端时间读取
                 threading.Timer(30, clear_heartbeat, ["fund_recommend"]).start()
             else:
@@ -225,7 +228,7 @@ def _spawn_recommend() -> bool:
         threading.Thread(target=_wait_and_cleanup, daemon=True).start()
         return True
     except Exception as e:
-        print(f"[ERROR] 推荐启动异常: {e}", flush=True)
+        log.error("推荐启动异常", exc_info=True)
         clear_heartbeat("fund_recommend")
         if _err_f is not None:
             _err_f.close()
@@ -545,9 +548,9 @@ def _recalc_cached_scores() -> None:
         with open(tmp, "w", encoding="utf-8") as _f:
             json.dump(data, _f, indent=2, ensure_ascii=False)
         os.replace(tmp, rec_path)
-        print(f"[recalc] 已用新权重重新评分 {len(results)} 只基金", flush=True)
+        log.info("已用新权重重新评分 %d 只基金", len(results))
     except Exception as e:
-        print(f"[recalc] 重新评分失败: {e}", flush=True)
+        log.error("重新评分失败", exc_info=True)
 
 
 # ── 维度窗口指标后台补算（改窗口保存后，只补受影响维度的新窗口值，无需重跑推荐）──
@@ -578,7 +581,7 @@ def _backfill_window_metrics() -> None:
             return
         write_heartbeat("fund-backfill", total=len(missing), progress=0,
                         phase="补算窗口", detail=f"补齐 {len(missing)} 只基金多窗口指标")
-        print(f"[backfill] 补齐 {len(missing)} 只基金: {sorted(need_keys)}", flush=True)
+        log.info("补齐 %d 只基金: %s", len(missing), sorted(need_keys))
         from fund_utils import _load_fund_trend_cache
         from fund_metrics import _calc_nav_metrics
         trend_cache = _load_fund_trend_cache()
@@ -630,9 +633,9 @@ def _backfill_window_metrics() -> None:
         _fund_table_cache = None
         _recommend_table_cache["data"] = None
         clear_heartbeat("fund-backfill")
-        print(f"[backfill] 完成: {done} 只基金多窗口指标已补齐", flush=True)
+        log.info("多窗口指标已补齐 %d 只基金", done)
     except Exception as e:
-        print(f"[backfill] 失败: {e}", flush=True)
+        log.error("多窗口指标回填失败", exc_info=True)
         clear_heartbeat("fund-backfill")
     finally:
         _BACKFILL_LOCK.release()
@@ -644,11 +647,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
     _quiet_paths = {"/api/heartbeat", "/api/tasks", "/api/fund-table", "/api/recommend-table", "/api/est-error"}
 
     def log_request(self, code: int | str = ..., size: int | str = ...) -> None:
-        # 去掉查询参数再匹配静默路径
+        """访问日志：只记录慢请求（>1s）或异常状态码（非200），避免高频轮询刷屏。
+        静默路径（heartbeat 等高频轮询）同样记录慢/错误——慢请求正是排查重点。"""
         _p = self.path.split("?")[0] if hasattr(self, "path") else ""
+        _dur = getattr(self, "_req_start", None)
+        _dur_s = (time.time() - _dur) if _dur else 0.0
+        _code = int(code) if code not in (..., None) else 200
+        _slow = _dur_s > 1.0
+        _err = _code >= 400
         if _p in self._quiet_paths:
+            # 静默路径：只记录错误或慢请求（heartbeat 等通常 <1s 不会刷屏）
+            if _slow:
+                log.info("HTTP 慢请求 %s %s -> %d (%.2fs)", self.command, _p, _code, _dur_s)
+            elif _err:
+                log.warning("HTTP %s %s -> %d (%.2fs)", self.command, _p, _code, _dur_s)
             return
-        super().log_request(code, size)
+        if _slow or _err:
+            log.info("HTTP %s %s -> %d (%.2fs)", self.command, _p, _code, _dur_s)
 
     def _send(self, status: int, headers: dict, body: bytes):
         self.send_response(status)
@@ -666,6 +681,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        self._req_start = time.time()
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
 
@@ -834,7 +850,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     })
                 self._send(*_json_response({"ok": True, "trends": result}))
             except Exception as e:
-                print(f"[ERROR] /api/market-trends: {e}", flush=True)
+                log.error("/api/market-trends 异常", exc_info=True)
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
@@ -866,7 +882,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     result.append({"name": name, "symbol": sym, "klines": klines})
                 self._send(*_json_response({"ok": True, "klines": result}))
             except Exception as e:
-                print(f"[ERROR] /api/market-kline: {e}", flush=True)
+                log.error("/api/market-kline 异常", exc_info=True)
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
@@ -1878,7 +1894,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # 超时后取消剩余任务
                         for _f in fut_map:
                             _f.cancel()
-                        print(f"[fund-table] 超时: {_fund_td_done}/{len(_fund_list_for_progress)} 只完成", flush=True)
+                        log.warning("fund-table 超时: %d/%d 只完成", _fund_td_done, len(_fund_list_for_progress))
                 clear_heartbeat("fund-td-refresh")
 
                 # 按 fund_list 原始顺序排序
@@ -1970,6 +1986,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(200, {"Content-Type": ctype}, data)
 
     def do_POST(self):
+        self._req_start = time.time()
         global _fund_table_cache
         length = 0
         try:
@@ -2102,11 +2119,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if _saved:
                         _rec_mtime = os.path.getmtime(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json"))
                         _recommend_table_cache["data"] = {"html": _web_rich_recommend_table(_saved), "mtime": _rec_mtime, "time": time.time()}
-                        print(f"[dims] 推荐表缓存已预热，{len(_saved)} 只", flush=True)
+                        log.info("推荐表缓存已预热 %d 只", len(_saved))
                     else:
                         _recommend_table_cache["data"] = None
                 except Exception as ex:
-                    print(f"[dims] 推荐表缓存预热失败: {ex}", flush=True)
+                    log.warning("推荐表缓存预热失败", exc_info=True)
                     _recommend_table_cache["data"] = None
                 self._send(*_json_response({"ok": True, "message": "权重已保存"}))
             except Exception as e:
@@ -2232,11 +2249,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if _saved:
                         _rec_mtime = os.path.getmtime(os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json"))
                         _recommend_table_cache["data"] = {"html": _web_rich_recommend_table(_saved), "mtime": _rec_mtime, "time": time.time()}
-                        print(f"[dims/calibrate] 推荐表缓存已预热，{len(_saved)} 只", flush=True)
+                        log.info("推荐表缓存已预热(calibrate) %d 只", len(_saved))
                     else:
                         _recommend_table_cache["data"] = None
                 except Exception as ex:
-                    print(f"[dims/calibrate] 推荐表缓存预热失败: {ex}", flush=True)
+                    log.warning("推荐表缓存预热失败(calibrate)", exc_info=True)
                     _recommend_table_cache["data"] = None
                 self._send(*_json_response({"ok": True, "message": "评分曲线已基于百分位自动校准"}))
             except Exception as e:
@@ -2293,7 +2310,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         _recommend_state["proc"] = None
                         clear_heartbeat("fund_recommend")
                         self._send(*_json_response({"ok": True, "message": "推荐任务已取消"}))
-                        print("[recommend] 用户取消推荐任务", flush=True)
+                        log.info("用户取消推荐任务")
                     else:
                         self._send(*_json_response({"ok": False, "error": "当前没有正在运行的推荐任务"}, 404))
             except Exception as e:
@@ -2308,7 +2325,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # 用心跳文件 mtime 判断，而不是 progress==total（初筛/排行阶段 progress 本来就等于 total，会误判误杀）
                         _hb_age = heartbeat_age("fund_recommend")
                         if _hb_age > 600:
-                            print(f"[recommend] 心跳 {_hb_age:.0f}s 未更新，判定进程挂死(PID={_recommend_state['proc'].pid})，强制清理", flush=True)
+                            log.warning("推荐心跳 %.0fs 未更新，判定进程挂死(PID=%s)，强制清理", _hb_age, _recommend_state['proc'].pid)
                             try: _recommend_state["proc"].kill()
                             except Exception: pass
                             _recommend_state["proc"] = None
@@ -2327,7 +2344,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 else:
                     self._send(*_json_response({"ok": False, "error": "推荐任务启动失败"}, 500))
             except Exception as e:
-                print(f"[ERROR] /api/recommend 异常: {e}", flush=True)
+                log.error("/api/recommend 异常", exc_info=True)
                 import traceback; traceback.print_exc()
                 clear_heartbeat("fund_recommend")
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
@@ -2857,10 +2874,12 @@ def main():
     server = http.server.ThreadingHTTPServer((host, port), Handler)
     print(f"🌐 基金优选页面：http://{host}:{port}")
     print("   按 Ctrl+C 停止服务")
+    log.info("服务启动: http://%s:%s (PID=%d)", host, port, os.getpid())
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n服务已停止")
+        log.info("服务已停止")
         server.server_close()
 
 
@@ -2885,7 +2904,7 @@ def _check_port_and_kill(host: str, port: int) -> None:
                     _sp.run(["taskkill", "/F", "/PID", _pid], capture_output=True, timeout=10)
                     _killed += 1
         if _killed:
-            print(f"[startup] 端口 {port} 被 {_killed} 个进程占用，已全部清理", flush=True)
+            log.warning("端口 %s 被 %d 个进程占用，已全部清理", port, _killed)
     except Exception:
         pass
 
