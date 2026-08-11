@@ -1048,11 +1048,11 @@ def _supplement_self_selected(base_results: list | None = None, td_map: dict | N
                 print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
             else:
                 print(f"  ⏭️ {_f['code']} {_f.get('name','')[:12]} — 跳过")
-            if _done_supp % 5 == 0 or _done_supp == _total:
-                update_heartbeat("fund_recommend", progress=_done_supp, total=_total,
-                                 overall_pct=max(97, 97 + int(_done_supp / _total * 2)),
-                                 phase="检查自选基金",
-                                 detail=f"补充自选基金 {_done_supp}/{_total}")
+            # 逐只更新心跳：串行每只可能几秒（拉净值），每 1 只反馈更及时，避免"卡住"假象
+            update_heartbeat("fund_recommend", progress=_done_supp, total=_total,
+                             overall_pct=max(97, 97 + int(_done_supp / _total * 2)),
+                             phase="检查自选基金",
+                             detail=f"补充自选基金 {_done_supp}/{_total} {_f['code']} {_f.get('name','')[:10]}")
         if not _extra:
             return
         if base_results is not None:
@@ -1360,9 +1360,14 @@ def main() -> None:
                     _flush_trend_cache()
                 pct = i / total * 100
                 opct = 15 + i / total * 82
+                # 评分心跳：显示进度+当前基金代码/名称+耗时（区分"网络慢"与"卡住"）
+                _cur_code = c["code"]
+                _cur_name = c.get("name", "")
+                _cur_cost = time.time() - _t4
+                _rate = (i / _cur_cost) if _cur_cost > 0 else 0  # 只/秒
                 update_heartbeat("fund_recommend", progress=i, total=total,
                                  overall_pct=opct, phase="评分",
-                                 detail=f"评分 {i}/{total} ({pct:.0f}%) {c['name'][:12]}",
+                                 detail=f"评分 {i}/{total} ({pct:.0f}%) {_cur_code} {_cur_name[:10]} · {_cur_cost:.0f}s/{_rate:.1f}只/秒",
                                  elapsed=_elapsed())
 
         print(f"\n   ✅ 评分完成: {len(scored)}/{total} 只成功 ({time.time()-_t4:.1f}s)")

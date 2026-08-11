@@ -1975,6 +1975,8 @@ async function runRecommendFromFilter() {
             remainText = remainSec < 60 ? '· 约剩 ' + Math.round(remainSec) + ' 秒' : '· 约剩 ' + Math.round(remainSec/60) + ' 分钟';
           }
           var statusParts = [icon, fPhase, displayPct + '%'];
+          // 追加后端 detail（当前评分基金/耗时/速率等细粒度进度）
+          if (recData.detail && recData.detail !== recData.phase) statusParts.push(recData.detail);
           if (remainText) statusParts.push(remainText);
           if (statusEl) statusEl.textContent = statusParts.join(' ');
           if (btn) btn.textContent = '⏳ ' + displayPct + '%';
