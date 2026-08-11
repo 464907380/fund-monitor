@@ -450,41 +450,55 @@ def _cache_evict() -> None:
     log.debug("缓存清理: 过期 %d, 当前 %d 条", len(expired), len(_cache))
 
 
-def _request_with_retry(req: urllib.request.Request, decode: bool = True) -> str | bytes | None:
-    """带指数退避的 HTTP 请求，返回 str（decode=True）或 bytes（decode=False），失败返回 None"""
+def _request_with_retry(req: urllib.request.Request, decode: bool = True,
+                        retry_max: int | None = None,
+                        timeout: float | None = None) -> str | bytes | None:
+    """带指数退避的 HTTP 请求，返回 str（decode=True）或 bytes（decode=False），失败返回 None。
+
+    retry_max/timeout 传 None 时用全局配置；评分等"尽力而为"场景可传 retry_max=1、短 timeout 快速失败。
+    """
     # 限速：同一域名至少间隔 _RATE_LIMIT_DELAY 秒
     _rate_limit_domain(req.full_url)
+    _rmax = _RETRY_MAX if retry_max is None else max(1, int(retry_max))
+    _to = get_timeout("request_with_retry", 15) if timeout is None else timeout
     last_err = None
-    for attempt in range(1, _RETRY_MAX + 1):
+    for attempt in range(1, _rmax + 1):
         try:
             # 用 with 确保 response 被正确关闭，防止连接/句柄泄漏导致进程 OOM 被杀
-            with urllib.request.urlopen(req, timeout=get_timeout("request_with_retry", 15)) as _resp:
+            with urllib.request.urlopen(req, timeout=_to) as _resp:
                 _raw = _resp.read()
             if decode:
                 return _raw.decode("utf-8", errors="ignore")  # type: ignore[no-any-return]
             return _raw  # type: ignore[no-any-return]
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             last_err = e
-            if attempt < _RETRY_MAX:
+            if attempt < _rmax:
                 wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
                 time.sleep(wait)
-    log.warning("请求失败 %s (已重试 %d 次) %s", req.full_url, _RETRY_MAX, last_err)
+    log.warning("请求失败 %s (已重试 %d 次) %s", req.full_url, _rmax, last_err)
     return None
 
 
-def _retry_fetch(url: str, headers: dict | None = None) -> str:
+def _retry_fetch(url: str, headers: dict | None = None,
+                 retry_max: int | None = None,
+                 timeout: float | None = None) -> str:
     """带指数退避的 HTTP GET 请求"""
     _cache_evict()
     req_headers = {"User-Agent": "Mozilla/5.0"}
     if headers:
         req_headers.update(headers)
     req = urllib.request.Request(url, headers=req_headers)
-    result = _request_with_retry(req, decode=True)
+    result = _request_with_retry(req, decode=True, retry_max=retry_max, timeout=timeout)
     return result if isinstance(result, str) else ""
 
 
-def fetch(url: str, headers: dict | None = None) -> str:
-    """带缓存的 HTTP GET，可传自定义 headers"""
+def fetch(url: str, headers: dict | None = None,
+          retry_max: int | None = None,
+          timeout: float | None = None) -> str:
+    """带缓存的 HTTP GET，可传自定义 headers。
+
+    retry_max/timeout 透传给 _retry_fetch；评分上下文可传 retry_max=1、timeout=4 快速失败。
+    """
     with _cache_lock:
         entry = _cache.get(url)
         if entry:
@@ -492,7 +506,7 @@ def fetch(url: str, headers: dict | None = None) -> str:
             if time.time() - ts <= _CACHE_TTL:
                 return data
             del _cache[url]
-    resp = _retry_fetch(url, headers)
+    resp = _retry_fetch(url, headers, retry_max=retry_max, timeout=timeout)
     with _cache_lock:
         _cache[url] = (time.time(), resp)
     return resp
@@ -504,11 +518,13 @@ def clear_cache() -> None:
         _cache.clear()
 
 
-def fetch_bytes(url: str, headers: dict | None = None) -> bytes | None:
+def fetch_bytes(url: str, headers: dict | None = None,
+                retry_max: int | None = None,
+                timeout: float | None = None) -> bytes | None:
     """带指数退避的 HTTP GET，返回原始 bytes（不缓存，供新浪等非标准编码使用）"""
     _cache_evict()
     req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
-    result = _request_with_retry(req, decode=False)
+    result = _request_with_retry(req, decode=False, retry_max=retry_max, timeout=timeout)
     return result if isinstance(result, bytes) else None
 
 

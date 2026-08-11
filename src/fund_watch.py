@@ -503,16 +503,18 @@ def get(code: str) -> dict:
     return d
 
 
-def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
+def _fetch_nav_from_lsjz(code: str, max_pages: int = 38, timeout: float | None = None) -> list[dict] | None:
     """从 LSJZ 历史净值 API 并行获取多页净值数据，兼容旧格式返回。
 
     返回 [{d: YYYY-MM-DD, v: nav_value}, ...] 按日期升序。
     注意: LSJZ API 每页固定返回 20 条（pageSize>20 无效），页数即 max_pages。
+    timeout 传 None 用全局 default 超时；评分回退可传短超时快速失败。
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import urllib.request, re, json as _json
 
     _total_pages = max(1, max_pages)
+    _to = get_timeout("default", 10) if timeout is None else timeout
 
     def _fetch_page(page: int) -> list[dict]:
         url = (f"https://api.fund.eastmoney.com/f10/lsjz"
@@ -521,7 +523,7 @@ def _fetch_nav_from_lsjz(code: str, max_pages: int = 38) -> list[dict] | None:
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://fund.eastmoney.com/",
         })
-        with urllib.request.urlopen(req, timeout=get_timeout("default", 10)) as r:
+        with urllib.request.urlopen(req, timeout=_to) as r:
             text = r.read().decode("utf-8")
         m = re.search(r"j\((.+)\)", text)
         if not m:
@@ -684,8 +686,9 @@ def get_scoring_data(code: str) -> dict:
         pass
     if full_nav is None:
         # 优先 pingzhongdata（1次请求拉全量，比 LSJZ 38页快~1.5倍且数据全），截断到800条控制计算量；失败回退 LSJZ 分页
+        # 评分上下文"尽力而为"：retry_max=1 + 短超时快速失败，避免晚间 pingzhongdata 不稳时每只卡 30s
         try:
-            _pz_raw = fetch(api_url("fund_pingzhongdata", code=code))
+            _pz_raw = fetch(api_url("fund_pingzhongdata", code=code), retry_max=1, timeout=4)
             _pz = _parse_full_nav(_pz_raw)
             if _pz:
                 full_nav = _pz[-800:]
@@ -701,7 +704,7 @@ def get_scoring_data(code: str) -> dict:
         except Exception:
             pass
         if full_nav is None:
-            full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages)
+            full_nav = _fetch_nav_from_lsjz(code, max_pages=max_pages, timeout=4)
     if full_nav:
         d["full_nav"] = full_nav
         d["nav"] = full_nav  # 完整净值数据
