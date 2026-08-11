@@ -580,8 +580,9 @@ def _print_results(results: list[dict]) -> None:
     print("💡 一键加入监控: python fund_recommend.py --add 基金代码")
 
 
-def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict | None:
-    """单只基金评分"""
+def _score_one(code: str, name: str, limit_amount: float | None = None,
+               td_map: dict | None = None) -> dict | None:
+    """单只基金评分（td_map 为批量预取的当日涨跌映射，避免每只独立发多个网络请求）"""
     try:
         from fund_watch import get_scoring_data as _get
         d = _get(code)
@@ -608,13 +609,22 @@ def _score_one(code: str, name: str, limit_amount: float | None = None) -> dict 
             if any(d.get(k) is None or d.get(k) == "" for k in perf_keys):
                 log.debug("跳过 %s(%s): 缺失收益维度", name, code)
                 return None
-        # 获取当日涨跌（供td维度评分）
+        # 获取当日涨跌（供td维度评分）：优先用批量预取值，命中则跳过独立网络请求
         td_src = ""
-        td = _fetch_fund_estimate(code)
+        td = None
+        if td_map:
+            _item = td_map.get(code)
+            if _item and _item[0] is not None:
+                td = round(_item[0], 2)
+                td_src = _item[1]
+        if td is None:
+            _fe = _fetch_fund_estimate(code)
+            if _fe is not None and _fe[1] is not None:
+                td = round(_fe[1], 2)
+                td_src = _fe[2]
         if td is not None:
-            d["td"] = round(td[1], 2)
-            day_str = f"{td[1]:+.2f}%"
-            td_src = td[2]
+            d["td"] = td
+            day_str = f"{td:+.2f}%"
         else:
             # 无实时数据时从净值算最近交易日涨跌
             navs_local = d.get("nav", [])
@@ -1013,8 +1023,21 @@ def main() -> None:
         print(f"\n{'进度':<8} {'代码':<7} {'基金名':<20} {'年化':<8} {'评分':<6} {'耗时':<7}")
         print("-" * 65)
 
+        # 批量预取所有候选当日涨跌（盘中合并持仓行情填缓存；_fetch_one_td 只做 1 次估算，
+        # 避免 _score_one 每只独立发 3 个网络请求导致评分阶段被拖慢）
+        _td_prefetch: dict[str, tuple[float, str]] = {}
+        try:
+            print(f"   ⚡ 批量预取 {total} 只当日涨跌...", flush=True)
+            update_heartbeat("fund_recommend", progress=0, total=total,
+                             overall_pct=15, phase="评分",
+                             detail=f"批量预取 {total} 只当日涨跌", elapsed=_elapsed())
+            _td_prefetch = _batch_fetch_estimates([c["code"] for c in candidates])
+            print(f"   ✅ 预取完成: {len(_td_prefetch)} 只 ({time.time()-_t4:.1f}s)", flush=True)
+        except Exception as _pf_exc:
+            print(f"   ⚠️ 预取失败(评分兜底重试): {_pf_exc}", flush=True)
+
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as executor:
-            futs = {executor.submit(_score_one, c["code"], c["name"], c.get("_limit_amount")): c for c in candidates}
+            futs = {executor.submit(_score_one, c["code"], c["name"], c.get("_limit_amount"), _td_prefetch): c for c in candidates}
             for i, fut in enumerate(as_completed(futs), 1):
                 c = futs[fut]
                 result = fut.result()
