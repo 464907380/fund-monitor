@@ -265,6 +265,32 @@ def _refresh_recommend_days(_saved: list[dict]) -> None:
             list(_ex.map(_refresh_one, _top))
     except Exception:
         pass
+
+
+def _recommend_mode_info() -> dict:
+    """判断本次推荐将运行的模式，返回 {mode, mode_text, est_text} 供前端提示预计时长"""
+    try:
+        from fund_recommend import _filter_hash, _score_hash
+        _rec_file = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
+        if not os.path.exists(_rec_file):
+            return {"mode": "full", "mode_text": "全量分析", "est_text": "预计 5-8 分钟"}
+        with open(_rec_file, encoding="utf-8") as f:
+            _old = json.load(f)
+        _saved_date = _old.get("date")
+        _today = datetime.date.today().isoformat()
+        _fl_same = _old.get("filter_hash") == _filter_hash()
+        _sc_same = _old.get("score_hash") == _score_hash()
+        if _saved_date != _today:
+            return {"mode": "full", "mode_text": "全量分析（跨日净值更新）", "est_text": "预计 5-8 分钟"}
+        if _fl_same and _sc_same:
+            return {"mode": "refresh", "mode_text": "仅更新今日行情", "est_text": "预计 1-2 分钟"}
+        if _fl_same:
+            return {"mode": "rescore", "mode_text": "按新权重重新评分", "est_text": "预计 1-2 分钟"}
+        if _sc_same:
+            return {"mode": "refilter", "mode_text": "仅筛选变化，复用已评分结果", "est_text": "预计 1-3 分钟"}
+        return {"mode": "full", "mode_text": "全量分析", "est_text": "预计 5-8 分钟"}
+    except Exception:
+        return {"mode": "unknown", "mode_text": "运行分析", "est_text": "请稍候"}
 _CONFIG_PATH = os.path.join(_PROJECT_ROOT, "data", "config.json")
 _PORT = get_config("server", "port", default=8080)
 
@@ -2287,7 +2313,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(*_json_response({"ok": False, "error": "推荐任务正在运行中"}))
                     return
                 if _spawn_recommend():
-                    self._send(*_json_response({"ok": True, "message": "推荐任务已启动，约需 16 分钟"}))
+                    _minfo = _recommend_mode_info()
+                    self._send(*_json_response({"ok": True, "message": "推荐任务已启动", **_minfo}))
                 else:
                     self._send(*_json_response({"ok": False, "error": "推荐任务启动失败"}, 500))
             except Exception as e:

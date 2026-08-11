@@ -2524,6 +2524,10 @@ async function runRecommendFromFilter() {
       if (statusEl) statusEl.textContent = '✖ ' + (d.error || '启动失败');
       return;
     }
+    // 显示运行模式与预计时长（产品友好提示）
+    if (d.mode_text) {
+      if (statusEl) statusEl.textContent = '🚀 ' + d.mode_text + (d.est_text ? '，' + d.est_text : '');
+    }
     var startTime = Date.now();
     var MAX_WAIT = 1800000; // 30分钟超时保护
     var poll = setInterval(async function() {
@@ -2556,11 +2560,21 @@ async function runRecommendFromFilter() {
           var phaseIcon = {'获取排行':'📥','初筛':'📊','限购':'🔒','评分':'🧮','保存':'💾','完成':'✅',
                            '刷新涨跌':'📋','更新涨跌':'📋','涨跌':'📋','重新评分':'📋','检查自选基金':'📋'};
           var icon = phaseIcon[recData.phase] || '⏳';
-          var statusParts = [icon];
-          if (recData.phase) statusParts.push(recData.phase);
-          if (recData.detail) statusParts.push(recData.detail);
-          if (recData.elapsed != null) statusParts.push(Math.round(recData.elapsed) + 's');
-          if (statusEl) statusEl.textContent = statusParts.join(' | ');
+          // 友好阶段文案
+          var friendlyPhase = {'获取排行':'获取市场数据','初筛':'初步筛选','限购':'检查限购','评分':'分析基金',
+                               '保存':'保存结果','刷新涨跌':'更新今日行情','更新涨跌':'更新今日行情',
+                               '涨跌':'更新行情','重新评分':'重新评分','检查自选基金':'补充自选基金',
+                               '重新筛选':'重新筛选','预取持仓':'准备数据','预取行情':'拉取行情'};
+          var fPhase = friendlyPhase[recData.phase] || recData.phase;
+          // 剩余时间估算（按进度线性外推）
+          var remainText = '';
+          if (recData.overall_pct != null && recData.overall_pct > 1 && recData.overall_pct < 100 && recData.elapsed != null) {
+            var remainSec = recData.elapsed / recData.overall_pct * (100 - recData.overall_pct);
+            remainText = remainSec < 60 ? '· 约剩 ' + Math.round(remainSec) + ' 秒' : '· 约剩 ' + Math.round(remainSec/60) + ' 分钟';
+          }
+          var statusParts = [icon, fPhase, displayPct + '%'];
+          if (remainText) statusParts.push(remainText);
+          if (statusEl) statusEl.textContent = statusParts.join(' ');
           if (btn) btn.textContent = '⏳ ' + displayPct + '%';
         } else if (!recAlive || recDone) {
           clearInterval(poll);
@@ -2591,7 +2605,15 @@ async function runRecommendFromFilter() {
           var _timeoutInfo = '';
           try { var _r = await fetch(API + '/api/recommend?_t=' + Date.now()).then(function(r){ return r.json(); }); if (_r && _r.timeout_count > 0) { _timeoutInfo = ' ⚠' + _r.timeout_count + '次超时'; } } catch(e) {}
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
-          if (statusEl) statusEl.textContent = (_tableOk ? '✔ 刷新完成' : '✔ 刷新完成（部分失败）') + _timeoutInfo;
+          // 友好完成反馈：数量 + 耗时（隐藏内部超时细节）
+          var _doneCount = recData && recData.total ? recData.total : '';
+          var _doneTime = '';
+          if (recData && recData.elapsed != null) {
+            _doneTime = recData.elapsed < 60 ? Math.round(recData.elapsed) + ' 秒' : (Math.round(recData.elapsed/6)/10) + ' 分钟';
+          }
+          if (statusEl) statusEl.textContent = (_tableOk ? '✔ 推荐完成' : '✔ 推荐完成（部分数据缺失）')
+            + (_doneCount ? '：' + _doneCount + ' 只基金' : '')
+            + (_doneTime ? '，用时 ' + _doneTime : '');
           if (prog) prog.style.width = '0%';
           setTimeout(function() { if (prog) prog.style.width = '0%'; if (statusEl && statusEl.textContent.indexOf('刷新完成') >= 0) statusEl.textContent = ''; }, 4000);
           return;

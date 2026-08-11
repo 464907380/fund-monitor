@@ -1315,9 +1315,9 @@ def main() -> None:
             # 异常已在 except 中写入错误心跳，这里不再覆盖
             pass
         else:
-            update_heartbeat("fund_recommend", progress=1, total=1,
-                             overall_pct=100, phase="完成",
-                             detail="推荐完成", elapsed=_elapsed())
+            # 不传 total：保留前面保存阶段写入的实际基金数（避免覆盖成 1 导致前端显示"1只"）
+            update_heartbeat("fund_recommend", progress=1, overall_pct=100,
+                             phase="完成", detail="推荐完成", elapsed=_elapsed())
         if _timeout_count > 0:
             print(f"\n⚠️ 超时警告: {_timeout_count} 次请求超时")
             for _td in _timeout_details[:10]:
