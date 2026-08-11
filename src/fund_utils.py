@@ -78,47 +78,157 @@ def is_trading_day(d: datetime.date) -> bool:
 HISTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── 基金净值走势磁盘缓存（推荐进程与 Web 服务器共享，避免重复请求）──
-_TREND_CACHE_PATH = os.path.join(HISTORY_DIR, "data", "fund_trend_cache.json")
+# 存储：SQLite（WAL 模式，跨进程并发安全），替代原 111MB 单 JSON 文件。
+# 对外接口 _load/_save/_get/_set_fund_trend_cache 保持原签名，调用点零改动。
+_TREND_CACHE_PATH = os.path.join(HISTORY_DIR, "data", "fund_trend_cache.db")
 _TREND_DISK_LOCK = threading.Lock()
-# 进程内缓存 + 文件 mtime，避免评分阶段每只基金都重读整个 JSON 文件
+# 进程内缓存 + 文件 mtime，避免评分阶段每只基金都重读整个 DB
 _TREND_CACHE_MEM: dict | None = None
 _TREND_CACHE_MTIME: float = -1.0
+_TREND_DB_INIT: bool = False
+
+
+def _trend_db_conn() -> "object":
+    """获取 SQLite 连接（WAL 模式，允许跨进程并发读写）"""
+    import sqlite3
+    _conn = sqlite3.connect(_TREND_CACHE_PATH, timeout=30, check_same_thread=False)
+    _conn.execute("PRAGMA journal_mode=WAL")
+    _conn.execute("PRAGMA synchronous=NORMAL")
+    return _conn
+
+
+def _trend_migrate_from_json() -> bool:
+    """从旧 JSON 文件迁移到 SQLite（一次性）。返回是否迁移成功/已有数据。"""
+    global _TREND_DB_INIT
+    if _TREND_DB_INIT:
+        return True
+    _TREND_DB_INIT = True
+    try:
+        _json_path = os.path.join(HISTORY_DIR, "data", "fund_trend_cache.json")
+        if not os.path.exists(_json_path):
+            return True  # 无旧文件，直接使用空库
+        try:
+            _conn = _trend_db_conn()
+            _conn.execute("CREATE TABLE IF NOT EXISTS fund_trend (code TEXT PRIMARY KEY, date TEXT, navs TEXT)")
+            _cnt = _conn.execute("SELECT COUNT(*) FROM fund_trend").fetchone()[0]
+            if _cnt > 0:
+                return True  # 已迁移过
+            with open(_json_path, encoding="utf-8") as _f:
+                _data = json.load(_f)
+            _conn.executemany(
+                "INSERT OR REPLACE INTO fund_trend (code, date, navs) VALUES (?, ?, ?)",
+                [(c, e.get("date", ""), json.dumps(e.get("navs", []), ensure_ascii=False))
+                 for c, e in _data.items()]
+            )
+            _conn.commit()
+            _conn.close()
+            log.info("基金净值走势缓存已从 JSON 迁移到 SQLite: %d 只", len(_data))
+            return True
+        except Exception:
+            return False  # 迁移失败，回退 JSON
+    except Exception:
+        return False
 
 
 def _load_fund_trend_cache() -> dict:
-    """读取净值走势磁盘缓存 {code: {date, navs:[[d,v],...]}}（进程内缓存+mtime 检测）"""
+    """读取净值走势磁盘缓存 {code: {date, navs:[[d,v],...]}}（进程内缓存+mtime 检测）
+    优先 SQLite，失败回退 JSON。"""
     global _TREND_CACHE_MEM, _TREND_CACHE_MTIME
     try:
+        if not _trend_migrate_from_json():
+            return _load_fund_trend_cache_json()
         if os.path.exists(_TREND_CACHE_PATH):
             _mtime = os.path.getmtime(_TREND_CACHE_PATH)
             if _TREND_CACHE_MEM is not None and _mtime == _TREND_CACHE_MTIME:
                 return _TREND_CACHE_MEM
-            with open(_TREND_CACHE_PATH, encoding="utf-8") as f:
-                _TREND_CACHE_MEM = json.load(f)
-            _TREND_CACHE_MTIME = _mtime
-            return _TREND_CACHE_MEM
+            try:
+                _conn = _trend_db_conn()
+                _rows = _conn.execute("SELECT code, date, navs FROM fund_trend").fetchall()
+                _conn.close()
+                _mem = {}
+                for _c, _d, _n in _rows:
+                    try:
+                        _mem[_c] = {"date": _d, "navs": json.loads(_n)}
+                    except Exception:
+                        pass
+                _TREND_CACHE_MEM = _mem
+                _TREND_CACHE_MTIME = _mtime
+                return _mem
+            except Exception:
+                return _load_fund_trend_cache_json()
+    except Exception:
+        return _load_fund_trend_cache_json()
+    return {}
+
+
+def _load_fund_trend_cache_json() -> dict:
+    """回退：读取旧 JSON 缓存"""
+    _json_path = os.path.join(HISTORY_DIR, "data", "fund_trend_cache.json")
+    try:
+        if os.path.exists(_json_path):
+            with open(_json_path, encoding="utf-8") as f:
+                return json.load(f)
     except Exception:
         pass
     return {}
 
 
 def _save_fund_trend_cache(cache: dict) -> None:
-    """原子写入净值走势缓存，并同步进程内缓存避免重复读文件"""
+    """批量写入净值走势缓存到 SQLite（原子事务），失败回退 JSON。"""
     global _TREND_CACHE_MEM, _TREND_CACHE_MTIME
     try:
+        if not _trend_migrate_from_json():
+            return _save_fund_trend_cache_json(cache)
         os.makedirs(os.path.dirname(_TREND_CACHE_PATH), exist_ok=True)
-        _tmp = _TREND_CACHE_PATH + ".tmp"
-        with open(_tmp, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
-        os.replace(_tmp, _TREND_CACHE_PATH)
+        _conn = _trend_db_conn()
+        _conn.execute("CREATE TABLE IF NOT EXISTS fund_trend (code TEXT PRIMARY KEY, date TEXT, navs TEXT)")
+        _conn.executemany(
+            "INSERT OR REPLACE INTO fund_trend (code, date, navs) VALUES (?, ?, ?)",
+            [(c, e.get("date", ""), json.dumps(e.get("navs", []), ensure_ascii=False))
+             for c, e in cache.items()]
+        )
+        _conn.commit()
+        _conn.close()
         _TREND_CACHE_MEM = cache
         _TREND_CACHE_MTIME = os.path.getmtime(_TREND_CACHE_PATH)
+    except Exception:
+        _save_fund_trend_cache_json(cache)
+
+
+def _save_fund_trend_cache_json(cache: dict) -> None:
+    """回退：写入旧 JSON 缓存"""
+    global _TREND_CACHE_MEM, _TREND_CACHE_MTIME
+    try:
+        _json_path = os.path.join(HISTORY_DIR, "data", "fund_trend_cache.json")
+        os.makedirs(os.path.dirname(_json_path), exist_ok=True)
+        _tmp = _json_path + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+        os.replace(_tmp, _json_path)
+        _TREND_CACHE_MEM = cache
+        _TREND_CACHE_MTIME = os.path.getmtime(_json_path)
     except Exception:
         pass
 
 
 def _get_fund_trend_navs(code: str) -> list | None:
     """读取当天净值走势缓存，返回 [{d,v}] 或 None（无缓存/已过期）"""
+    # 优先 SQLite 单行查询（快，不必全量加载）
+    try:
+        if _trend_migrate_from_json() and os.path.exists(_TREND_CACHE_PATH):
+            _conn = _trend_db_conn()
+            _row = _conn.execute("SELECT date, navs FROM fund_trend WHERE code=?", (code,)).fetchone()
+            _conn.close()
+            if _row:
+                today = datetime.datetime.now().strftime("%Y-%m-%d")
+                if _row[0] == today:
+                    try:
+                        return [{"d": d, "v": v} for d, v in json.loads(_row[1])]
+                    except Exception:
+                        pass
+            return None
+    except Exception:
+        pass
     entry = _load_fund_trend_cache().get(code)
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     if entry and entry.get("date") == today and entry.get("navs"):
@@ -127,10 +237,24 @@ def _get_fund_trend_navs(code: str) -> list | None:
 
 
 def _set_fund_trend_navs(code: str, navs: list) -> None:
-    """把 [{d,v}] 写入当天净值走势缓存（跨进程共享，原子写）"""
+    """把 [{d,v}] 写入当天净值走势缓存（跨进程共享，SQLite upsert 单行）"""
     if not navs:
         return
     today = datetime.datetime.now().strftime("%Y-%m-%d")
+    try:
+        if _trend_migrate_from_json():
+            _conn = _trend_db_conn()
+            _conn.execute("CREATE TABLE IF NOT EXISTS fund_trend (code TEXT PRIMARY KEY, date TEXT, navs TEXT)")
+            _conn.execute(
+                "INSERT OR REPLACE INTO fund_trend (code, date, navs) VALUES (?, ?, ?)",
+                (code, today, json.dumps([[n["d"], n["v"]] for n in navs], ensure_ascii=False))
+            )
+            _conn.commit()
+            _conn.close()
+            return
+    except Exception:
+        pass
+    # 回退：全量内存更新 + 落盘
     with _TREND_DISK_LOCK:
         cache = _load_fund_trend_cache()
         cache[code] = {"date": today, "navs": [[n["d"], n["v"]] for n in navs]}

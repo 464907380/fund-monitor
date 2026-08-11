@@ -39,6 +39,14 @@ fund_list.json
 # 净值走势磁盘缓存（自动生成，供折线图复用）
 fund_trend_cache.json
 
+# 净值走势 SQLite 缓存（自动生成，替代 JSON）
+data/fund_trend_cache.db
+data/fund_trend_cache.db-wal
+data/fund_trend_cache.db-shm
+
+# 净值走势缓存迁移备份
+data/fund_trend_cache.json.bak
+
 # 基金持仓缓存（自动生成，季报披露30天TTL）
 fund_holdings_cache.json
 
