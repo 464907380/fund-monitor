@@ -292,8 +292,8 @@ def _estimate_from_holdings(code: str) -> float | None:
             weighted_chg += chg_pct * h["p"]
         if total_w >= 5:
             return round(weighted_chg / total_w, 2)
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug("持仓估算失败 %s: %s", code, e)
     return None
 
 

@@ -731,158 +731,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/market-indices":
+            """大盘指数实时行情（新浪）—— 独立模块处理"""
             try:
-                from fund_utils import fetch_bytes, is_trading_day
-                import datetime
-                today = datetime.date.today()
-                is_trading = is_trading_day(today) and (datetime.datetime.now().hour >= 9 and datetime.datetime.now().hour < 15)
-                url = "http://hq.sinajs.cn/list=sh000001,sz399001,sz399006"
-                raw = fetch_bytes(url, {"Referer": "https://finance.sina.com.cn/"})
-                indices = []
-                if raw:
-                    text = raw.decode("gbk", errors="ignore")
-                    for line in text.strip().split("\n"):
-                        if "hq_str_" not in line:
-                            continue
-                        parts = line.split('"')
-                        if len(parts) < 2:
-                            continue
-                        fields = parts[1].split(",")
-                        if len(fields) < 30:
-                            continue
-                        name = fields[0]
-                        # 字段格式: name,今开,昨收,现价,最高,最低,...
-                        prev_close = float(fields[2]) if fields[2] else 0
-                        price = float(fields[3]) if fields[3] else 0
-                        chg_pts = price - prev_close
-                        chg_pct = (chg_pts / prev_close * 100) if prev_close else 0
-                        indices.append({
-                            "name": name, "price": price,
-                            "change_points": round(chg_pts, 2), "change_pct": round(chg_pct, 2),
-                        })
-                self._send(*_json_response({"ok": True, "indices": indices, "is_trading": is_trading}))
+                from fund_api_market import api_market_indices
+                self._send(*_json_response(api_market_indices()))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/api/market-trends":
-            """大盘指数当日5分钟K线数据（用于画分时折线图）"""
+            """大盘指数当日5分钟K线数据（用于画分时折线图）—— 独立模块处理"""
             try:
-                from fund_utils import fetch
-                import datetime, json as _json
-                now = datetime.datetime.now()
-                today_str = now.strftime("%Y-%m-%d")
-                symbols = [
-                    ("sh000001", "上证指数"),
-                    ("sz399001", "深证成指"),
-                    ("sz399006", "创业板指"),
-                ]
-                def _trading_offset(day_str: str) -> int:
-                    """计算交易偏移量（分钟），09:30→0, 11:30→120, 13:00→120, 15:00→240"""
-                    import datetime as _dt
-                    try:
-                        dt = _dt.datetime.strptime(day_str, "%Y-%m-%d %H:%M:%S")
-                        mins = dt.hour * 60 + dt.minute
-                        if mins < 570:  # 09:30 之前
-                            return 0
-                        if mins <= 690:  # 09:30-11:30
-                            return mins - 570
-                        if mins < 780:  # 11:30-13:00 午休
-                            return 120
-                        # 13:00-15:00
-                        return 120 + (mins - 780)
-                    except Exception:
-                        return 0
-
-                def _fetch_pre_close(sym: str, ref_day: str) -> float | None:
-                    """从日K线获取 ref_day 前一交易日的收盘价（昨收）
-                    ref_day 为展示数据的日期：交易日=今天，非交易日=最近交易日
-                    """
-                    try:
-                        daily_url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=10"
-                        raw_daily = fetch(daily_url)
-                        daily_data = _json.loads(raw_daily)
-                        if daily_data:
-                            # 找最后一个日期早于 ref_day 的K线收盘价
-                            for p in reversed(daily_data):
-                                if p.get("day", "")[:10] < ref_day and p.get("close"):
-                                    return float(p["close"])
-                    except Exception:
-                        pass
-                    return None
-
-                result = []
-                for sym, name in symbols:
-                    url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=48"
-                    raw = fetch(url)
-                    points = _json.loads(raw)
-                    # 确定展示日期：优先今日；无今日数据（周末/节假日）则用最近交易日
-                    today_points = [p for p in points if p.get("day", "").startswith(today_str)]
-                    if today_points:
-                        display_day = today_str
-                    elif points:
-                        display_day = points[-1].get("day", "")[:10]
-                    else:
-                        display_day = today_str
-                    # 昨收 = 展示日期前一交易日收盘价（非交易日用日K线取前一日）
-                    pre_close = _fetch_pre_close(sym, display_day)
-                    if pre_close is None:
-                        for p in reversed(points):
-                            if p.get("day", "")[:10] < display_day and p.get("close"):
-                                pre_close = float(p["close"])
-                                break
-                    # 展示日期的5分钟K线
-                    if not today_points and points:
-                        today_points = [p for p in points if p.get("day", "").startswith(display_day)]
-                    pt_list = []
-                    for p in today_points:
-                        day_str = p.get("day", "")
-                        close = float(p.get("close", 0))
-                        off = _trading_offset(day_str)
-                        pt_list.append({"t": day_str, "close": close, "offset": off})
-                    closes = [pt["close"] for pt in pt_list]
-                    result.append({
-                        "name": name,
-                        "symbol": sym,
-                        "closes": closes,
-                        "points": pt_list,
-                        "pre_close": pre_close,
-                    })
-                self._send(*_json_response({"ok": True, "trends": result}))
+                from fund_api_market import api_market_trends
+                self._send(*_json_response(api_market_trends()))
             except Exception as e:
-                log.error("/api/market-trends 异常", exc_info=True)
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
         if parsed.path == "/api/market-kline":
-            """大盘指数30日K线（含成交量，用于画日K蜡烛图）"""
+            """大盘指数30日K线（含成交量，用于画日K蜡烛图）—— 独立模块处理"""
             try:
-                from fund_utils import fetch
-                import datetime, json as _json
-                symbols = [
-                    ("sh000001", "上证指数"),
-                    ("sz399001", "深证成指"),
-                    ("sz399006", "创业板指"),
-                ]
-                result = []
-                for sym, name in symbols:
-                    url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={sym}&scale=240&ma=no&datalen=30"
-                    raw = fetch(url)
-                    data = _json.loads(raw)
-                    klines = []
-                    for p in data:
-                        klines.append({
-                            "d": p.get("day", "")[:10],
-                            "o": float(p.get("open", 0)),
-                            "h": float(p.get("high", 0)),
-                            "l": float(p.get("low", 0)),
-                            "c": float(p.get("close", 0)),
-                            "v": float(p.get("volume", 0)),
-                        })
-                    result.append({"name": name, "symbol": sym, "klines": klines})
-                self._send(*_json_response({"ok": True, "klines": result}))
+                from fund_api_market import api_market_kline
+                self._send(*_json_response(api_market_kline()))
             except Exception as e:
-                log.error("/api/market-kline 异常", exc_info=True)
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
@@ -1771,8 +1642,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     if _nav_data and len(_nav_data) >= 2:
                                         _trend_list = [[_nav_data[0]["d"], 0.0]] + [[_nav_data[i]["d"], round((_nav_data[i]["v"] - _nav_data[i-1]["v"]) / _nav_data[i-1]["v"] * 100, 2)] for i in range(1, len(_nav_data))]
                                         row["_trend"] = _trend_list
-                                except Exception:
-                                    pass
+                                except Exception as _te:
+                                    log.debug("拉取走势图失败 %s: %s", code, _te)
                             # 追加今日实时涨跌到走势图末尾
                             if _td is not None and row.get("_trend"):
                                 row["_trend"].append((datetime.date.today().isoformat(), round(_td, 2)))
@@ -1843,7 +1714,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         row["_score_detail"] = details
                         row["_skipped_weight"] = skipped
                         return _carry_window(row, d)
-                    except Exception:
+                    except Exception as _pe:
+                        log.warning("_process_one(%s) 失败: %s", code, _pe, exc_info=True)
                         return None
 
                 # 并行拉取所有基金数据

@@ -176,6 +176,30 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+
+def safe_call(name: str, fn, fallback=None, log_level: int = logging.WARNING, exc: bool = True):
+    """统一"捕获异常 + 记录 + 降级"的工具，替代散落的 `except Exception: pass`。
+
+    Args:
+        name: 调用标识（如 "settle_estimate_errors"），用于日志定位
+        fn: 要执行的可调用对象
+        fallback: 异常时的降级返回值（默认 None）
+        log_level: 日志级别（默认 WARNING；预期会失败的路径可传 DEBUG）
+        exc: 是否记录 traceback（默认 True，便于排查；高频/预期失败路径可传 False）
+
+    Returns:
+        fn() 的成功结果，或 fallback。
+
+    Example:
+        data = safe_call("_parse_holdings(002910)", lambda: _parse_holdings("002910"), fallback=None)
+    """
+    try:
+        return fn()
+    except Exception as e:
+        log.log(log_level, "safe_call %s 失败: %s", name, e, exc_info=exc)
+        return fallback
+
+
 # ── 网络缓存 ──────────────────────────────────
 _cache: dict[str, tuple[float, str]] = {}       # url -> (timestamp, data)
 _cache_lock = threading.Lock()
