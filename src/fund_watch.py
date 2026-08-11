@@ -9,7 +9,7 @@ import threading
 import datetime
 from config import CFG, api_url, get_timeout
 from config import get_secret as _get_secret
-from fund_utils import fetch, fetch_bytes, log, HISTORY_DIR, _fetch_fund_estimate, record_estimate
+from fund_utils import fetch, fetch_bytes, log, HISTORY_DIR, _fetch_fund_estimate, record_estimate, inter_process_lock
 from fund_scoring import SCORE_DIMS, calc_score_detail
 from fund_metrics import _calc_nav_metrics
 
@@ -418,10 +418,13 @@ def _parse_holdings(code: str) -> list[dict] | None:
         if result is not None:
             _HOLDINGS_PROC[code] = (_now, result)
             try:
-                with _HOLDINGS_LOCK:
-                    _disk = _load_holdings_cache()
-                    _disk[code] = {"ts": _now, "holds": result}
-                    _save_holdings_cache(_disk)
+                # 跨进程锁：server/recommend/monitor 三进程共享持仓缓存，
+                # 读-改-写需互斥，避免并发写互相覆盖丢数据。
+                with inter_process_lock(_HOLDINGS_CACHE_PATH):
+                    with _HOLDINGS_LOCK:
+                        _disk = _load_holdings_cache()
+                        _disk[code] = {"ts": _now, "holds": result}
+                        _save_holdings_cache(_disk)
             except Exception:
                 pass
         return result

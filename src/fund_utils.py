@@ -77,6 +77,83 @@ def is_trading_day(d: datetime.date) -> bool:
 # ── 路径 ──────────────────────────────────────
 HISTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
+# ── 跨进程文件锁（server/recommend/monitor 共享磁盘缓存时，保证读-改-写互斥）──
+# Windows 用 msvcrt 独占锁，Linux 用 fcntl；进程内同文件用 threading 锁兜底防重入。
+class _InterProcessLock:
+    """跨进程互斥锁：对指定文件加独占锁，避免多进程同时写共享缓存互相覆盖。
+    用法：with inter_process_lock(path): ...（内部自动加进程内防重入锁）"""
+
+    def __init__(self, path: str, timeout: float = 15.0):
+        self._path = path + ".lock"
+        self._timeout = timeout
+        self._fh = None
+        self._proc_lock = threading.Lock()
+
+    def acquire(self) -> None:
+        import time as _t
+        # 进程内防重入（同一进程内多线程写同一缓存）
+        self._proc_lock.acquire()
+        _deadline = _t.time() + self._timeout
+        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        while True:
+            try:
+                self._fh = open(self._path, "a+")
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(self._fh.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except (OSError, IOError):
+                if self._fh:
+                    try:
+                        self._fh.close()
+                    except Exception:
+                        pass
+                    self._fh = None
+                if _t.time() >= _deadline:
+                    # 超时仍强行继续（避免死锁阻塞业务），进程内锁已保证同进程互斥
+                    log.warning("跨进程锁等待超时: %s（继续执行）", self._path)
+                    return
+                _t.sleep(0.05)
+
+    def release(self) -> None:
+        if self._fh:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    try:
+                        self._fh.seek(0)
+                        msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+                    except OSError:
+                        pass
+                else:
+                    import fcntl
+                    try:
+                        fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+                self._fh.close()
+            except Exception:
+                pass
+            self._fh = None
+        self._proc_lock.release()
+
+    def __enter__(self) -> "_InterProcessLock":
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.release()
+
+
+def inter_process_lock(path: str, timeout: float = 15.0) -> _InterProcessLock:
+    """对共享缓存文件加跨进程锁，保证多进程读-改-写互斥"""
+    return _InterProcessLock(path, timeout)
+
+
 # ── 基金净值走势磁盘缓存（推荐进程与 Web 服务器共享，避免重复请求）──
 # 存储：SQLite（WAL 模式，跨进程并发安全），替代原 111MB 单 JSON 文件。
 # 对外接口 _load/_save/_get/_set_fund_trend_cache 保持原签名，调用点零改动。
@@ -561,12 +638,14 @@ def _save_td_cache(cache: dict) -> None:
     global _TD_MEM, _TD_MTIME
     try:
         os.makedirs(os.path.dirname(_TD_CACHE_PATH), exist_ok=True)
-        _tmp = _TD_CACHE_PATH + ".tmp"
-        with open(_tmp, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
-        os.replace(_tmp, _TD_CACHE_PATH)
-        _TD_MEM = cache
-        _TD_MTIME = os.path.getmtime(_TD_CACHE_PATH)
+        # 跨进程锁：server 与 recommend 都可能 flush td 缓存
+        with inter_process_lock(_TD_CACHE_PATH):
+            _tmp = _TD_CACHE_PATH + ".tmp"
+            with open(_tmp, "w", encoding="utf-8") as f:
+                json.dump(cache, f, ensure_ascii=False)
+            os.replace(_tmp, _TD_CACHE_PATH)
+            _TD_MEM = cache
+            _TD_MTIME = os.path.getmtime(_TD_CACHE_PATH)
     except Exception:
         pass
 
@@ -739,16 +818,41 @@ def _load_est_error() -> dict:
 
 
 def _save_est_error(cache: dict) -> None:
-    """原子写入估算误差文件并同步进程内缓存"""
+    """合并式原子写入估算误差文件。
+    - estimates（临时待结算区）与 errors（历史累积）均**合并**进磁盘最新快照：
+      长任务（settle/backfill）的旧快照不会覆盖他进程（如 record_estimate）新增的条目。
+    - settle 对已结算条目的删除退化为幂等（errors 已有记录则不再结算，仅多查一次净值）。
+    跨进程锁保证并发写不互相覆盖。同步进程内缓存。"""
     global _EST_ERROR_MEM, _EST_ERROR_MTIME
     try:
         os.makedirs(os.path.dirname(_EST_ERROR_PATH), exist_ok=True)
-        _tmp = _EST_ERROR_PATH + ".tmp"
-        with open(_tmp, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
-        os.replace(_tmp, _EST_ERROR_PATH)
-        _EST_ERROR_MEM = cache
-        _EST_ERROR_MTIME = os.path.getmtime(_EST_ERROR_PATH)
+        with inter_process_lock(_EST_ERROR_PATH):
+            # 重新读磁盘最新内容
+            try:
+                if os.path.exists(_EST_ERROR_PATH):
+                    with open(_EST_ERROR_PATH, encoding="utf-8") as _f:
+                        _disk = json.load(_f)
+                else:
+                    _disk = {}
+            except Exception:
+                _disk = {}
+            # estimates 与 errors 都合并
+            for _k in ("estimates", "errors"):
+                _incoming = cache.get(_k)
+                if isinstance(_incoming, dict) and _incoming:
+                    _dst = _disk.setdefault(_k, {})
+                    for _ck, _cv in _incoming.items():
+                        if isinstance(_cv, dict):
+                            _d2 = _dst.setdefault(_ck, {})
+                            _d2.update(_cv)
+                        else:
+                            _dst[_ck] = _cv
+            _tmp = _EST_ERROR_PATH + ".tmp"
+            with open(_tmp, "w", encoding="utf-8") as f:
+                json.dump(_disk, f, ensure_ascii=False)
+            os.replace(_tmp, _EST_ERROR_PATH)
+            _EST_ERROR_MEM = _disk
+            _EST_ERROR_MTIME = os.path.getmtime(_EST_ERROR_PATH)
     except Exception:
         pass
 
@@ -759,15 +863,18 @@ def record_estimate(code: str, est_pct: float) -> None:
         return
     try:
         _today = datetime.datetime.now().strftime("%Y-%m-%d")
-        with _EST_ERROR_LOCK:
-            _cache = _load_est_error()
-            _est_map = _cache.setdefault("estimates", {})
-            _day = _est_map.setdefault(_today, {})
-            _val = round(float(est_pct), 2)
-            if _day.get(code) == _val:
-                return  # 值未变，避免反复写盘（自选表每次刷新都会调用）
-            _day[code] = _val
-            _save_est_error(_cache)
+        # 跨进程锁：server 与 recommend 可能同时写估算误差文件，
+        # 必须保证"读-改-写"在进程间互斥，避免互相覆盖丢数据。
+        with inter_process_lock(_EST_ERROR_PATH):
+            with _EST_ERROR_LOCK:
+                _cache = _load_est_error()
+                _est_map = _cache.setdefault("estimates", {})
+                _day = _est_map.setdefault(_today, {})
+                _val = round(float(est_pct), 2)
+                if _day.get(code) == _val:
+                    return  # 值未变，避免反复写盘（自选表每次刷新都会调用）
+                _day[code] = _val
+                _save_est_error(_cache)
     except Exception:
         pass
 

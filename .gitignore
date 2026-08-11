@@ -47,6 +47,11 @@ data/fund_trend_cache.db-shm
 # 净值走势缓存迁移备份
 data/fund_trend_cache.json.bak
 
+# 估算误差缓存备份与跨进程锁文件
+data/fund_est_error.json.bak*
+data/fund_est_error.json.lock
+data/*.lock
+
 # 基金持仓缓存（自动生成，季报披露30天TTL）
 fund_holdings_cache.json
 
