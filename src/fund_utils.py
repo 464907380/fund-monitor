@@ -660,7 +660,10 @@ def flush_td_cache() -> None:
             _disk = _load_td_cache()
             _changed = False
             for _c, _e in _TD_PROC.items():
-                if _e.get("date") == _today and _disk.get(_c) != _e:
+                # 只持久化实际净值(lsjz)固定值；fallback(昨日新浪)仅为进程内短期
+                # 提速用，落盘会污染跨进程缓存（_get_td_lsjz_cache 只认 lsjz）
+                if (_e.get("date") == _today and _e.get("src") == "lsjz"
+                        and _disk.get(_c) != _e):
                     _disk[_c] = _e
                     _changed = True
             if _changed:

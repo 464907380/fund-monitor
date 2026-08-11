@@ -105,32 +105,75 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
     # 涨跌来源：收盘后=LSJZ当日净值，盘中(9:30-15:00)=持仓估算，其余=新浪昨日
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
+    # 收盘后：探测今日净值是否已普遍发布（晚上才陆续出）。未发布则跳过每只的 LSJZ 查询，
+    # 直接走新浪昨日（1 个轻量请求），避免 refresh 模式对 1733 只逐只发 LSJZ(空等)+新浪+fundgz 三个请求。
+    _today_nav_ready = False
+    if is_after_market:
+        try:
+            from fund_utils import _probe_latest_nav_date
+            _probe_codes = list(dict.fromkeys(codes))[:3]
+            # 并行探测 3 只（各 1 个 LSJZ 请求），替代串行省 ~4s
+            if _probe_codes:
+                with ThreadPoolExecutor(max_workers=3) as _pe:
+                    _pfuts = {_pe.submit(_probe_latest_nav_date, _pc): _pc for _pc in _probe_codes}
+                    for _pf in as_completed(_pfuts):
+                        try:
+                            _ld = _pf.result()
+                        except Exception:
+                            _ld = None
+                        if _ld and _ld >= today_str:
+                            _today_nav_ready = True
+                            break
+        except Exception:
+            pass
+
     def _fetch_one_td(code: str) -> tuple[str, float | None, str]:
         """返回 (code, 涨跌幅, 来源)
 
         来源优先级（当日涨跌维度开启时）:
-          收盘后 → LSJZ 当日实际净值 "lsjz"
+          收盘后 → LSJZ 当日实际净值 "lsjz"（先查当天缓存；净值未发布则直接新浪昨日）
           盘中(9:30-15:00) → 持仓估算 "holdings"
           其余/失败 → 新浪昨日 "fallback"
         """
-        # 收盘后先查 LSJZ 实际净值（优先，避免用新浪的昨日数据）
+        # 收盘后：先查当天 td 缓存（实际净值 lsjz，或批量预取的昨日 fallback），
+        # 命中直接返回——避免 refresh 模式对 1733 只候选逐只发多个请求。
         if is_after_market:
             try:
-                _url_lsjz = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
-                _req_lsjz = urllib.request.Request(_url_lsjz, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(_req_lsjz, timeout=get_timeout("default", 6)) as _r:
-                    _lsjz_data = _r.read().decode("utf-8")
-                _m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', _lsjz_data)
-                _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
-                if _m_date and _m_val:
-                    # 今日有实际净值 → 当日净值
-                    if _m_date.group(1) == today_str:
-                        return (code, float(_m_val.group(1)), "lsjz")
-                    # 今日无净值（非交易日/节假日）→ 返回最近净值，与自选表一致（不降级到新浪昨日）
-                    if not is_trading_day(datetime.date.today()):
-                        return (code, float(_m_val.group(1)), "lsjz")
+                from fund_utils import _get_td_lsjz_cache, _TD_PROC
+                _cached_td = _get_td_lsjz_cache(code)
+                if _cached_td is not None:
+                    return (code, _cached_td, "lsjz")
+                # 净值未发布时，批量预取已写入 _TD_PROC(fallback=昨日)，直接命中
+                _pe = _TD_PROC.get(code)
+                if _pe and _pe.get("date") == today_str and _pe.get("src") == "fallback" and _pe.get("td") is not None:
+                    return (code, _pe["td"], "fallback")
             except Exception:
                 pass
+            # 今日净值普遍未发布 → 跳过 LSJZ 逐只查询，直接走新浪昨日（下方统一处理）
+            if not _today_nav_ready:
+                pass
+            else:
+                try:
+                    _url_lsjz = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+                    _req_lsjz = urllib.request.Request(_url_lsjz, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(_req_lsjz, timeout=get_timeout("default", 6)) as _r:
+                        _lsjz_data = _r.read().decode("utf-8")
+                    _m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', _lsjz_data)
+                    _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
+                    if _m_date and _m_val:
+                        # 今日有实际净值 → 当日净值，写入缓存供同天复用
+                        if _m_date.group(1) == today_str:
+                            try:
+                                from fund_utils import _set_td_lsjz_cache
+                                _set_td_lsjz_cache(code, float(_m_val.group(1)))
+                            except Exception:
+                                pass
+                            return (code, float(_m_val.group(1)), "lsjz")
+                        # 今日无净值（非交易日/节假日）→ 返回最近净值，与自选表一致（不降级到新浪昨日）
+                        if not is_trading_day(datetime.date.today()):
+                            return (code, float(_m_val.group(1)), "lsjz")
+                except Exception:
+                    pass
         # 盘中(9:30-15:00)：优先持仓估算（与自选表"估算"一致）
         _now2 = datetime.datetime.now()
         if (9, 30) <= (_now2.hour, _now2.minute) < (15, 0):
@@ -211,6 +254,51 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
                                  detail=f"合并拉取 {len(_all_sina)} 只重仓股行情",
                                  elapsed=round(time.time() - _start_gz, 1))
                 _fetch_stock_quotes_batch(_all_sina)
+        except Exception:
+            pass
+    # 收盘后净值未发布 → 新浪基金批量预取昨日涨跌（并发分块拉取，替代 1733 只逐只请求）
+    if is_after_market and not _today_nav_ready and codes:
+        try:
+            import urllib.request as _ur
+            from fund_utils import _TD_PROC
+
+            def _fetch_chunk(_chunk: list[str]) -> int:
+                """拉取一块新浪基金行情，写入 _TD_PROC(fallback=昨日)。返回成功条数"""
+                _url = f"https://hq.sinajs.cn/list=" + ",".join(f"of{c}" for c in _chunk)
+                try:
+                    _req = _ur.Request(_url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn"})
+                    with _ur.urlopen(_req, timeout=8) as _r:
+                        _text = _r.read().decode("gbk", errors="ignore")
+                    for _line in _text.strip().split("\n"):
+                        _mm = re.search(r'hq_str_of(\d{6})="(.*?)"', _line)
+                        if not _mm:
+                            continue
+                        _fcode = _mm.group(1)
+                        _parts = _mm.group(2).split(",")
+                        if len(_parts) >= 5 and _parts[4]:
+                            # 写入进程内 td 缓存（fallback=昨日），供 _fetch_one_td 命中
+                            _TD_PROC[_fcode] = {"date": today_str, "td": float(_parts[4]), "src": "fallback"}
+                    return len(_chunk)
+                except Exception:
+                    return 0
+
+            _chunks = [codes[i:i + 40] for i in range(0, len(codes), 40)]
+            _done_batch = 0
+            # 并发拉取各块（新浪行情接口支持多只一次查询，网络 IO 密集可并行），
+            # 替代 44 块串行 ~60s+ → 8 worker 并发 ~10s
+            with ThreadPoolExecutor(max_workers=8) as _be:
+                _bfuts = {_be.submit(_fetch_chunk, _c): _c for _c in _chunks}
+                for _bf in as_completed(_bfuts):
+                    try:
+                        _done_batch += _bf.result()
+                    except Exception:
+                        pass
+                    if _done_batch % 200 == 0 or _done_batch >= len(codes):
+                        update_heartbeat("fund_recommend", progress=_done_batch, total=_total_gz,
+                                         overall_pct=(pct_base if pct_base is not None else 15),
+                                         phase="刷新涨跌",
+                                         detail=f"批量获取昨日涨跌 {_done_batch}/{_total_gz}",
+                                         elapsed=round(time.time() - _start_gz, 1))
         except Exception:
             pass
     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_net_value", default=50)) as _ge:
@@ -878,10 +966,12 @@ def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> 
     _print_results(cached_results)
 
 
-def _supplement_self_selected(base_results: list | None = None) -> None:
+def _supplement_self_selected(base_results: list | None = None, td_map: dict | None = None) -> None:
     """补拉自选基金数据到推荐结果
     如果提供 base_results，则在其基础上追加（不保存文件）；
     否则加载现有结果文件追加。
+    td_map: 已批量预取的当日涨跌映射（可选）。缺失自选基金不在其中时，
+    内部批量补拉一次，避免 _score_one 每只单独走 fundgz（已死，重试拖慢）。
     """
     try:
         _fund_list_file = os.path.join(_RECOMMEND_DIR, "data", "fund_list.json")
@@ -906,50 +996,59 @@ def _supplement_self_selected(base_results: list | None = None) -> None:
         print(f"\n📋 补拉 {_total} 只自选基金数据...")
         _extra: list[dict] = []
         _done_supp = 0
+        # 预热净值走势磁盘缓存：首次全量读 SQLite(6332只) 若被并发 20 线程同时触发
+        # 会造成 IO 风暴+连接争抢（冷启动极慢，实测并发20=243s vs 串行3s）。
+        # 先串行加载一次进内存，后续 mtime 命中 O(1)
+        try:
+            from fund_utils import _load_fund_trend_cache
+            _load_fund_trend_cache()
+        except Exception:
+            pass
+        # 缺失自选基金的当日涨跌批量预取：_score_one 命中 td_map 后跳过
+        # 逐只 fundgz（该接口已死，每次重试 2×timeout 很慢），收盘后走新浪批量
+        if td_map is None or not td_map:
+            try:
+                _td_map = _batch_fetch_estimates([f["code"] for f in _missing])
+            except Exception:
+                _td_map = {}
+        else:
+            _td_map = td_map
+        _miss_td = [f["code"] for f in _missing if f["code"] not in _td_map]
+        if _miss_td:
+            try:
+                _extra_td = _batch_fetch_estimates(_miss_td)
+                _td_map = {**_td_map, **_extra_td}
+            except Exception:
+                pass
 
         def _score_and_check(f: dict) -> dict | None:
             try:
-                _r = _score_one(f["code"], f.get("name", ""))
+                # 自选基金是用户手动加入的，必须始终出现在推荐表里，
+                # 不受筛选条件限制（否则不符合 m1≥5% 等条件的自选会被静默丢弃）。
+                # 只评分（含缺失收益维度的照常纳入），不应用 _FILTER_CONDITIONS 过滤。
+                _r = _score_one(f["code"], f.get("name", ""), td_map=_td_map)
                 if not _r:
                     return None
-                for _cond in _FILTER_CONDITIONS:
-                    _fld = _cond.get("field", "")
-                    _op = _cond.get("op", "gte")
-                    _val = _cond.get("value")
-                    if _val is None or _fld not in _RANK_FIELD_MAP:
-                        continue
-                    _raw = _r.get(_fld)
-                    if _raw is None:
-                        return None
-                    try:
-                        # f5 等字段是带 % 的字符串（如 "+10.0%"），统一去符号/百分号再比较
-                        _raw_num = float(str(_raw).replace("%", "").replace("+", ""))
-                        if _op == "gte" and not (_raw_num >= _val):
-                            return None
-                        elif _op == "lte" and not (_raw_num <= _val):
-                            return None
-                    except (ValueError, TypeError):
-                        return None
                 return _r
             except Exception:
                 return None
 
-        with ThreadPoolExecutor(max_workers=min(20, _total)) as _se:
-            _sfuts = {_se.submit(_score_and_check, f): f for f in _missing}
-            for _sf in as_completed(_sfuts):
-                _f = _sfuts[_sf]
-                _r = _sf.result()
-                _done_supp += 1
-                if _r:
-                    _extra.append(_r)
-                    print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
-                else:
-                    print(f"  ⏭️ {_f['code']} {_f.get('name','')[:12]} — 跳过")
-                if _done_supp % 5 == 0 or _done_supp == _total:
-                    update_heartbeat("fund_recommend", progress=_done_supp, total=_total,
-                                     overall_pct=max(97, 97 + int(_done_supp / _total * 2)),
-                                     phase="检查自选基金",
-                                     detail=f"补充自选基金 {_done_supp}/{_total}")
+        # 串行评分（自选基金数量少，一般 ≤50 只）。实测并发 20 在冷启动 SQLite
+        # 净值缓存时会因锁竞争+IO 风暴慢到 243s/24只，串行反而只要 3s——自选量小，
+        # 串行更稳更快。_score_one 命中 trend 缓存 + td_map 后单只 <0.1s。
+        for _f in _missing:
+            _r = _score_and_check(_f)
+            _done_supp += 1
+            if _r:
+                _extra.append(_r)
+                print(f"  ✅ {_f['code']} {_r['name']} — {_r['score']:.1f}分")
+            else:
+                print(f"  ⏭️ {_f['code']} {_f.get('name','')[:12]} — 跳过")
+            if _done_supp % 5 == 0 or _done_supp == _total:
+                update_heartbeat("fund_recommend", progress=_done_supp, total=_total,
+                                 overall_pct=max(97, 97 + int(_done_supp / _total * 2)),
+                                 phase="检查自选基金",
+                                 detail=f"补充自选基金 {_done_supp}/{_total}")
         if not _extra:
             return
         if base_results is not None:
@@ -1121,7 +1220,7 @@ def main() -> None:
 
                 print(f"\n💾 保存缓存结果...")
                 # 先补充自选基金再保存，确保最终数量与评分阶段一致
-                _supplement_self_selected(cached_results)
+                _supplement_self_selected(cached_results, td_map=td_map if _HAS_TD else None)
                 _final_count = len(cached_results)
                 update_heartbeat("fund_recommend", progress=_final_count, total=_final_count,
                                  overall_pct=97, phase="保存",
