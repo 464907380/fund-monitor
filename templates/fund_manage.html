@@ -1592,13 +1592,13 @@ setInterval(loadFeatures, 30000);
 
 var ALL_DIM_KEYS = ['y1','m3','m1','sharpe','win_rate','profit_ratio','sortino','recovery','sy6','sy3','max_dd','rate','scale','annual_return','institutional','f5','sy2','volatility','calmar','max_loss_days','td'];
 var DIM_INFO = {
-  'y1': {name:'近1年收益',desc:'近250个交易日净值复利收益',cat:'perf'},
+  'y1': {name:'近1年收益',desc:'近1个自然年净值复利收益(约243个交易日)',cat:'perf'},
   'm3': {name:'近3月收益',desc:'近66个交易日净值复利收益',cat:'perf'},
   'm1': {name:'近1月收益',desc:'近22个交易日净值复利收益',cat:'perf'},
   'f5': {name:'近一周收益',desc:'最近5个交易日净值复利收益',cat:'perf'},
-  'sy6': {name:'近6月收益',desc:'近125个交易日净值复利收益',cat:'perf'},
-  'sy2': {name:'近2年收益',desc:'近500个交易日净值复利收益',cat:'perf'},
-  'sy3': {name:'近3年收益',desc:'近750个交易日净值复利收益',cat:'perf'},
+  'sy6': {name:'近6月收益',desc:'近6个自然月净值复利收益(约119个交易日)',cat:'perf'},
+  'sy2': {name:'近2年收益',desc:'近2个自然年净值复利收益(约484个交易日)',cat:'perf'},
+  'sy3': {name:'近3年收益',desc:'近3个自然年净值复利收益(约728个交易日)',cat:'perf'},
   'annual_return': {name:'年化收益率',desc:'基于全部净值(约3年)的年化复合收益',cat:'perf'},
   'max_dd': {name:'最大回撤',desc:'基于全部净值(约3年)的最大回撤',cat:'risk'},
   'volatility': {name:'波动率',desc:'基于全部净值(约3年)的年化波动率',cat:'risk'},
@@ -2140,11 +2140,11 @@ async function resetDims() {
   const defaults = [
     {name:'近3月收益',key:'m3',weight:0.12,enabled:true,desc:'近66个交易日净值复利收益，中期趋势',curve:_defCurve('m3'),category:'perf'},
     {name:'近1月收益',key:'m1',weight:0.15,enabled:true,desc:'近22个交易日净值复利收益，捕捉短期动量',curve:_defCurve('m1'),category:'perf'},
-    {name:'近1年收益',key:'y1',weight:0.09,enabled:true,desc:'近250个交易日净值复利收益，反映一年表现',curve:_defCurve('y1'),category:'perf'},
+    {name:'近1年收益',key:'y1',weight:0.09,enabled:true,desc:'近1个自然年净值复利收益(约243个交易日)，反映一年表现',curve:_defCurve('y1'),category:'perf'},
     {name:'近一周收益',key:'f5',weight:0.03,enabled:true,desc:'最近5个交易日净值复利收益，捕捉短期动量',curve:_defCurve('f5'),category:'perf'},
-    {name:'近6月收益',key:'sy6',weight:0.06,enabled:true,desc:'近125个交易日净值复利收益',curve:_defCurve('sy6'),category:'perf'},
-    {name:'近2年收益',key:'sy2',weight:0.05,enabled:true,desc:'近500个交易日净值复利收益，填补中期维度',curve:_defCurve('sy2'),category:'perf'},
-    {name:'近3年收益',key:'sy3',weight:0.07,enabled:true,desc:'近750个交易日净值复利收益，看穿越牛熊能力',curve:_defCurve('sy3'),category:'perf'},
+    {name:'近6月收益',key:'sy6',weight:0.06,enabled:true,desc:'近6个自然月净值复利收益(约119个交易日)',curve:_defCurve('sy6'),category:'perf'},
+    {name:'近2年收益',key:'sy2',weight:0.05,enabled:true,desc:'近2个自然年净值复利收益(约484个交易日)，填补中期维度',curve:_defCurve('sy2'),category:'perf'},
+    {name:'近3年收益',key:'sy3',weight:0.07,enabled:true,desc:'近3个自然年净值复利收益(约728个交易日)，看穿越牛熊能力',curve:_defCurve('sy3'),category:'perf'},
     {name:'年化收益率',key:'annual_return',weight:0.04,enabled:true,desc:'基于全部净值(约3年)的年化复合收益',curve:_defCurve('annual_return'),category:'perf'},
     {name:'最大回撤',key:'max_dd',weight:0.10,enabled:true,desc:'基于全部净值(约3年)的最大回撤',curve:_defCurve('max_dd'),category:'risk'},
     {name:'波动率',key:'volatility',weight:0.03,enabled:true,desc:'基于全部净值(约3年)的年化波动率，衡量震荡幅度',curve:_defCurve('volatility'),category:'risk'},

@@ -2618,7 +2618,7 @@ _BUILTIN_PRESETS = {
             {"name":"近一周收益","key":"f5","weight":0.03,"enabled":True,"desc":"近五个交易日涨跌幅，捕捉短期动量","curve":{"points":[[0,0],[5,40],[10,60],[15,80],[20,100]]},"category":"perf"},
             {"name":"近6月收益","key":"sy6","weight":0.06,"enabled":True,"desc":"近六个月表现，补充近1年的中短期维度","curve":{"points":[[0,10],[20,50],[50,75],[100,100]]},"category":"perf"},
             {"name":"近2年收益","key":"sy2","weight":0.05,"enabled":True,"desc":"近两年精确收益，填补中期维度","curve":{"points":[[0,0],[30,20],[60,40],[100,70],[200,100]]},"category":"perf"},
-            {"name":"近3年收益","key":"sy3","weight":0.07,"enabled":True,"desc":"从净值数据取级750个交易日精确计算，看穿越牛熊能力","curve":{"points":[[0,0],[50,20],[100,40],[150,70],[300,100]]},"category":"perf"},
+            {"name":"近3年收益","key":"sy3","weight":0.07,"enabled":True,"desc":"近3个自然年净值复利收益（约728个交易日），看穿越牛熊能力","curve":{"points":[[0,0],[50,20],[100,40],[150,70],[300,100]]},"category":"perf"},
             {"name":"年化收益率","key":"annual_return","weight":0.04,"enabled":True,"desc":"基金成立以来年化回报","curve":{"points":[[0,0],[10,20],[20,50],[30,80],[60,100]]},"category":"perf"},
             {"name":"最大回撤","key":"max_dd","weight":0.10,"enabled":True,"desc":"历史最大跌幅","curve":{"points":[[0,90],[16.67,90],[20,86],[50,50],[75,20],[91.67,0]]},"category":"risk"},
             {"name":"波动率","key":"volatility","weight":0.03,"enabled":True,"desc":"年化波动率，衡量基金震荡幅度","curve":{"points":[[10,100],[20,80],[40,40],[60,0]]},"category":"risk"},

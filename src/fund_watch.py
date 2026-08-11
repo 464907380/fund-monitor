@@ -469,9 +469,9 @@ def get(code: str) -> dict:
         d["nav"] = full_nav
         metrics = _calc_nav_metrics(full_nav)
         d.update(metrics)
-        # 从净值数据计算近3年收益
-        d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3年（约250个交易日/年 × 3）
-        d["sy2"] = _calc_period_return(full_nav, 500)  # ≈2年
+        # 从净值数据计算近3年收益（自然日历口径，与排行API一致）
+        d["sy3"] = _calc_period_return(full_nav, 728)  # ≈3年（自然日1095天≈728个交易日）
+        d["sy2"] = _calc_period_return(full_nav, 484)  # ≈2年（自然日730天≈484个交易日）
     else:
         if nav := _parse_net_trend(data):
             d["nav"] = nav
@@ -565,8 +565,8 @@ def _required_nav_pages() -> int:
             from config import CFG
             if CFG.get("recommend", {}).get("skip_missing_perf", False):
                 # skip_missing_perf 检查的字段所需最少天数
-                _perf_lookback = {"m1": 22, "m3": 66, "y1": 250, "f5": 5,
-                                  "sy6": 125, "sy2": 500, "sy3": 750,
+                _perf_lookback = {"m1": 22, "m3": 66, "y1": 243, "f5": 6,
+                                  "sy6": 119, "sy2": 484, "sy3": 728,
                                   "annual_return": 250}
                 for _need in _perf_lookback.values():
                     if _need > max_days:
@@ -685,13 +685,13 @@ def get_scoring_data(code: str) -> dict:
             _m = _calc_nav_metrics(full_nav, lookback=_days) if _days else metrics
             for _dk in _window_dims:
                 d[f"{_dk}_{_lb}"] = _m.get(_dk)
-        # 从净值数据计算各阶段收益
+        # 从净值数据计算各阶段收益（自然日历口径：近1月=22交易日、近3月=66、近6月=119、近1年=243、近2年=484、近3年=728，与排行API一致）
         d["m1"] = _calc_period_return(full_nav, 22)    # ≈1月
         d["m3"] = _calc_period_return(full_nav, 66)    # ≈3月
-        d["y1"] = _calc_period_return(full_nav, 250)   # ≈1年
-        d["sy6"] = _calc_period_return(full_nav, 125)  # ≈6月
-        d["sy3"] = _calc_period_return(full_nav, 750)  # ≈3年（可能不够数据）
-        d["sy2"] = _calc_period_return(full_nav, 500)  # ≈2年
+        d["y1"] = _calc_period_return(full_nav, 243)   # ≈1年（自然日365天≈243交易日）
+        d["sy6"] = _calc_period_return(full_nav, 119)  # ≈6月（自然日182天≈119交易日）
+        d["sy3"] = _calc_period_return(full_nav, 728)  # ≈3年（自然日1095天≈728交易日）
+        d["sy2"] = _calc_period_return(full_nav, 484)  # ≈2年（自然日730天≈484交易日）
     else:
         d["nav"] = []
 
