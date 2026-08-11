@@ -1749,7 +1749,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         navs = d.get("nav", [])
                         td = d.get("td")
                         day_s = f"{td:+.2f}%" if td is not None else ""
-                        if len(navs) >= 5:
+                        if len(navs) >= 6:
+                            pct = (navs[-1]["v"] - navs[-6]["v"]) / navs[-6]["v"] * 100
+                            d["f5"] = f"{pct:+.1f}%"
+                        elif len(navs) >= 5:
                             pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
                             d["f5"] = f"{pct:+.1f}%"
                         row = {

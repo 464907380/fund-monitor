@@ -639,7 +639,11 @@ def _score_one(code: str, name: str, limit_amount: float | None = None,
         # 计算近一周涨跌幅（需在缺失检查前计算，因为 f5 不在原始数据中）
         navs = d.get("nav", [])
         f5_val = ""
-        if len(navs) >= 5:
+        if len(navs) >= 6:
+            # 近一周 = 最近5个交易日（与排行API口径一致，navs[-1]最新，往前第6个点即5个交易日前）
+            pct = (navs[-1]["v"] - navs[-6]["v"]) / navs[-6]["v"] * 100
+            f5_val = f"{pct:+.1f}%"
+        elif len(navs) >= 5:
             pct = (navs[-1]["v"] - navs[-5]["v"]) / navs[-5]["v"] * 100
             f5_val = f"{pct:+.1f}%"
         d["f5"] = f5_val
@@ -831,9 +835,11 @@ def _supplement_self_selected(base_results: list | None = None) -> None:
                     if _raw is None:
                         return None
                     try:
-                        if _op == "gte" and not (float(_raw) >= _val):
+                        # f5 等字段是带 % 的字符串（如 "+10.0%"），统一去符号/百分号再比较
+                        _raw_num = float(str(_raw).replace("%", "").replace("+", ""))
+                        if _op == "gte" and not (_raw_num >= _val):
                             return None
-                        elif _op == "lte" and not (float(_raw) <= _val):
+                        elif _op == "lte" and not (_raw_num <= _val):
                             return None
                     except (ValueError, TypeError):
                         return None
