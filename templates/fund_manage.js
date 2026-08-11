@@ -295,8 +295,11 @@ async function loadSavedTables() {
     }
   } catch(e) {}
   // 检查是否有推荐任务正在后台运行，有则恢复进度显示
+  // （仅限非终态心跳：完成/失败/进度满 100% 的残留心跳不应触发"推荐中"恢复）
   try {
-    if (hbR && hbR.ok && hbR.alive && hbR.alive.fund_recommend && hbR.heartbeats && hbR.heartbeats.fund_recommend) {
+    var recHbR = hbR && hbR.heartbeats && hbR.heartbeats.fund_recommend;
+    if (hbR && hbR.ok && hbR.alive && hbR.alive.fund_recommend && recHbR &&
+        recHbR.phase !== '完成' && recHbR.phase !== '失败' && (recHbR.overall_pct || 0) < 100) {
       _resumeRecommendProgress();
     }
   } catch(e) {}

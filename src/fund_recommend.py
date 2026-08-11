@@ -25,7 +25,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fund_utils import update_heartbeat, clear_heartbeat, _fetch_fund_estimate, setup_log, is_trading_day
 
-setup_log("recommend.log")
+# 注意：setup_log("recommend.log") 移到 __main__ 块调用，避免被 fund_server 以
+# from fund_recommend import ... 导入时误改服务器日志配置（服务器日志会混入 recommend.log）。
+# 这里仅保留模块导入，日志初始化在进程入口处执行。
 
 try:
     from fund_watch import log, fetch
@@ -1490,7 +1492,8 @@ def main() -> None:
             pass
         else:
             # 不传 total：保留前面保存阶段写入的实际基金数（避免覆盖成 1 导致前端显示"1只"）
-            update_heartbeat("fund_recommend", progress=1, overall_pct=100,
+            # 显式同步 status="完成"，覆盖启动时写入的"启动中"，避免前端读到矛盾状态误判仍在运行
+            update_heartbeat("fund_recommend", progress=1, overall_pct=100, status="完成",
                              phase="完成", detail="推荐完成", elapsed=_elapsed())
         if _timeout_count > 0:
             print(f"\n⚠️ 超时警告: {_timeout_count} 次请求超时")
@@ -1500,6 +1503,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # 进程入口才初始化日志（服务器 import 本模块时不改服务器日志配置）
+    setup_log("recommend.log")
     # CLI 参数处理
     if "--load" in sys.argv:
         results = _load_result()

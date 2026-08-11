@@ -1341,6 +1341,9 @@ def update_heartbeat(name: str, **kwargs) -> None:
         # 非完成/失败阶段时，overall_pct 不超过 99，防止前端误判完成
         if hb.get("phase") not in ("完成", "失败", "保存") and hb.get("overall_pct", 0) >= 100:
             hb["overall_pct"] = 99
+        # 终态(完成/失败)时同步 status，避免残留"启动中"等中间态导致前端误判仍在运行
+        if hb.get("phase") in ("完成", "失败") and hb.get("status") not in ("完成", "失败"):
+            hb["status"] = hb.get("phase")
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(hb, f)

@@ -193,7 +193,8 @@ def _spawn_recommend() -> bool:
         # stderr 重定向到文件（不用 DEVNULL），崩溃时保留 Traceback 便于诊断
         _err_f = open(os.path.join(_PROJECT_ROOT, "recommend_err.log"), "a", encoding="utf-8")
         proc = subprocess.Popen(
-            [sys.executable, script],
+            # 与服务器一致启用 -X utf8，避免子进程中文日志/输出在 GBK 控制台下编码崩溃
+            [sys.executable, "-X", "utf8", script],
             cwd=_SCRIPT_DIR,
             stdout=subprocess.DEVNULL,
             stderr=_err_f,
@@ -214,7 +215,7 @@ def _spawn_recommend() -> bool:
             if p.returncode != 0:
                 _err_msg = f"推荐进程异常退出(code={p.returncode})，请查看 recommend.log"
                 write_heartbeat("fund_recommend", progress=0, total=0, overall_pct=100,
-                                phase="失败", detail=_err_msg, error=_err_msg)
+                                phase="失败", status="失败", detail=_err_msg, error=_err_msg)
                 log.error("推荐进程异常退出: %s", _err_msg)
                 # 保留 30 秒再清除，给前端时间读取
                 threading.Timer(30, clear_heartbeat, ["fund_recommend"]).start()
