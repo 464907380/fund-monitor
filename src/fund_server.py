@@ -1897,6 +1897,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         log.warning("fund-table 超时: %d/%d 只完成", _fund_td_done, len(_fund_list_for_progress))
                 clear_heartbeat("fund-td-refresh")
 
+                # 收盘后实际净值已采集 → 进程内 td 缓存落盘，供跨进程/重启复用（首屏不再逐只请求）
+                try:
+                    from fund_utils import flush_td_cache
+                    flush_td_cache()
+                except Exception:
+                    pass
+
                 # 按 fund_list 原始顺序排序
                 order = {f["code"]: i for i, f in enumerate(fund_list)}
                 rows.sort(key=lambda r: order.get(r["code"], 999))
@@ -2840,7 +2847,73 @@ def _init_builtin_presets(cfg: dict) -> None:
 
 
 def _background_refresh_recommend_cache():
-    """后台线程：每 60 秒刷新一次推荐表缓存，确保始终温暖。"""
+    """后台线程：启动立即预热关键缓存，之后每 60 秒刷新一次推荐表缓存确保温暖。
+    预热内容：①磁盘缓存(名称索引/净值走势/估算误差)载入进程内
+    ②自选基金持仓+合并行情填充行情缓存(60s复用,首屏不再逐只拉新浪)
+    ③推荐表缓存(读文件渲染,快)。避免重启后首屏冷启动等 1-2 分钟。"""
+    # 启动立即预热一次，不等 60s
+    try:
+        # 1. 磁盘缓存 → 进程内（秒级，避免首屏逐只读盘/首次下载）
+        from fund_utils import _load_fund_name_index, _load_fund_trend_cache, _load_est_error
+        _load_fund_name_index()
+        _load_fund_trend_cache()
+        _load_est_error()
+        # 2. 自选基金持仓 + 合并行情，填充 _stock_quote_cache(60s)
+        try:
+            from fund_watch import _parse_holdings, _fetch_stock_quotes_batch
+            _fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
+            _codes: list[str] = []
+            if os.path.exists(_fl_path):
+                with open(_fl_path, encoding="utf-8") as _f:
+                    _codes = [x.get("code") for x in json.load(_f) if x.get("code")]
+            if _codes:
+                _all_sina: list[str] = []
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as _pe:
+                    _hfs = {_pe.submit(_parse_holdings, _c): _c for _c in _codes}
+                    for _hf in concurrent.futures.as_completed(_hfs):
+                        try:
+                            for _hh in (_hf.result() or []):
+                                if _hh.get("c"):
+                                    _all_sina.append(("sh" if _hh.get("m") == "sh" else "sz") + _hh["c"])
+                        except Exception:
+                            pass
+                if _all_sina:
+                    _fetch_stock_quotes_batch(_all_sina)
+        except Exception:
+            log.warning("启动预热: 自选行情预取失败", exc_info=True)
+        # 3. 预热推荐表缓存（读文件渲染，快）
+        from fund_render import _web_rich_recommend_table, _load_saved_recommend_data
+        _saved = _load_saved_recommend_data()
+        if _saved:
+            _rec_f = os.path.join(_PROJECT_ROOT, ".fund_recommend_result.json")
+            _rec_mtime = os.path.getmtime(_rec_f) if os.path.exists(_rec_f) else 0
+            _recommend_table_cache["data"] = {"html": _web_rich_recommend_table(_saved), "mtime": _rec_mtime, "time": time.time()}
+            log.info("启动预热: 推荐表缓存 %d 只", len(_saved))
+        else:
+            _recommend_table_cache["data"] = None
+        # 4. 收盘后(≥15:00)预取自选基金当日实际净值(lsjz)，写入 td 缓存，
+        #    首屏 fund-table 直接命中缓存，不再每只实时请求 LSJZ
+        try:
+            from fund_watch import _parse_real_time
+            from fund_utils import flush_td_cache
+            import datetime as _dt
+            if _dt.datetime.now().hour >= 15:
+                _fl_path = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
+                _codes2: list[str] = []
+                if os.path.exists(_fl_path):
+                    with open(_fl_path, encoding="utf-8") as _f:
+                        _codes2 = [x.get("code") for x in json.load(_f) if x.get("code")]
+                if _codes2:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as _pe2:
+                        list(_pe2.map(_parse_real_time, _codes2))
+                    flush_td_cache()  # 进程内缓存落盘，供跨进程/重启复用
+                    log.info("启动预热: 自选 td 已预取 %d 只并落盘", len(_codes2))
+        except Exception:
+            log.warning("启动预热: 自选 td 预取失败", exc_info=True)
+        log.info("启动预热完成")
+    except Exception:
+        log.warning("启动预热失败", exc_info=True)
+    # 之后每 60 秒刷新推荐表缓存
     while True:
         time.sleep(60)
         try:

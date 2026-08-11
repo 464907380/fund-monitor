@@ -187,14 +187,22 @@ _RETRY_BACKOFF = CFG.get("network", {}).get("retry_backoff_seconds", [1, 3, 8])
 # ── 域名级限速器（防止触发 API 频率限制） ──────
 _RATE_LIMIT_DELAY = CFG.get("network", {}).get("rate_limit_delay", 0.3)
 _last_request_time: dict[str, float] = {}
-_rate_limit_lock = threading.Lock()
+_domain_locks: dict[str, threading.Lock] = {}  # 每域名一把锁，不同域名可并行
+_rate_limit_guard = threading.Lock()  # 仅保护 _domain_locks 字典本身（不参与 sleep）
 
 
 def _rate_limit_domain(url: str) -> None:
-    """对同一域名施加最小请求间隔，防止触发 API 频率限制（如东方财富 514）"""
+    """对同一域名施加最小请求间隔，防止触发 API 频率限制（如东方财富 514）。
+    不同域名各自独立限速（互不阻塞），避免全局锁把多域名并发请求串行化。"""
     from urllib.parse import urlparse
     domain = urlparse(url).hostname or "unknown"
-    with _rate_limit_lock:
+    # 取该域名的专属锁（不同域名并行，同一域名才串行）
+    with _rate_limit_guard:
+        _lock = _domain_locks.get(domain)
+        if _lock is None:
+            _lock = threading.Lock()
+            _domain_locks[domain] = _lock
+    with _lock:
         last = _last_request_time.get(domain, 0.0)
         now = time.time()
         elapsed = now - last
@@ -434,6 +442,28 @@ def flush_td_cache() -> None:
         pass
 
 
+def _get_td_lsjz_cache(code: str) -> float | None:
+    """读取当日实际净值(lsjz)缓存：进程内 → 磁盘。仅收盘后固定值，返回 None 未缓存。"""
+    _today = datetime.date.today().isoformat()
+    _c = _TD_PROC.get(code)
+    if _c and _c.get("date") == _today and _c.get("src") == "lsjz":
+        return _c["td"]
+    try:
+        _d = _load_td_cache().get(code)
+        if _d and _d.get("date") == _today and _d.get("src") == "lsjz":
+            _TD_PROC[code] = _d
+            return _d["td"]
+    except Exception:
+        pass
+    return None
+
+
+def _set_td_lsjz_cache(code: str, td: float) -> None:
+    """写入当日实际净值(lsjz)缓存到进程内（跨进程落盘由 flush_td_cache 统一处理）"""
+    _today = datetime.date.today().isoformat()
+    _TD_PROC[code] = {"date": _today, "td": round(float(td), 2), "src": "lsjz"}
+
+
 def _fetch_fund_estimate(code: str) -> tuple[str, float, str] | None:
     """获取基金当日涨跌幅（带当天缓存）。
 
@@ -599,6 +629,7 @@ def _fetch_actual_nav_pct(code: str, date: str) -> float | None:
     _url = (f"https://api.fund.eastmoney.com/f10/lsjz"
             f"?callback=j&fundCode={code}&pageIndex=1&pageSize=20")
     try:
+        _rate_limit_domain(_url)  # 域名限速，避免并发打爆 LSJZ
         _req = urllib.request.Request(_url, headers={
             "User-Agent": "Mozilla/5.0", "Referer": "https://fund.eastmoney.com/"})
         with urllib.request.urlopen(_req, timeout=get_timeout("default", 10)) as _r:
@@ -638,7 +669,9 @@ def _probe_latest_nav_date(code: str) -> str | None:
 def settle_estimate_errors() -> None:
     """结算估算误差：对已有估算记录的日期（含今天）每只基金独立并行拉实际净值算差异。
     净值已出的基金结算，未出的保留待下次——每只独立判断，
-    不会因某只基金净值未发布而耽误其它已发布的基金（如不同基金发布时间不同）。幂等。"""
+    不会因某只基金净值未发布而耽误其它已发布的基金（如不同基金发布时间不同）。幂等。
+    优化：结算前先探测今日净值是否发布——收盘后净值通常晚上才出，若未发布则跳过
+    今日全部结算（避免对数千只基金无效请求占满网络，拖慢 fund-table 首屏）。"""
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         with _EST_ERROR_LOCK:
@@ -650,6 +683,27 @@ def settle_estimate_errors() -> None:
             for _d, _day_map in list(_est_map.items()):
                 for _code, _est in list(_day_map.items()):
                     _tasks[(_d, _code)] = _est
+            if not _tasks:
+                return
+            # 净值日期探测：若今日净值普遍未发布（收盘后，最新净值日期 < 今天），
+            # 跳过今日任务的结算，仅结算历史日期——避免数千无效请求占满网络。
+            _today = datetime.date.today().isoformat()
+            _hist = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d < _today}
+            _today_tasks = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d >= _today}
+            if _today_tasks:
+                _probe_codes = list(dict.fromkeys(_c for (_d, _c) in _today_tasks))[:3]
+                _today_ready = False
+                for _pc in _probe_codes:
+                    try:
+                        _ld = _probe_latest_nav_date(_pc)
+                        if _ld and _ld >= _today:
+                            _today_ready = True
+                            break
+                    except Exception:
+                        pass
+                # 今日未发布 → 仅结算历史；已发布 → 连同今日一起结算
+                if not _today_ready:
+                    _tasks = _hist
             if not _tasks:
                 return
             _settled: dict[tuple[str, str], float] = {}

@@ -148,13 +148,21 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
     来源: lsjz=实际净值, holdings=持仓估算
     交易日: 优先今日实际净值，无今日净值时用持仓估算
     非交易日: 只用实际净值（最近一次净值），不做持仓估算
+    收盘后(≥15:00) lsjz 实际净值是当天固定值 → 命中当天缓存直接返回，避免每只基金实时请求。
     """
     import urllib.request, re as _re, datetime
-    from fund_utils import is_trading_day
+    from fund_utils import is_trading_day, _get_td_lsjz_cache, _set_td_lsjz_cache
 
     now = datetime.datetime.now()
     today_str = now.strftime("%Y-%m-%d")
     is_trading = is_trading_day(now.date())
+    after_market = now.hour >= 15
+
+    # 收盘后：实际净值固定值，命中当天缓存直接返回（避免重启后首屏每只实时请求 LSJZ）
+    if after_market:
+        _cached_td = _get_td_lsjz_cache(code)
+        if _cached_td is not None:
+            return (_cached_td, "lsjz")
 
     # 查 LSJZ 实际净值（今日有净值则用今日；非交易日返回最近净值）
     try:
@@ -165,9 +173,12 @@ def _parse_real_time(code: str) -> tuple[float | None, str]:
         m_date = _re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', gz_data)
         m_val = _re.search(r'"JZZZL":"([-+\d.]+)"', gz_data)
         if m_date and m_val:
-            # 今日有实际净值（收盘后）→ 净值
+            # 今日有实际净值（收盘后）→ 净值，并缓存当天固定值
             if m_date.group(1) == today_str:
-                return (float(m_val.group(1)), "lsjz")
+                _v = float(m_val.group(1))
+                if after_market:
+                    _set_td_lsjz_cache(code, _v)
+                return (_v, "lsjz")
             # 非交易日 → 返回最近净值，不做估算
             if not is_trading:
                 return (float(m_val.group(1)), "lsjz")
