@@ -15,6 +15,13 @@ server.log
 recommend.log
 recommend_err.log
 
+# 运行日志轮转备份（RotatingFileHandler 生成的 .1/.2/.3）
+fund_watch.log.*
+monitor.log.*
+server.log.*
+recommend.log.*
+recommend_err.log.*
+
 # 节假日 API 缓存（自动生成）
 .holiday_cache.json
 
