@@ -1368,6 +1368,35 @@ def write_heartbeat(name: str, **kwargs) -> None:
         log.debug("写入心跳失败 %s: %s", name, e)
 
 
+# 心跳诊断：记录每进程内各心跳的 phase/写入时间，用于日志输出"阶段切换"与
+# "长时间无更新"。前端卡在已完成阶段 = 心跳两次更新间隔长，靠此日志定位。
+_heartbeat_log: dict[str, dict] = {}
+_heartbeat_log_lock = threading.Lock()
+
+
+def _log_heartbeat_progress(name: str, hb: dict) -> None:
+    """输出心跳推进日志：阶段切换记 INFO，同一阶段长时间无更新记 WARNING。
+    仅推荐任务(fund_recommend)，避免 monitor 等低频心跳刷屏。"""
+    _phase = str(hb.get("phase", ""))
+    _overall = hb.get("overall_pct")
+    _elapsed = hb.get("elapsed")
+    _now = time.time()
+    with _heartbeat_log_lock:
+        _prev = _heartbeat_log.get(name)
+        _heartbeat_log[name] = {"phase": _phase, "overall": _overall, "t": _now}
+        if _prev is None:
+            log.info("心跳[%s] 开始: 阶段=%s overall=%s%% elapsed=%s", name, _phase, _overall, _elapsed)
+            return
+        _gap = _now - _prev["t"]
+        if _prev.get("phase") != _phase:
+            log.info("心跳[%s] 阶段 %s(%s%%) -> %s(%s%%) 累计%s, 距上次更新%.1fs",
+                     name, _prev.get("phase"), _prev.get("overall"), _phase, _overall, _elapsed, _gap)
+        elif _gap > 30:
+            # 同一阶段长时间无进度更新 → 前端会显示"卡住"，指向该阶段网络/IO 阻塞
+            log.warning("心跳[%s] 阶段 %s(%s%%) 已%.1fs无更新(累计%s) —— 前端可能显示卡住, 检查该阶段网络/IO",
+                        name, _phase, _overall, _gap, _elapsed)
+
+
 def update_heartbeat(name: str, **kwargs) -> None:
     """更新心跳中的 progress/status 等字段，不重置 start/pid"""
     _ensure_heartbeat_dir()
@@ -1387,6 +1416,12 @@ def update_heartbeat(name: str, **kwargs) -> None:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(hb, f)
         os.replace(tmp, path)
+        # 心跳诊断日志（仅推荐任务）
+        if name == "fund_recommend":
+            try:
+                _log_heartbeat_progress(name, hb)
+            except Exception:
+                pass
     except Exception as e:
         log.debug("更新心跳失败 %s: %s", name, e)
 
