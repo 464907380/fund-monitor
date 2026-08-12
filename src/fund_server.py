@@ -296,12 +296,28 @@ def _refresh_recommend_days(_saved: list[dict]) -> None:
                     r["day"] = f"{_td:+.2f}%"
                     r["td"] = _td
                     r["_td_src"] = _td_src or r.get("_td_src", "")
+                    # 用最新涨跌重算分数: 评分含"当日涨跌"维度, 若沿用推荐时的旧涨跌(昨日)
+                    # 分数/排名会失真。今日净值已出用净值, 未出用今日估算, 均通过 td 反映。
+                    try:
+                        from fund_scoring import calc_score_detail
+                        _sc, _det, _skip = calc_score_detail(r)
+                        r["score"] = _sc
+                        r["score_detail"] = _det  # 市场优选TOP弹窗
+                        r["_score_detail"] = _det  # 自选表弹窗
+                        r["_skipped_weight"] = _skip
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=get_config("network", "max_workers", "server_recommend_table", default=20)) as _ex:
             list(_ex.map(_refresh_one, _top))
+        # 按最新分数重排 TOP N，使排名反映今日涨跌
+        try:
+            _saved[:_show_n] = sorted(_saved[:_show_n], key=lambda x: x.get("score", 0), reverse=True)
+        except Exception:
+            pass
     except Exception:
         pass
 

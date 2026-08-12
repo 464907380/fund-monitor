@@ -19,7 +19,8 @@ class TestFetch(unittest.TestCase):
         mock_retry.return_value = '{"key": "value"}'
         result = fetch("https://example.com/api")
         self.assertEqual(result, '{"key": "value"}')
-        mock_retry.assert_called_once_with("https://example.com/api", None)  # headers 默认 None
+        # headers 默认 None；retry_max/timeout 默认 None（fetch 透传给 _retry_fetch）
+        mock_retry.assert_called_once_with("https://example.com/api", None, retry_max=None, timeout=None)
 
     @patch("fund_utils._retry_fetch")
     def test_fetch_cache_hit(self, mock_retry):
