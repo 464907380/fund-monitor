@@ -250,21 +250,48 @@ _FUND_LIST_PATH = os.path.join(_PROJECT_ROOT, "data", "fund_list.json")
 
 
 def _refresh_recommend_days(_saved: list[dict]) -> None:
-    """盘中刷新市场优选表涨跌为今日实时估算（推荐结果文件是静态快照）。
-    仅交易时段 9:00–15:00 生效，并发刷新 TOP N（show_top）只；
-    盘后/非交易日保持快照（推荐结果里的净值/昨日），不额外发请求。"""
+    """刷新市场优选表涨跌为当日实时估算（推荐结果文件是静态快照）。
+    交易时段(9:00-15:00): 用 _parse_real_time(净值缓存/持仓估算)。
+    收盘后净值未发布: 直接用持仓估算(今日最终行情)，不查 LSJZ(避免无效请求占满网络)，
+    前端标"估算"而非"昨日"；净值已发布则切回净值快照(lsjz)，不再估算。
+    非交易日/盘前保持快照。"""
     try:
-        from fund_utils import is_trading_day
-        from fund_watch import _parse_real_time
+        from fund_utils import is_trading_day, _probe_latest_nav_date, record_estimate
+        from fund_watch import _parse_real_time, _estimate_from_holdings
         _now = datetime.datetime.now()
-        if not (is_trading_day(_now.date()) and 9 <= _now.hour < 15):
-            return
+        if not is_trading_day(_now.date()) or _now.hour < 9:
+            return  # 非交易日/盘前：保持快照(最近净值/昨日)
         _show_n = int(CFG.get("recommend", {}).get("show_top", 20))
         _top = list(_saved)[:_show_n]
+        _is_intraday = _now.hour < 15
+        _nav_ready = False
+        if not _is_intraday:
+            # 收盘后：探测今日净值是否已普遍发布（发布则切净值快照，未发布则估算）
+            try:
+                _today = datetime.date.today().isoformat()
+                for _r in _top[:3]:
+                    if _r.get("code"):
+                        _ld = _probe_latest_nav_date(_r["code"])
+                        if _ld and _ld >= _today:
+                            _nav_ready = True
+                            break
+            except Exception:
+                _nav_ready = True  # 探测失败按已发布处理，避免持续无效探测
 
         def _refresh_one(r: dict) -> None:
             try:
-                _td, _td_src = _parse_real_time(r.get("code", ""))
+                _code = r.get("code", "")
+                if _is_intraday or _nav_ready:
+                    # 盘中 / 净值已发布：_parse_real_time(lsjz缓存优先，其次估算/净值)
+                    _td, _td_src = _parse_real_time(_code)
+                else:
+                    # 收盘后净值未发布：直接用持仓估算（不查 LSJZ），记录估算供结算对比
+                    _est = _estimate_from_holdings(_code)
+                    if _est is not None:
+                        record_estimate(_code, _est)
+                        _td, _td_src = _est, "holdings"
+                    else:
+                        _td, _td_src = None, ""
                 if _td is not None:
                     r["day"] = f"{_td:+.2f}%"
                     r["td"] = _td
