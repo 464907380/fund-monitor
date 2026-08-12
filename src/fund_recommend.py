@@ -1185,14 +1185,9 @@ def main() -> None:
                 _cands = _filter_candidates(_rows)
                 print(f"   ✅ 排行初筛: {len(_cands)} 只 ({time.time()-_t2:.1f}s)")
                 _new_cands = [c for c in _cands if c["code"] not in _base_set]
-                # 放宽筛选时新增候选可能上千(如 m1>=5 → 1271 只), 逐只冷评分网络密集耗时数分钟。
-                # 只评分排行靠前的 N 只(_cands 按 rank_sort 排序, 默认近1年收益降序)大幅提速:
-                # 市场优选 TOP 按评分取前50, 排行靠后的基金挤进高分 TOP 概率极低, 影响可忽略。
-                # 阈值用 config.json recommend.max_new_score 调整(默认400)。
-                _max_new = get_config("recommend", "max_new_score", default=400)
-                if len(_new_cands) > _max_new:
-                    log.info("refilter: 新增候选 %d 只>上限 %d, 只评分排行前 %d 只", len(_new_cands), _max_new, _max_new)
-                    _new_cands = _new_cands[:_max_new]
+                # 注意: 放宽筛选必须评分全部新增候选(用户要看到所有符合筛选条件的基金),
+                # 不能只评分排行靠前的 N 只——否则排行靠后但评分高的基金永远不会出现,
+                # 放宽筛选就失去意义。数量大时慢是放宽筛选的固有成本。
                 print(f"   ➕ 新增需评分: {len(_new_cands)} 只 (复用已评分 {len(_base)} 只)")
                 log.info("refilter: 旧过滤%d只, 排行初筛%d只, 新增需评分%d只", len(_base), len(_cands), len(_new_cands))
                 _scored_new: list[dict] = []
