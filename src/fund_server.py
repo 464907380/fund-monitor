@@ -810,6 +810,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 hb = read_all_heartbeats()
                 alive = {k: is_heartbeat_alive(k, 1800) for k in hb}
+                # 残留心跳防护: fund_recommend 若没有实际运行的推荐进程(本server未跟踪)且
+                # 心跳>300s未更新, 判为残留(进程已退出/外部写入)并清除——否则前端会一直
+                # 显示"推荐中/卡住"(如推荐进程被强杀/诊断脚本直接写心跳后退出)。
+                # 正在运行的推荐(含孤儿)会高频更新心跳, 不会误清。
+                if "fund_recommend" in hb:
+                    _rec_running = bool(_recommend_state.get("proc") and _recommend_state["proc"].poll() is None)
+                    if not _rec_running and heartbeat_age("fund_recommend") > 300:
+                        log.warning("清理残留推荐心跳(无运行进程且>300s未更新)")
+                        clear_heartbeat("fund_recommend")
+                        hb.pop("fund_recommend", None)
+                        alive.pop("fund_recommend", None)
                 brief_path = os.path.join(_PROJECT_ROOT, ".briefing_fund.html")
                 brief_mtime = os.path.getmtime(brief_path) if os.path.exists(brief_path) else 0
                 self._send(*_json_response({"ok": True, "heartbeats": hb, "alive": alive, "briefing_mtime": brief_mtime}))
