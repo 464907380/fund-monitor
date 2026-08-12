@@ -736,6 +736,22 @@ def _save_result(results: list[dict]) -> bool:
     if not results:
         print("\n⚠️ 未找到匹配基金，保留上次结果")
         return False
+    # 最终校验：按评分口径的指标值再应用一次筛选条件，保证保存的结果（市场优选 TOP 表
+    # 的数据源）严格满足筛选条件。初筛用的是排名接口 m1（口径可能与评分 m1 略有差异，
+    # 如 005618/005619 排名 m1≥10 但评分 m1=9.4）；且自选基金补充不再豁免，否则
+    # 不符合 m1≥10 等条件的自选会混进 TOP 表（显示负收益却在"市场优选TOP"里）。
+    # _filter_scored_results 对缺失值(None)判不通过 → 自选/无数据基金同样被过滤，
+    # 它们仍会出现在「自选表」中，只是不进市场优选 TOP。
+    if _FILTER_CONDITIONS:
+        _filtered = _filter_scored_results(results)
+        _dropped = len(results) - len(_filtered)
+        if _dropped:
+            print(f"   🔍 最终筛选: 剔除 {_dropped} 只不符合条件({[c.get('field')+str(c.get('op'))+str(c.get('value')) for c in _FILTER_CONDITIONS]})的基金, 保留 {len(_filtered)} 只")
+            log.info("最终筛选剔除 %d 只(条件 %s), 保留 %d 只", _dropped, _FILTER_CONDITIONS, len(_filtered))
+        results = _filtered
+    if not results:
+        print("\n⚠️ 最终筛选后无匹配基金，保留上次结果")
+        return False
     # 清理残留锁文件（超过5分钟）
     lock_file = _RESULT_FILE + ".lock"
     try:
