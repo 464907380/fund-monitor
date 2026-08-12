@@ -537,10 +537,8 @@ function loadMarketIndices() {
       }
     }
     timeEl.textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    // 加载分时折线图
+    // 加载分时折线图（K线由独立低频定时器刷新，不随指数更新连带，避免频繁请求）
     _renderMarketSparklines();
-    // 加载30日K线
-    _renderMarketKlines();
   }).catch(function(){});
 }
 /** 渲染大盘分时折线图 */
@@ -874,17 +872,17 @@ loadMarketIndices();
     // 从服务端恢复偏好设置
     _loadPrefs();
     if (_isTradingTime) {
-      _marketTimer = setInterval(loadMarketIndices, 60000);
-      // 折线图/30日K线单独刷新（更频繁，不依赖大盘指数API）
+      _marketTimer = setInterval(loadMarketIndices, 30000);   // 大盘涨跌(指数) 30s 更新
+      // 分时折线 30s；30日K线低频(5分钟)即可，避免频繁请求
       setInterval(_renderMarketSparklines, 30000);
-      setInterval(_renderMarketKlines, 60000);
+      setInterval(_renderMarketKlines, 300000);
     } else if (d.next_check_seconds > 0) {
       setTimeout(function(){
         _isTradingTime = true;
         loadMarketIndices();
-        _marketTimer = setInterval(loadMarketIndices, 60000);
+        _marketTimer = setInterval(loadMarketIndices, 30000);
         setInterval(_renderMarketSparklines, 30000);
-        setInterval(_renderMarketKlines, 60000);
+        setInterval(_renderMarketKlines, 300000);
       }, d.next_check_seconds * 1000);
     }
   }).catch(function(){
