@@ -905,6 +905,59 @@ def _score_one(code: str, name: str, limit_amount: float | None = None,
         return None
 
 
+# ── 评分诊断统计（线程安全，供"运行推荐慢"快速定位：慢基金/缓存命中率/均耗时）──
+_score_stats_lock = threading.Lock()
+_score_stats: dict = {
+    "total": 0, "ok": 0, "fail": 0, "cache_hit": 0,
+    "cost_sum": 0.0, "slow": [],  # [(code, name, secs)] 单只>3s
+}
+
+
+def _score_one_timed(code: str, name: str, limit_amount: float | None = None,
+                     td_map: dict | None = None) -> dict | None:
+    """评分单只并记录诊断统计(耗时/缓存命中/慢基金)，返回 _score_one 结果。
+    慢基金(>3s)单独告警，便于定位是哪些基金拖慢评分。"""
+    _hit = False
+    try:
+        from fund_utils import _get_fund_trend_navs
+        _hit = len(_get_fund_trend_navs(code) or []) >= 250  # 走趋势缓存(≥250条)视为命中
+    except Exception:
+        pass
+    _t0 = time.time()
+    _r = _score_one(code, name, limit_amount, td_map)
+    _dt = time.time() - _t0
+    with _score_stats_lock:
+        _score_stats["total"] += 1
+        if _hit:
+            _score_stats["cache_hit"] += 1
+        if _r:
+            _score_stats["ok"] += 1
+            _score_stats["cost_sum"] += _dt
+        else:
+            _score_stats["fail"] += 1
+        if _dt > 3:
+            _score_stats["slow"].append((code, (name or "")[:10], round(_dt, 1)))
+    if _dt > 3:
+        log.warning("评分慢(%.1fs): %s %s", _dt, code, name)
+    return _r
+
+
+def _log_score_stats(label: str) -> None:
+    """输出评分诊断统计汇总（成功/失败/缓存命中率/均耗时/最慢基金）"""
+    with _score_stats_lock:
+        _s = dict(_score_stats)
+        _slow = sorted(_s["slow"], key=lambda x: -x[2])[:8]
+        _score_stats["slow"].clear()
+    _tot = _s["total"]
+    if not _tot:
+        return
+    _hit_rate = _s["cache_hit"] / _tot * 100
+    _avg = _s["cost_sum"] / _s["ok"] if _s["ok"] else 0
+    _slow_txt = " ".join(f"{c}({t}s)" for c, _, t in _slow) if _slow else "无"
+    log.info("%s 评分统计: 共%d 成功%d 失败%d 缓存命中%d(%.0f%%) 均%.2fs/只 慢基金[%s]",
+             label, _tot, _s["ok"], _s["fail"], _s["cache_hit"], _hit_rate, _avg, _slow_txt)
+
+
 def _re_score_and_refresh(cached_results: list[dict], total_candidates: int) -> None:
     """用当前权重重新评分 + 刷新涨跌（复用缓存数据）"""
     from fund_scoring import _calc_score as _calc_score2
@@ -1176,20 +1229,24 @@ def main() -> None:
                 log.info("refilter: 复用 %d 只已评分基金重新筛选", total_candidates)
                 update_heartbeat("fund_recommend", progress=0, total=1, overall_pct=5,
                                  phase="重新筛选", detail=f"过滤 {total_candidates} 只已评分基金", elapsed=_elapsed())
+                _t_old = time.time()
                 _base = _filter_scored_results(cached_results)
                 _base_set = {r["code"] for r in _base}
-                print(f"   ✅ 旧结果按新条件过滤: {len(_base)} 只 ({_elapsed()}s)")
+                _dt_old = time.time() - _t_old
+                print(f"   ✅ 旧结果按新条件过滤: {len(_base)} 只 ({_dt_old:.1f}s)")
                 # 从排行 API 初筛当前条件全部候选，找出需新增评分的
                 _t2 = time.time()
                 _rows = _fetch_rank_list(_TOP)
                 _cands = _filter_candidates(_rows)
-                print(f"   ✅ 排行初筛: {len(_cands)} 只 ({time.time()-_t2:.1f}s)")
+                _dt_cands = time.time() - _t2
+                print(f"   ✅ 排行初筛: {len(_cands)} 只 ({_dt_cands:.1f}s)")
                 _new_cands = [c for c in _cands if c["code"] not in _base_set]
                 # 注意: 放宽筛选必须评分全部新增候选(用户要看到所有符合筛选条件的基金),
                 # 不能只评分排行靠前的 N 只——否则排行靠后但评分高的基金永远不会出现,
                 # 放宽筛选就失去意义。数量大时慢是放宽筛选的固有成本。
                 print(f"   ➕ 新增需评分: {len(_new_cands)} 只 (复用已评分 {len(_base)} 只)")
-                log.info("refilter: 旧过滤%d只, 排行初筛%d只, 新增需评分%d只", len(_base), len(_cands), len(_new_cands))
+                log.info("refilter: 旧过滤%d只(%.1fs), 排行初筛%d只(%.1fs), 新增需评分%d只, 累计%.1fs",
+                         len(_base), _dt_old, len(_cands), _dt_cands, len(_new_cands), _elapsed())
                 _scored_new: list[dict] = []
                 if _new_cands:
                     _t3 = time.time()
@@ -1210,9 +1267,9 @@ def main() -> None:
                     except Exception:
                         pass
                     _td_prefetch = _batch_fetch_estimates([c["code"] for c in _new_cands], pct_base=30)
-                    log.info("refilter: 批量预取新增涨跌完成 %d 只", len(_td_prefetch))
+                    log.info("refilter: 批量预取新增涨跌完成 %d 只 (%.1fs)", len(_td_prefetch), time.time() - _t3)
                     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as _ex:
-                        _futs = {_ex.submit(_score_one, c["code"], c["name"], c.get("_limit_amount"), _td_prefetch): c for c in _new_cands}
+                        _futs = {_ex.submit(_score_one_timed, c["code"], c["name"], c.get("_limit_amount"), _td_prefetch): c for c in _new_cands}
                         for _i, _f in enumerate(as_completed(_futs), 1):
                             _rr = _f.result()
                             if _rr:
@@ -1223,6 +1280,7 @@ def main() -> None:
                                 update_heartbeat("fund_recommend", progress=_i, total=len(_new_cands),
                                                  overall_pct=30 + int(_pp * 0.6), phase="评分",
                                                  detail=f"评分新增 {_i}/{len(_new_cands)} ({_pp}%)", elapsed=_elapsed())
+                    _log_score_stats("refilter 评分")
                     print(f"   ✅ 新增评分完成: {len(_scored_new)} 只 ({time.time()-_t3:.1f}s)")
                     log.info("refilter: 新增评分完成 %d 只 (%.1fs)", len(_scored_new), time.time() - _t3)
                 _combined = _base + _scored_new
@@ -1385,7 +1443,7 @@ def main() -> None:
             print(f"   ⚠️ 预取失败(评分兜底重试): {_pf_exc}", flush=True)
 
         with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as executor:
-            futs = {executor.submit(_score_one, c["code"], c["name"], c.get("_limit_amount"), _td_prefetch): c for c in candidates}
+            futs = {executor.submit(_score_one_timed, c["code"], c["name"], c.get("_limit_amount"), _td_prefetch): c for c in candidates}
             for i, fut in enumerate(as_completed(futs), 1):
                 c = futs[fut]
                 result = fut.result()
@@ -1412,6 +1470,7 @@ def main() -> None:
                                  detail=f"评分 {i}/{total} ({pct:.0f}%) {_cur_code} {_cur_name[:10]} · {_cur_cost:.0f}s/{_rate:.1f}只/秒",
                                  elapsed=_elapsed())
 
+        _log_score_stats("阶段4/5 评分")
         log.info("阶段4/5 完成: 评分 %d/%d 成功 (%d 只无数据跳过) (%.1fs)", len(scored), total, total - len(scored), time.time() - _t4)
 
         # ── 排序保存 ──
