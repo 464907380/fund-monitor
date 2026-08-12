@@ -376,7 +376,7 @@ def setup_log(name: str) -> None:
     try:
         _handlers.insert(0, RotatingFileHandler(
             os.path.join(HISTORY_DIR, name),
-            maxBytes=5 * 1024 * 1024, backupCount=3,
+            maxBytes=2 * 1024 * 1024, backupCount=3,
         ))
     except OSError:
         pass
@@ -390,7 +390,7 @@ def setup_log(name: str) -> None:
 try:
     _handlers.insert(0, RotatingFileHandler(
         os.path.join(HISTORY_DIR, _log_name),
-        maxBytes=5 * 1024 * 1024, backupCount=3,
+        maxBytes=2 * 1024 * 1024, backupCount=3,
     ))
 except OSError:
     pass  # 日志目录不可写时只用控制台输出
@@ -474,6 +474,33 @@ def _cache_evict() -> None:
     log.debug("缓存清理: 过期 %d, 当前 %d 条", len(expired), len(_cache))
 
 
+# 请求失败日志限频：同一 URL 在窗口内只打一条 WARNING，避免 403/限流等
+# 重复失败刷屏（如新浪行情对部分标的稳定返回 403，每轮每只都打会撑爆日志）。
+_req_fail_log: dict[str, tuple[float, int]] = {}
+_req_fail_log_lock = threading.Lock()
+_REQ_FAIL_LOG_WINDOW = 300.0   # 同一 URL 5 分钟内最多打 1 条 WARNING
+_REQ_FAIL_LOG_MAX = 512        # 防止 dict 无限膨胀（超限整体清空）
+
+
+def _log_request_failure(url: str, retries: int, err: Exception) -> None:
+    """失败日志限频：窗口内同 URL 只打第一条 WARNING，后续重复失败静默累计计数。"""
+    now = time.time()
+    with _req_fail_log_lock:
+        if len(_req_fail_log) > _REQ_FAIL_LOG_MAX:
+            _req_fail_log.clear()
+        prev = _req_fail_log.get(url)
+        if prev is None or now - prev[0] >= _REQ_FAIL_LOG_WINDOW:
+            count = (prev[1] if prev else 0) + 1
+            _req_fail_log[url] = (now, count)
+            if count > 1:
+                log.warning("请求失败 %s (已重试 %d 次, 近5分钟已累计失败 %d 次) %s",
+                            url, retries, count, err)
+            else:
+                log.warning("请求失败 %s (已重试 %d 次) %s", url, retries, err)
+        else:
+            _req_fail_log[url] = (prev[0], prev[1] + 1)
+
+
 def _request_with_retry(req: urllib.request.Request, decode: bool = True,
                         retry_max: int | None = None,
                         timeout: float | None = None) -> str | bytes | None:
@@ -499,7 +526,7 @@ def _request_with_retry(req: urllib.request.Request, decode: bool = True,
             if attempt < _rmax:
                 wait = _RETRY_BACKOFF[min(attempt - 1, len(_RETRY_BACKOFF) - 1)]
                 time.sleep(wait)
-    log.warning("请求失败 %s (已重试 %d 次) %s", req.full_url, _rmax, last_err)
+    _log_request_failure(req.full_url, _rmax, last_err)
     return None
 
 

@@ -18,7 +18,7 @@ import logging
 
 # 同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, heartbeat_age, HISTORY_DIR, setup_log, _get_fund_name, _get_fund_trend_navs, _set_fund_trend_navs
+from fund_utils import read_all_heartbeats, read_heartbeat, is_heartbeat_alive, write_heartbeat, update_heartbeat, clear_heartbeat, heartbeat_age, is_trading_day, HISTORY_DIR, setup_log, _get_fund_name, _get_fund_trend_navs, _set_fund_trend_navs
 from config import CFG, api_url, get_timeout, get_config
 
 log = logging.getLogger("fund_server")
@@ -2854,6 +2854,55 @@ def _background_refresh_recommend_cache():
             pass
 
 
+_MONITOR_STALE_SECONDS = 1800  # 盘中时段监控心跳超过 30 分钟未更新 → 判定卡死
+
+
+def _kill_pid(pid: int) -> None:
+    """强制结束指定进程（Windows taskkill）"""
+    try:
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                       capture_output=True, timeout=10)
+    except Exception:
+        pass
+
+
+def _watch_monitor_task() -> None:
+    """守护盘中监控：进程消失则拉起；盘中时段心跳长期不更新则判定卡死并重启。
+
+    仅监控"进程消失"会漏掉卡死（进程还在但已不工作），因此结合心跳年龄判断：
+    监控盘中每轮更新心跳（fund_monitor 主循环 update_heartbeat），心跳 mtime
+    长时间不动说明监控卡死。只查交易活跃时段（9:30-11:30, 13:00-15:00），
+    避开午休/盘前盘后监控合法的长睡眠（wait_until_next_trading 不更新心跳）。
+    """
+    while True:
+        time.sleep(60)
+        try:
+            if not _task_pid_alive("fund_monitor"):
+                _spawn_task("fund_monitor")
+                continue
+            # 进程存活：仅交易活跃时段检查心跳卡死
+            _now = datetime.datetime.now()
+            if not is_trading_day(_now.date()):
+                continue
+            _t = _now.time()
+            _active = (datetime.time(9, 30) <= _t < datetime.time(11, 30)) or \
+                      (datetime.time(13, 0) <= _t < datetime.time(15, 0))
+            if not _active:
+                continue
+            _age = heartbeat_age("fund_monitor")
+            if _age > _MONITOR_STALE_SECONDS:
+                _hb = read_heartbeat("fund_monitor")
+                _pid = int(_hb["pid"]) if _hb and _hb.get("pid") else 0
+                log.warning("监控心跳 %.0f 秒未更新(盘中活跃时段), 判定卡死, 重启(PID=%s)...", _age, _pid)
+                if _pid:
+                    _kill_pid(_pid)
+                time.sleep(3)
+                if not _task_pid_alive("fund_monitor"):
+                    _spawn_task("fund_monitor")
+        except Exception:
+            pass
+
+
 def main():
     setup_log("server.log")
     # 清理上次残留的心跳（monitor 心跳保留，用于防重复启动判断）
@@ -2862,6 +2911,8 @@ def main():
     # 自动启动盘中监控（若已有 monitor 进程在运行则跳过，避免多次重启 server 累积重复 monitor）
     if not _task_pid_alive("fund_monitor"):
         _spawn_task("fund_monitor")
+    # 守护盘中监控（进程消失/盘中心跳卡死自动拉起）
+    threading.Thread(target=_watch_monitor_task, daemon=True).start()
     # 后台线程刷新推荐表缓存
     threading.Thread(target=_background_refresh_recommend_cache, daemon=True).start()
     host = get_config("server", "host", default="0.0.0.0")

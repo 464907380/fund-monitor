@@ -12,7 +12,7 @@ import os
 import time
 import re
 from config import CFG, api_url, get_secret
-from fund_utils import fetch, fetch_bytes, log, is_trading_day, write_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html, setup_log
+from fund_utils import fetch, fetch_bytes, log, is_trading_day, write_heartbeat, update_heartbeat, clear_heartbeat, _fetch_fund_estimate, send_wechat, send_mail_html, parse_sina_csv, _strip_html, setup_log
 
 setup_log("monitor.log")
 from fund_watch import FUND_LIST, _parse_holdings, _ensure_fund_list_loaded
@@ -733,6 +733,9 @@ def monitor() -> None:
 
         # 持久化状态快照（进程崩溃恢复用）
         _save_snapshot(states, stock_states, today, empty_rounds, hold_loaded)
+
+        # 更新心跳（供服务器守护判断是否卡死：盘中每轮刷新 mtime）
+        update_heartbeat("fund_monitor", status="盘中轮询中")
 
         # 等待到下一轮
         time.sleep(POLL_INTERVAL)
