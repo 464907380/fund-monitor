@@ -131,7 +131,9 @@ def api_market_trends() -> dict:
 
 
 def api_market_kline() -> dict:
-    """大盘指数30日K线（含成交量，用于画日K蜡烛图）"""
+    """大盘指数30日K线（含成交量，用于画日K蜡烛图）。
+    新浪日K接口(scale=240)当日/盘中不含未收盘的今日日K → 用今日5分钟K合成一根
+    "今日日K"(O/H/L/C/成交量聚合)追加，使图上出现今天。非交易日无今日5分钟K则不加。"""
     try:
         symbols = [
             ("sh000001", "上证指数"),
@@ -154,6 +156,26 @@ def api_market_kline() -> dict:
                     "c": float(p.get("close", 0)),
                     "v": float(p.get("volume", 0)),
                 })
+            # 今日日K缺失 → 用今日5分钟K合成今日日K追加
+            _today = datetime.date.today().isoformat()
+            if not klines or klines[-1]["d"] != _today:
+                try:
+                    url5 = (f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+                            f"CN_MarketData.getKLineData?symbol={sym}&scale=5&ma=no&datalen=120")
+                    raw5 = fetch(url5)
+                    d5 = json.loads(raw5)
+                    _bars = [p for p in d5 if p.get("day", "").startswith(_today) and p.get("open")]
+                    if _bars:
+                        klines.append({
+                            "d": _today,
+                            "o": float(_bars[0]["open"]),
+                            "h": max(float(p["high"]) for p in _bars),
+                            "l": min(float(p["low"]) for p in _bars),
+                            "c": float(_bars[-1]["close"]),
+                            "v": sum(float(p.get("volume", 0) or 0) for p in _bars),
+                        })
+                except Exception:
+                    pass  # 5分钟K失败则维持原状(无今日)
             result.append({"name": name, "symbol": sym, "klines": klines})
         return {"ok": True, "klines": result}
     except Exception as e:
