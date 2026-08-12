@@ -139,59 +139,61 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
           盘中(9:30-15:00) → 持仓估算 "holdings"
           其余/失败 → 新浪昨日 "fallback"
         """
-        # 收盘后：先查当天 td 缓存（实际净值 lsjz，或批量预取的昨日 fallback），
-        # 命中直接返回——避免 refresh 模式对 1733 只候选逐只发多个请求。
+        # 收盘后：先查当天 td 缓存（实际净值 lsjz），命中直接返回
         if is_after_market:
             try:
-                from fund_utils import _get_td_lsjz_cache, _TD_PROC
+                from fund_utils import _get_td_lsjz_cache
                 _cached_td = _get_td_lsjz_cache(code)
                 if _cached_td is not None:
                     return (code, _cached_td, "lsjz")
-                # 批量预取的 fallback=昨日，仅当今日净值普遍未发布时才可命中；
-                # 若探测到今日已发布（_today_nav_ready），该基金可能也有今日净值，
-                # 不能用昨日 fallback 顶替（否则市场优选会显示"昨日"涨跌）——
-                # 下方统一走 LSJZ 逐只查询今日，查不到今日再回退 fallback。
-                if not _today_nav_ready:
-                    _pe = _TD_PROC.get(code)
-                    if _pe and _pe.get("date") == today_str and _pe.get("src") == "fallback" and _pe.get("td") is not None:
-                        return (code, _pe["td"], "fallback")
             except Exception:
                 pass
-            # 今日净值普遍未发布 → 跳过 LSJZ 逐只查询，直接走新浪昨日（下方统一处理）
-            if not _today_nav_ready:
-                pass
-            else:
-                try:
-                    _url_lsjz = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
-                    _req_lsjz = urllib.request.Request(_url_lsjz, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(_req_lsjz, timeout=get_timeout("default", 6)) as _r:
-                        _lsjz_data = _r.read().decode("utf-8")
-                    _m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', _lsjz_data)
-                    _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
-                    if _m_date and _m_val:
-                        # 今日有实际净值 → 当日净值，写入缓存供同天复用
-                        if _m_date.group(1) == today_str:
-                            try:
-                                from fund_utils import _set_td_lsjz_cache
-                                _set_td_lsjz_cache(code, float(_m_val.group(1)))
-                            except Exception:
-                                pass
-                            return (code, float(_m_val.group(1)), "lsjz")
-                        # 今日无净值（非交易日/节假日）→ 返回最近净值，与自选表一致（不降级到新浪昨日）
-                        if not is_trading_day(datetime.date.today()):
-                            return (code, float(_m_val.group(1)), "lsjz")
-                except Exception:
-                    pass
-        # 盘中(9:30-15:00)：优先持仓估算（与自选表"估算"一致）
+        # 需用"今日持仓估算"：盘中(9:30-15:00) 或 收盘后今日净值未发布(交易日内)。
+        # 收盘后净值未发布时优先持仓估算而非新浪昨日，避免修改筛选重跑后市场优选表
+        # 出现大量"昨日"涨跌。
         _now2 = datetime.datetime.now()
-        if (9, 30) <= (_now2.hour, _now2.minute) < (15, 0):
+        _need_est = ((9, 30) <= (_now2.hour, _now2.minute) < (15, 0)
+                     or (is_after_market and not _today_nav_ready and is_trading_day(datetime.date.today())))
+        if _need_est:
             try:
                 from fund_watch import _estimate_from_holdings
                 from fund_utils import record_estimate
                 _est = _estimate_from_holdings(code)
                 if _est is not None:
-                    record_estimate(code, _est)  # 记录盘中估算，供收盘后对比实际净值
+                    record_estimate(code, _est)  # 记录估算，供收盘后对比实际净值
                     return (code, _est, "holdings")
+            except Exception:
+                pass
+        # 收盘后：今日净值已发布 → LSJZ 逐只查询今日净值
+        if is_after_market and _today_nav_ready:
+            try:
+                _url_lsjz = f"https://api.fund.eastmoney.com/f10/lsjz?callback=j&fundCode={code}&pageIndex=1&pageSize=1"
+                _req_lsjz = urllib.request.Request(_url_lsjz, headers={"Referer": "https://fund.eastmoney.com/", "User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(_req_lsjz, timeout=get_timeout("default", 6)) as _r:
+                    _lsjz_data = _r.read().decode("utf-8")
+                _m_date = re.search(r'FSRQ":"(\d{4}-\d{2}-\d{2})"', _lsjz_data)
+                _m_val = re.search(r'"JZZZL":"([-+\d.]+)"', _lsjz_data)
+                if _m_date and _m_val:
+                    # 今日有实际净值 → 当日净值，写入缓存供同天复用
+                    if _m_date.group(1) == today_str:
+                        try:
+                            from fund_utils import _set_td_lsjz_cache
+                            _set_td_lsjz_cache(code, float(_m_val.group(1)))
+                        except Exception:
+                            pass
+                        return (code, float(_m_val.group(1)), "lsjz")
+                    # 今日无净值（非交易日/节假日）→ 返回最近净值，与自选表一致（不降级到新浪昨日）
+                    if not is_trading_day(datetime.date.today()):
+                        return (code, float(_m_val.group(1)), "lsjz")
+            except Exception:
+                pass
+        # 收盘后净值未发布：批量预取的昨日 fallback 兜底（持仓估算失败时）
+        if is_after_market and not _today_nav_ready:
+            try:
+                from fund_utils import _TD_PROC
+                _pe = _TD_PROC.get(code)
+                if _pe and _pe.get("date") == today_str and _pe.get("src") == "fallback" and _pe.get("td") is not None:
+                    return (code, _pe["td"], "fallback")
             except Exception:
                 pass
         try:
@@ -225,11 +227,12 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
     _total_gz = len(codes)
     _start_gz = time.time()
     _last_hb_pct = -1
-    # 盘中预取合并行情：并行收集所有候选持仓，合并股票一次性批量拉行情填缓存，
-    # 之后各基金 _estimate_from_holdings 命中缓存（_fetch_stock_quotes_batch 60s缓存），
-    # 避免每只候选单独重复拉持仓/行情
-    _is_intraday = (9, 30) <= (now.hour, now.minute) < (15, 0)
-    if _is_intraday and codes:
+    # 预取合并行情（盘中 或 收盘后净值未发布都要持仓估算）：并行收集所有候选持仓，
+    # 合并股票一次性批量拉行情填缓存，之后各基金 _estimate_from_holdings 命中缓存
+    # （_fetch_stock_quotes_batch 60s缓存），避免每只候选单独重复拉持仓/行情
+    _needs_est = ((9, 30) <= (now.hour, now.minute) < (15, 0)
+                  or (is_after_market and not _today_nav_ready and is_trading_day(datetime.date.today())))
+    if _needs_est and codes:
         try:
             from fund_watch import _parse_holdings, _fetch_stock_quotes_batch
             _all_sina: list[str] = []
