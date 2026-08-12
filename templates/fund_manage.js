@@ -1834,6 +1834,124 @@ async function saveMonitorConfig() {
   }
   if (btn) btn.disabled = false;
 }
+
+// ── 推送配置（邮件多收件人 + 企业微信 webhook） ──────────────
+function openPushConfig() {
+  var old = document.getElementById('pushConfigModal');
+  if (old) old.remove();
+  var el = document.createElement('div');
+  el.id = 'pushConfigModal';
+  el.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;';
+  el.innerHTML =
+    '<div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:18px;width:520px;max-width:94vw;max-height:84vh;overflow-y:auto;font-size:13px;color:#ccc;box-shadow:0 8px 30px rgba(0,0,0,0.5);">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
+    + '<div style="font-size:15px;font-weight:600;color:#e0e0e0;">📮 推送配置</div>'
+    + '<button onclick="closePushConfig()" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;">✕</button></div>'
+    + '<div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;">邮件由 QQ 邮箱 SMTP 发送（发件人/授权码在 <code>.env</code> 的 QQ_EMAIL / QQ_MAIL_AUTH，此处仅配收件人，可填多个）；微信通过企业微信群机器人 webhook 推送。保存后点「发送测试」验证。</div>'
+    + '<div id="pcStatus" style="font-size:11px;margin-bottom:8px;">加载中...</div>'
+    + '<div style="font-weight:600;color:#ccc;margin:8px 0 4px;">📧 收件邮箱（多个收件人）</div>'
+    + '<div id="pcRecipients"></div>'
+    + '<button onclick="addRecipientRow()" style="margin-top:6px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;padding:4px 10px;font-size:12px;cursor:pointer;">＋ 添加邮箱</button>'
+    + '<div style="font-weight:600;color:#ccc;margin:12px 0 4px;">💬 企业微信 Webhook</div>'
+    + '<input id="pcWebhook" type="text" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ccc;padding:6px 8px;font-family:Consolas;font-size:12px;box-sizing:border-box;">'
+    + '<div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap;">'
+    + '<button onclick="savePushConfig()" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:6px 16px;font-size:12px;cursor:pointer;">💾 保存</button>'
+    + '<button onclick="testPushConfig()" style="background:linear-gradient(135deg,#66bb6a,#43a047);border:none;border-radius:6px;color:#fff;padding:6px 16px;font-size:12px;cursor:pointer;">🚀 发送测试</button>'
+    + '<span id="pcSaveStatus" style="font-size:11px;color:#888;"></span></div></div>';
+  document.body.appendChild(el);
+  loadPushConfig();
+}
+function closePushConfig() {
+  var el = document.getElementById('pushConfigModal');
+  if (el) el.remove();
+}
+function setPcStatus(text, color) {
+  var s = document.getElementById('pcStatus');
+  if (s) { s.textContent = text; s.style.color = color || '#888'; }
+}
+function addRecipientRow(email) {
+  var box = document.getElementById('pcRecipients');
+  if (!box) return;
+  var row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-top:4px;';
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'you@qq.com';
+  input.value = email || '';
+  input.style.cssText = 'flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#ccc;padding:5px 8px;font-family:Consolas;font-size:12px;';
+  var del = document.createElement('button');
+  del.textContent = '✕';
+  del.title = '移除';
+  del.style.cssText = 'background:#333;border:1px solid #555;border-radius:4px;color:#ef5350;padding:3px 8px;font-size:11px;cursor:pointer;';
+  del.onclick = function() { row.remove(); };
+  row.appendChild(input);
+  row.appendChild(del);
+  box.appendChild(row);
+}
+async function loadPushConfig() {
+  setPcStatus('加载中...');
+  try {
+    var r = await fetch(API + '/api/push-config');
+    var d = await r.json();
+    if (!d.ok || !d.config) { setPcStatus('✖ 加载失败', '#ef5350'); return; }
+    var cfg = d.config;
+    var recs = cfg.email_recipients || [];
+    if (!recs.length) recs = [''];
+    var box = document.getElementById('pcRecipients');
+    box.innerHTML = '';
+    recs.forEach(function(em) { addRecipientRow(em); });
+    var wh = document.getElementById('pcWebhook');
+    if (wh) wh.value = cfg.wechat_webhook || '';
+    var msgs = [];
+    if (cfg.smtp_configured) msgs.push('SMTP ✅ 已配置');
+    else msgs.push('SMTP ⚠️ 未配置（需 .env 的 QQ_EMAIL/QQ_MAIL_AUTH）');
+    if (cfg.wechat_webhook || cfg.wechat_env_configured) msgs.push('微信 ✅ webhook 可用');
+    else msgs.push('微信 ⚠️ 未配置 webhook');
+    setPcStatus(msgs.join(' · '));
+  } catch(e) { setPcStatus('✖ 加载失败', '#ef5350'); }
+}
+async function savePushConfig() {
+  var recs = [];
+  document.querySelectorAll('#pcRecipients input').forEach(function(inp) {
+    var v = inp.value.trim();
+    if (v) recs.push(v);
+  });
+  var webhook = (document.getElementById('pcWebhook') || {}).value || '';
+  var status = document.getElementById('pcSaveStatus');
+  if (status) { status.textContent = '保存中...'; status.style.color = '#888'; }
+  try {
+    var r = await fetch(API + '/api/push-config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email_recipients: recs, wechat_webhook: webhook}),
+    });
+    var d = await r.json();
+    if (status) {
+      status.textContent = d.ok ? '✔ 已保存' : '✖ ' + (d.error || '保存失败');
+      status.style.color = d.ok ? '#66bb6a' : '#ef5350';
+    }
+  } catch(e) {
+    if (status) { status.textContent = '✖ 保存失败'; status.style.color = '#ef5350'; }
+  }
+}
+async function testPushConfig() {
+  var status = document.getElementById('pcSaveStatus');
+  if (status) { status.textContent = '发送中...'; status.style.color = '#888'; }
+  try {
+    var r = await fetch(API + '/api/push-config/test', { method: 'POST' });
+    var d = await r.json();
+    if (!d.ok) {
+      if (status) { status.textContent = '✖ ' + (d.error || '测试失败'); status.style.color = '#ef5350'; }
+      return;
+    }
+    var parts = (d.results || []).map(function(t) {
+      var label = t.channel === 'mail' ? '📧 邮件' : '💬 微信';
+      return t.ok ? (label + ' ✅') : (label + ' ❌ ' + (t.error || '失败'));
+    });
+    if (status) { status.textContent = parts.join('　'); status.style.color = '#ccc'; }
+  } catch(e) {
+    if (status) { status.textContent = '✖ 测试失败'; status.style.color = '#ef5350'; }
+  }
+}
 function addFilterCondition(field, op, value) {
   var condDiv = document.getElementById('filterConditions');
   if (!condDiv) return;

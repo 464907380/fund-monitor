@@ -542,8 +542,9 @@ input, select, button { font-family: inherit; outline: none; }
           </select>
         </div>
       </div>
-      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button onclick="saveMonitorConfig()" style="background:linear-gradient(135deg,#42a5f5,#1e88e5);border:none;border-radius:6px;color:#fff;padding:6px 16px;font-size:12px;cursor:pointer;">💾 保存阈值</button>
+        <button onclick="openPushConfig()" style="background:linear-gradient(135deg,#7e57c2,#5e35b1);border:none;border-radius:6px;color:#fff;padding:6px 16px;font-size:12px;cursor:pointer;">📮 推送配置</button>
         <span id="mcSaveStatus" style="font-size:11px;color:#888;"></span>
       </div>
     </div>

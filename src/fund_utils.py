@@ -1293,16 +1293,49 @@ def backfill_estimate_errors(days: int = 10) -> int:
 
 # ── 推送 ──────────────────────────────────────
 
+def _push_config() -> dict:
+    """实时读取推送配置(config.json 的 push 节)，不走进程内缓存（前端可能刚改过）"""
+    try:
+        _p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "config.json")
+        with open(_p, encoding="utf-8") as _f:
+            return json.load(_f).get("push", {})
+    except Exception:
+        return {}
+
+
+def _push_email_recipients() -> list[str]:
+    """收件邮箱列表：优先 config.json push.email_recipients，空则回退发件邮箱"""
+    _recs = [str(r).strip() for r in (_push_config().get("email_recipients") or []) if str(r).strip()]
+    if not _recs:
+        _qq = get_secret("QQ_EMAIL")
+        if _qq:
+            _recs = [_qq]
+    return _recs
+
+
+def _push_wechat_webhook() -> str:
+    """企业微信 webhook：优先 config.json push.wechat_webhook，回退 env WECHAT_WEBHOOK"""
+    return str(_push_config().get("wechat_webhook") or get_secret("WECHAT_WEBHOOK") or "").strip()
+
+
 def _send_smtp(msg: MIMEText) -> None:
-    """发送 SMTP 邮件（QQ 邮箱）"""
+    """发送 SMTP 邮件（QQ 邮箱发件，收件人=配置的多个邮箱）"""
     qq_email = get_secret("QQ_EMAIL")
     qq_auth = get_secret("QQ_MAIL_AUTH")
+    recipients = _push_email_recipients()
+    if not qq_email or not qq_auth:
+        log.debug("QQ_EMAIL 或 QQ_MAIL_AUTH 未配置，邮件推送跳过")
+        return
+    if not recipients:
+        log.debug("未配置收件邮箱，邮件推送跳过")
+        return
+    msg["To"] = ", ".join(recipients)
     s = None
     try:
         s = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=get_timeout("smtp", 10))
         s.login(qq_email, qq_auth)
-        s.sendmail(qq_email, [qq_email], msg.as_string())
-        log.info("邮件发送成功")
+        s.sendmail(qq_email, recipients, msg.as_string())
+        log.info("邮件发送成功 -> %s", ", ".join(recipients))
     except Exception as e:
         log.error("邮件发送失败: %s", e)
     finally:
@@ -1315,7 +1348,7 @@ def _send_smtp(msg: MIMEText) -> None:
 
 def send_wechat(content: str, markdown: bool = True) -> bool:
     """发送企业微信消息"""
-    webhook = get_secret("WECHAT_WEBHOOK")
+    webhook = _push_wechat_webhook()
     if not webhook:
         return False
     msgtype = "markdown" if markdown else "text"
@@ -1343,7 +1376,7 @@ def send_mail(subject: str, text: str) -> None:
         return
     msg = MIMEText(text, "plain", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
-    msg["From"] = msg["To"] = qq_email
+    msg["From"] = qq_email
     _send_smtp(msg)
 
 
@@ -1356,7 +1389,7 @@ def send_mail_html(subject: str, html: str) -> None:
         return
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = Header(subject, "utf-8")  # type: ignore[assignment]
-    msg["From"] = msg["To"] = qq_email
+    msg["From"] = qq_email
     _send_smtp(msg)
 
 # ── 心跳监控（运行状态追踪） ──────────────────

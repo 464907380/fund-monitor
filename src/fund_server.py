@@ -1532,6 +1532,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
 
+        if parsed.path == "/api/push-config":
+            try:
+                from config import get_secret
+                with open(_CONFIG_PATH, encoding="utf-8") as _fpc:
+                    _pc_cfg = json.load(_fpc)
+                _push = _pc_cfg.get("push", {})
+                self._send(*_json_response({
+                    "ok": True,
+                    "config": {
+                        "email_recipients": _push.get("email_recipients", []),
+                        "wechat_webhook": _push.get("wechat_webhook", ""),
+                        "smtp_configured": bool(get_secret("QQ_EMAIL") and get_secret("QQ_MAIL_AUTH")),
+                        "wechat_env_configured": bool(get_secret("WECHAT_WEBHOOK")),
+                    }
+                }))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
         if parsed.path == "/api/recommend-table":
             """返回市场优选全维度表格 HTML（实时拉取 TOP N 基金数据）"""
             _trigger_settle_estimates()  # 后台结算估算误差（幂等）
@@ -2213,6 +2232,46 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 })
                 _write_config(cfg)
                 self._send(*_json_response({"ok": True, "message": "监控配置已更新"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/push-config":
+            try:
+                with open(_CONFIG_PATH, encoding="utf-8") as _fpc:
+                    cfg = json.load(_fpc)
+                push = cfg.setdefault("push", {})
+                _recs = body.get("email_recipients")
+                if _recs is not None:
+                    push["email_recipients"] = [str(r).strip() for r in _recs if str(r).strip()]
+                if "wechat_webhook" in body:
+                    push["wechat_webhook"] = str(body.get("wechat_webhook") or "").strip()
+                _write_config(cfg)
+                self._send(*_json_response({"ok": True, "message": "推送配置已保存"}))
+            except Exception as e:
+                self._send(*_json_response({"ok": False, "error": str(e)}, 500))
+            return
+
+        if self.path == "/api/push-config/test":
+            try:
+                from fund_utils import send_wechat, send_mail
+                from config import get_secret
+                _tests: list[dict] = []
+                # 邮件测试：配置存在则实际发送一封
+                _smtp_ok = bool(get_secret("QQ_EMAIL") and get_secret("QQ_MAIL_AUTH"))
+                if _smtp_ok:
+                    try:
+                        send_mail("基金监控测试", "这是一条测试推送，用于验证收件邮箱配置。收到即表示邮件推送正常。")
+                        _tests.append({"channel": "mail", "ok": True, "note": "已触发发送，请检查收件邮箱"})
+                    except Exception as _e:
+                        _tests.append({"channel": "mail", "ok": False, "error": str(_e)})
+                else:
+                    _tests.append({"channel": "mail", "ok": False, "error": "SMTP 未配置(QQ_EMAIL/QQ_MAIL_AUTH)"})
+                # 微信测试：webhook 存在则实际发送
+                _wc_ok = send_wechat("基金监控测试：微信推送配置验证成功 🎉")
+                _tests.append({"channel": "wechat", "ok": _wc_ok,
+                               "error": "" if _wc_ok else "webhook 未配置或推送失败"})
+                self._send(*_json_response({"ok": True, "results": _tests}))
             except Exception as e:
                 self._send(*_json_response({"ok": False, "error": str(e)}, 500))
             return
