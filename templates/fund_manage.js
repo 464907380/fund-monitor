@@ -2059,33 +2059,15 @@ function showScoreDetail(items) {
   // 按权重降序排列
   items = items.slice().sort(function(a,b){ return b[2] - a[2]; });
   var html = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;margin:8px 0;font-size:12px;color:#ccc;max-height:80vh;overflow-y:auto;">'
-    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">\u7ef4\u5ea6\u8bc4\u5206\u660e\u7ec6</div>'
-    + '<div style="margin-bottom:10px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;">';
-  var maxContrib = 0;
-  items.forEach(function(item){ var c = item[2] * item[1]; if (c > maxContrib) maxContrib = c; });
+    + '<div style="font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:10px;">\u7ef4\u5ea6\u8bc4\u5206\u660e\u7ec6</div>';
   var total = 0, weightSum = 0;
   items.forEach(function(item){
-    var name = item[0], score = item[1], weight = item[2], value = item[3];
+    var weight = item[2], value = item[3], score = item[1];
     var contrib = (value === null || value === undefined) ? 50 * weight : score * weight;
     total += contrib; weightSum += weight;
-    var barPct = maxContrib > 0 ? (contrib / maxContrib * 100) : 0;
-    var scoreColor = score >= 80 ? '#66bb6a' : score >= 40 ? '#ffa726' : '#ef5350';
-    var barColor = score >= 80 ? 'rgba(102,187,106,0.4)' : score >= 40 ? 'rgba(255,167,38,0.4)' : 'rgba(239,83,80,0.4)';
-    var valStr = value !== null && value !== undefined ? (typeof value === 'number' ? value.toFixed(2) : value) : '-';
-    var barHtml = '<div style="display:flex;align-items:center;gap:6px;margin:2px 0;">'
-      + '<div style="flex:0 0 80px;text-align:right;color:#888;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;" title="' + (item[4] || name) + '">' + name + '</div>'
-      + '<div style="flex:1;height:14px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;position:relative;">'
-      + '<div style="width:' + barPct.toFixed(0) + '%;height:100%;background:' + barColor + ';border-radius:3px;"></div>'
-      + '</div>'
-      + '<div style="flex:0 0 28px;text-align:right;font-family:Consolas;font-size:10px;font-weight:600;color:' + scoreColor + ';">' + score.toFixed(0) + '</div>'
-      + '<div style="flex:0 0 28px;text-align:right;font-family:Consolas;font-size:10px;color:#888;">' + (weight * 100).toFixed(0) + '%</div>'
-      + '<div style="flex:0 0 36px;text-align:right;font-family:Consolas;font-size:10px;color:#888;">' + contrib.toFixed(1) + '</div>'
-      + '</div>';
-    html += barHtml;
   });
   var normTotal = weightSum > 0 ? (total / weightSum).toFixed(1) : '0.0';
-  html += '</div>'
-    + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
     + '<thead><tr style="background:#2a2a2a;"><th style="padding:4px 6px;text-align:left;color:#888;border-bottom:1px solid #444;">\u7ef4\u5ea6</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u503c</th>'
     + '<th style="padding:4px 6px;text-align:right;color:#888;border-bottom:1px solid #444;">\u5f97\u5206</th>'
