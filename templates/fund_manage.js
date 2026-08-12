@@ -1847,7 +1847,7 @@ function openPushConfig() {
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
     + '<div style="font-size:15px;font-weight:600;color:#e0e0e0;">📮 推送配置</div>'
     + '<button onclick="closePushConfig()" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;">✕</button></div>'
-    + '<div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;">邮件由 QQ 邮箱 SMTP 发送（发件人/授权码在 <code>.env</code> 的 QQ_EMAIL / QQ_MAIL_AUTH，此处仅配收件人，可填多个）；微信通过企业微信群机器人 webhook 推送。保存后点「发送测试」验证。</div>'
+    + '<div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;">邮件由 QQ 邮箱 SMTP 发送（发件人/授权码在 <code>.env</code> 的 QQ_EMAIL / QQ_MAIL_AUTH）。下方默认显示<b>当前实际生效</b>的配置：未显式配置收件人时回退到发件邮箱，微信 webhook 未在配置文件中填写时回退 <code>.env</code> 的 WECHAT_WEBHOOK。保存后即固化到配置文件。</div>'
     + '<div id="pcStatus" style="font-size:11px;margin-bottom:8px;">加载中...</div>'
     + '<div style="font-weight:600;color:#ccc;margin:8px 0 4px;">📧 收件邮箱（多个收件人）</div>'
     + '<div id="pcRecipients"></div>'
@@ -1895,18 +1895,23 @@ async function loadPushConfig() {
     var d = await r.json();
     if (!d.ok || !d.config) { setPcStatus('✖ 加载失败', '#ef5350'); return; }
     var cfg = d.config;
-    var recs = cfg.email_recipients || [];
-    if (!recs.length) recs = [''];
+    // 收件人列表：显式配置优先，空则回显发件邮箱(当前实际生效)，便于看到/编辑
+    var recs = (cfg.email_recipients && cfg.email_recipients.length) ? cfg.email_recipients
+              : (cfg.qq_email ? [cfg.qq_email] : ['']);
     var box = document.getElementById('pcRecipients');
     box.innerHTML = '';
     recs.forEach(function(em) { addRecipientRow(em); });
+    // webhook：配置文件优先，空则回显 .env 的(当前实际生效)
     var wh = document.getElementById('pcWebhook');
-    if (wh) wh.value = cfg.wechat_webhook || '';
+    if (wh) wh.value = cfg.wechat_webhook || cfg.wechat_env_webhook || '';
     var msgs = [];
-    if (cfg.smtp_configured) msgs.push('SMTP ✅ 已配置');
-    else msgs.push('SMTP ⚠️ 未配置（需 .env 的 QQ_EMAIL/QQ_MAIL_AUTH）');
-    if (cfg.wechat_webhook || cfg.wechat_env_configured) msgs.push('微信 ✅ webhook 可用');
-    else msgs.push('微信 ⚠️ 未配置 webhook');
+    if (cfg.smtp_configured) msgs.push('SMTP ✅');
+    else msgs.push('SMTP ⚠️ 未配置');
+    msgs.push('收件人: ' + ((cfg.effective_recipients && cfg.effective_recipients.length)
+              ? cfg.effective_recipients.join(', ') : '未配置'));
+    var wcTxt = cfg.wechat_source === 'config' ? '配置文件 ✅'
+              : cfg.wechat_source === 'env' ? '.env ✅' : '未配置 ⚠️';
+    msgs.push('微信: ' + wcTxt);
     setPcStatus(msgs.join(' · '));
   } catch(e) { setPcStatus('✖ 加载失败', '#ef5350'); }
 }

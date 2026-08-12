@@ -1538,13 +1538,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(_CONFIG_PATH, encoding="utf-8") as _fpc:
                     _pc_cfg = json.load(_fpc)
                 _push = _pc_cfg.get("push", {})
+                _qq = get_secret("QQ_EMAIL")
+                _env_webhook = get_secret("WECHAT_WEBHOOK")
+                _recs = [str(r).strip() for r in (_push.get("email_recipients") or []) if str(r).strip()]
+                # 实际生效收件人：显式配置优先，空则回退发件邮箱
+                _eff_recs = _recs if _recs else ([_qq] if _qq else [])
+                _cfg_webhook = str(_push.get("wechat_webhook") or "").strip()
+                if _cfg_webhook:
+                    _wc_source = "config"
+                elif _env_webhook:
+                    _wc_source = "env"
+                else:
+                    _wc_source = "none"
                 self._send(*_json_response({
                     "ok": True,
                     "config": {
-                        "email_recipients": _push.get("email_recipients", []),
-                        "wechat_webhook": _push.get("wechat_webhook", ""),
-                        "smtp_configured": bool(get_secret("QQ_EMAIL") and get_secret("QQ_MAIL_AUTH")),
-                        "wechat_env_configured": bool(get_secret("WECHAT_WEBHOOK")),
+                        "email_recipients": _recs,
+                        "qq_email": _qq or "",
+                        "effective_recipients": _eff_recs,
+                        "wechat_webhook": _cfg_webhook,
+                        "wechat_env_webhook": _env_webhook or "",
+                        "wechat_source": _wc_source,
+                        "smtp_configured": bool(_qq and get_secret("QQ_MAIL_AUTH")),
                     }
                 }))
             except Exception as e:
