@@ -170,6 +170,51 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
     return "\n".join(parts)
 
 
+def _apply_filter_conditions(rows: list[dict]) -> list[dict]:
+    """按当前筛选条件(评分口径指标值)过滤市场优选TOP表展示。
+    结果文件仍持久化自选基金(commit 964482e 供 refresh 缓存命中)，但 TOP 表只展示
+    符合筛选条件的(如 m1>=10)——不达标的自选基金仍显示在自选表，不进市场优选TOP。
+    实时读 config.json，保证与最近一次推荐所用的筛选条件一致。"""
+    try:
+        import json as _json
+        with open(os.path.join(HISTORY_DIR, "data", "config.json"), encoding="utf-8") as _f:
+            _conds = _json.load(_f).get("recommend", {}).get("filter_conditions", [])
+    except Exception:
+        _conds = []
+    if not _conds:
+        return rows
+    _known = ("y1", "sy6", "m3", "m1", "sy2", "sy3", "f5", "sc")
+    out: list[dict] = []
+    for r in rows:
+        ok = True
+        for c in _conds:
+            field = c.get("field", "")
+            op = c.get("op", "gte")
+            val = c.get("value")
+            if val is None or field not in _known:
+                continue
+            raw = r.get(field)
+            if raw is None:
+                ok = False
+                break
+            try:
+                num = float(str(raw).replace("%", "").replace("+", ""))
+            except (ValueError, TypeError):
+                ok = False
+                break
+            if op == "gte" and not (num >= val):
+                ok = False
+            elif op == "lte" and not (num <= val):
+                ok = False
+            elif op == "eq" and not (abs(num - val) < 0.01):
+                ok = False
+            if not ok:
+                break
+        if ok:
+            out.append(r)
+    return out
+
+
 def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
     """生成推荐 TOP 10 完整维度数据 HTML 表格（Web 版）
     
@@ -179,6 +224,9 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         fresh = _load_saved_recommend_data()
     if not fresh:
         return ""
+    # 展示时按当前筛选条件(评分口径)过滤——结果文件仍持久化自选基金供 refresh 缓存，
+    # 但市场优选TOP表只展示符合筛选条件的(如 m1>=10)。
+    fresh = _apply_filter_conditions(fresh)
     from fund_scoring import SCORE_DIMS
     dim_names = [d[0] for d in sorted(SCORE_DIMS, key=lambda x: -x[2]) if d[0] != "当日涨跌"]
     dims_shown = dim_names
