@@ -4,13 +4,53 @@
 """
 import json
 import time
+import threading
 import datetime
 
 from config import get_timeout
 from fund_utils import fetch, fetch_bytes, is_trading_day, log
 
 
+# ── 大盘数据短缓存：新浪接口慢(2-23s)且偶发超时，页面每次刷新/轮询重复打新浪
+#    会让看板变慢甚至消失。盘中短 TTL(指数15s/分时30s/K线60s)，盘后数据固定用 300s。──
+_MARKET_CACHE: dict[str, tuple[float, dict]] = {}
+_MARKET_CACHE_LOCK = threading.Lock()
+
+
+def _is_trading_time_now() -> bool:
+    """当前是否交易时段(9:30-15:00 且为交易日)"""
+    try:
+        now = datetime.datetime.now()
+        if not is_trading_day(now.date()):
+            return False
+        t = now.time()
+        return datetime.time(9, 30) <= t < datetime.time(15, 0)
+    except Exception:
+        return False
+
+
+def _market_cached(key: str, ttl_on: float, fn) -> dict:
+    """带 TTL 的大盘缓存：盘中用 ttl_on，盘后/非交易用 300s。失败结果不缓存。"""
+    now = time.time()
+    _ttl = ttl_on if _is_trading_time_now() else 300.0
+    with _MARKET_CACHE_LOCK:
+        _c = _MARKET_CACHE.get(key)
+        if _c and now - _c[0] < _ttl:
+            return _c[1]
+    _data = fn()
+    if not isinstance(_data, dict) or not _data.get("ok"):
+        return _data  # 失败不缓存，下次继续尝试
+    with _MARKET_CACHE_LOCK:
+        _MARKET_CACHE[key] = (time.time(), _data)
+    return _data
+
+
 def api_market_indices() -> dict:
+    """大盘指数实时行情（新浪，带短缓存）"""
+    return _market_cached("indices", 15, _api_market_indices_impl)
+
+
+def _api_market_indices_impl() -> dict:
     """大盘指数实时行情（新浪）"""
     try:
         today = datetime.date.today()
@@ -80,6 +120,11 @@ def _fetch_pre_close(sym: str, ref_day: str) -> float | None:
 
 
 def api_market_trends() -> dict:
+    """大盘指数当日5分钟K线数据（用于画分时折线图，带短缓存）"""
+    return _market_cached("trends", 30, _api_market_trends_impl)
+
+
+def _api_market_trends_impl() -> dict:
     """大盘指数当日5分钟K线数据（用于画分时折线图）"""
     try:
         now = datetime.datetime.now()
@@ -131,6 +176,11 @@ def api_market_trends() -> dict:
 
 
 def api_market_kline() -> dict:
+    """大盘指数30日K线（含成交量，带短缓存）"""
+    return _market_cached("kline", 60, _api_market_kline_impl)
+
+
+def _api_market_kline_impl() -> dict:
     """大盘指数30日K线（含成交量，用于画日K蜡烛图）。
     新浪日K接口(scale=240)当日/盘中不含未收盘的今日日K → 用今日5分钟K合成一根
     "今日日K"(O/H/L/C/成交量聚合)追加，使图上出现今天。非交易日无今日5分钟K则不加。"""

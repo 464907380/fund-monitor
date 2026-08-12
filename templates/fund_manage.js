@@ -485,7 +485,7 @@ function loadMarketIndices() {
     return;
   }
   fetch(API + '/api/market-indices?_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){
-    if (!d.ok || !d.indices || !d.indices.length) { document.getElementById('marketBoard').style.display = 'none'; return; }
+    if (!d.ok || !d.indices || !d.indices.length) { return; }  // 单次失败保留现有看板，避免折线图/看板消失
     document.getElementById('marketBoard').style.display = '';
     var container = document.getElementById('marketIndices');
     var timeEl = document.getElementById('marketTime');
