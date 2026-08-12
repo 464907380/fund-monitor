@@ -906,10 +906,14 @@ def record_estimate(code: str, est_pct: float) -> None:
         return
     try:
         _today = datetime.datetime.now().strftime("%Y-%m-%d")
+        # 锁序必须与 settle/backfill 一致（先 _EST_ERROR_LOCK 再 inter_process_lock）：
+        # 若反序(先 inter_process_lock 再 _EST_ERROR_LOCK)会与 _save_est_error 的取锁方向
+        # 相反 → AB-BA 死锁(settle 持 _EST_ERROR_LOCK 等文件锁, 这里持文件锁等 _EST_ERROR_LOCK，
+        # 20 个 fund-table 线程全卡死, 前端"渲染表格"卡 120s)。
         # 跨进程锁：server 与 recommend 可能同时写估算误差文件，
         # 必须保证"读-改-写"在进程间互斥，避免互相覆盖丢数据。
-        with inter_process_lock(_EST_ERROR_PATH):
-            with _EST_ERROR_LOCK:
+        with _EST_ERROR_LOCK:
+            with inter_process_lock(_EST_ERROR_PATH):
                 _cache = _load_est_error()
                 _est_map = _cache.setdefault("estimates", {})
                 _day = _est_map.setdefault(_today, {})
@@ -974,6 +978,9 @@ def settle_estimate_errors() -> None:
     estimates 里大量历史候选（多次运行累加、已不再符合当前筛选条件）不再白白请求。"""
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        # ① 短临界区：加载缓存 + 构建待结算任务。
+        #    关键：_EST_ERROR_LOCK 绝不能跨网络持有（探测/拉净值会阻塞所有
+        #    record_estimate → fund-table 0/29 卡 120s），网络阶段移出锁外。
         with _EST_ERROR_LOCK:
             _cache = _load_est_error()
             _est_map = _cache.setdefault("estimates", {})
@@ -985,66 +992,74 @@ def settle_estimate_errors() -> None:
                     _tasks[(_d, _code)] = _est
             if not _tasks:
                 return
-            # 相关基金集合：自选基金 ∪ 当前推荐结果（估算误差徽章只在这两处展示）
-            _relevant: set[str] = set()
-            try:
-                _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                _fl_path = os.path.join(_root, "data", "fund_list.json")
-                if os.path.exists(_fl_path):
-                    with open(_fl_path, encoding="utf-8") as _f:
-                        for _item in json.load(_f):
-                            if _item.get("code"):
-                                _relevant.add(_item["code"])
-                _res_path = os.path.join(_root, ".fund_recommend_result.json")
-                if os.path.exists(_res_path):
-                    with open(_res_path, encoding="utf-8") as _f:
-                        _res = json.load(_f)
-                    for _r in _res.get("results", []):
-                        if _r.get("code"):
-                            _relevant.add(_r["code"])
-            except Exception:
-                pass
-            # 过滤：只结算相关基金（文件读取失败则保留全量，避免过度限制）
-            if _relevant:
-                _tasks = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _c in _relevant}
-                if not _tasks:
-                    return
-            # 净值日期探测：若今日净值普遍未发布（收盘后，最新净值日期 < 今天），
-            # 跳过今日任务的结算，仅结算历史日期——避免数千无效请求占满网络。
-            # 仅当今日任务规模较大时启用该"一刀切"保护；规模小（自选/推荐等少量
-            # 基金）时逐只结算，靠 _fetch_actual_nav_pct 对未发布基金返回 None 自然
-            # 跳过（任务保留下次再结算）——避免漏掉已发布的基金（各基金净值发布
-            # 时间不同，如 007639 已发布但探测前 3 只恰好都未发布会被误伤）。
-            _today = datetime.date.today().isoformat()
-            _hist = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d < _today}
-            _today_tasks = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d >= _today}
-            if _today_tasks and len(_today_tasks) >= 100:
-                _probe_codes = list(dict.fromkeys(_c for (_d, _c) in _today_tasks))[:3]
-                _today_ready = False
-                for _pc in _probe_codes:
-                    try:
-                        _ld = _probe_latest_nav_date(_pc)
-                        if _ld and _ld >= _today:
-                            _today_ready = True
-                            break
-                    except Exception:
-                        pass
-                # 今日未发布 → 仅结算历史；已发布 → 连同今日一起结算
-                if not _today_ready:
-                    _tasks = _hist
+        # ② 相关基金集合：自选基金 ∪ 当前推荐结果（估算误差徽章只在这两处展示；不持锁）
+        _relevant: set[str] = set()
+        try:
+            _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            _fl_path = os.path.join(_root, "data", "fund_list.json")
+            if os.path.exists(_fl_path):
+                with open(_fl_path, encoding="utf-8") as _f:
+                    for _item in json.load(_f):
+                        if _item.get("code"):
+                            _relevant.add(_item["code"])
+            _res_path = os.path.join(_root, ".fund_recommend_result.json")
+            if os.path.exists(_res_path):
+                with open(_res_path, encoding="utf-8") as _f:
+                    _res = json.load(_f)
+                for _r in _res.get("results", []):
+                    if _r.get("code"):
+                        _relevant.add(_r["code"])
+        except Exception:
+            pass
+        # 过滤：只结算相关基金（文件读取失败则保留全量，避免过度限制）
+        if _relevant:
+            _tasks = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _c in _relevant}
             if not _tasks:
                 return
-            _settled: dict[tuple[str, str], float] = {}
-            with ThreadPoolExecutor(max_workers=20) as _ex:
-                _futs = {_ex.submit(_fetch_actual_nav_pct, _c, _d): (_d, _c) for (_d, _c) in _tasks}
-                for _f in as_completed(_futs):
-                    _d, _c = _futs[_f]
-                    try:
-                        _actual = _f.result()
-                    except Exception:
-                        _actual = None
-                    if _actual is not None:
-                        _settled[(_d, _c)] = _actual
+        # ③ 净值日期探测（网络，不持锁）：若今日净值普遍未发布（收盘后，最新净值日期 < 今天），
+        #    跳过今日任务的结算，仅结算历史日期——避免数千无效请求占满网络。
+        #    仅当今日任务规模较大时启用该"一刀切"保护；规模小（自选/推荐等少量
+        #    基金）时逐只结算，靠 _fetch_actual_nav_pct 对未发布基金返回 None 自然
+        #    跳过（任务保留下次再结算）——避免漏掉已发布的基金（各基金净值发布
+        #    时间不同，如 007639 已发布但探测前 3 只恰好都未发布会被误伤）。
+        _today = datetime.date.today().isoformat()
+        _hist = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d < _today}
+        _today_tasks = {(_d, _c): _e for (_d, _c), _e in _tasks.items() if _d >= _today}
+        if _today_tasks and len(_today_tasks) >= 100:
+            _probe_codes = list(dict.fromkeys(_c for (_d, _c) in _today_tasks))[:3]
+            _today_ready = False
+            for _pc in _probe_codes:
+                try:
+                    _ld = _probe_latest_nav_date(_pc)
+                    if _ld and _ld >= _today:
+                        _today_ready = True
+                        break
+                except Exception:
+                    pass
+            # 今日未发布 → 仅结算历史；已发布 → 连同今日一起结算
+            if not _today_ready:
+                _tasks = _hist
+        if not _tasks:
+            return
+        # ④ 网络：并行拉实际净值（不持锁）
+        _settled: dict[tuple[str, str], float] = {}
+        with ThreadPoolExecutor(max_workers=20) as _ex:
+            _futs = {_ex.submit(_fetch_actual_nav_pct, _c, _d): (_d, _c) for (_d, _c) in _tasks}
+            for _f in as_completed(_futs):
+                _d, _c = _futs[_f]
+                try:
+                    _actual = _f.result()
+                except Exception:
+                    _actual = None
+                if _actual is not None:
+                    _settled[(_d, _c)] = _actual
+        if not _settled:
+            return
+        # ⑤ 短临界区：重新读最新磁盘快照，合并结算结果 + 保存（不覆盖其它进程新增）
+        with _EST_ERROR_LOCK:
+            _cache = _load_est_error()
+            _est_map = _cache.setdefault("estimates", {})
+            _errors = _cache.setdefault("errors", {})
             # 写入 errors + 从 estimates 移除已结算条目
             for (_d, _c), _actual in _settled.items():
                 _est = _tasks[(_d, _c)]
