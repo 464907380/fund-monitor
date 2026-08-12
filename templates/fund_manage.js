@@ -2014,9 +2014,18 @@ async function runRecommendFromFilter() {
           if (btn) { btn.disabled = false; btn.textContent = '▶ 运行推荐'; }
           // 友好完成反馈：数量 + 耗时（隐藏内部超时细节）
           var _doneCount = recData && recData.total ? recData.total : '';
+          // 用时取"点击到完成"的墙钟时间：心跳 start=服务器启动(≈用户点击)时刻，
+          // 比 recData.elapsed(推荐进程内部计时, 不含进程启动/导入的几秒)更准确，
+          // 与用户实际等待一致。start 缺失时回退 elapsed。
           var _doneTime = '';
-          if (recData && recData.elapsed != null) {
-            _doneTime = recData.elapsed < 60 ? Math.round(recData.elapsed) + ' 秒' : (Math.round(recData.elapsed/6)/10) + ' 分钟';
+          var _doneSecs = null;
+          if (recData && recData.start != null) {
+            _doneSecs = (Date.now() / 1000) - recData.start;
+          } else if (recData && recData.elapsed != null) {
+            _doneSecs = recData.elapsed;
+          }
+          if (_doneSecs != null) {
+            _doneTime = _doneSecs < 60 ? Math.round(_doneSecs) + ' 秒' : (Math.round(_doneSecs/6)/10) + ' 分钟';
           }
           if (statusEl) statusEl.textContent = (_tableOk ? '✔ 推荐完成' : '✔ 推荐完成（部分数据缺失）')
             + (_doneCount ? '：' + _doneCount + ' 只基金' : '')
