@@ -744,22 +744,21 @@ def get_scoring_data(code: str) -> dict:
 _scoring_cache: dict[str, tuple[str, dict]] = {}  # code -> (today_date, data)
 
 # ── 限购信息缓存（复用网络缓存TTL）────────────────
-_limit_cache: dict[str, tuple[float, float | None]] = {}  # code -> (timestamp, amount_in_wan)
+_limit_cache: dict[str, tuple[float, float | None, str]] = {}  # code -> (ts, amount_in_wan, mgr)
 
 
 def _parse_purchase_limit(code: str) -> float | None:
     """获取基金单日限购金额（万元），None=无限购/获取失败"""
     import urllib.request
     now = time.time()
+    _mgr = ""
     if code in _limit_cache and now - _limit_cache[code][0] < 86400:
         return _limit_cache[code][1]
     # 磁盘持久化缓存（24h 内复用）：避免每次推荐新进程都要重拉几千只详情页
     _limit_disk = _load_limit_cache()
     _le = _limit_disk.get(code)
     if _le and now - _le.get("ts", 0) < 86400:
-        _limit_cache[code] = (_le["ts"], _le.get("amount"))
-        return _le.get("amount")
-
+            _limit_cache[code] = (_le["ts"], _le.get("amount"), _le.get("mgr", ""))
     result: float | None = None
     try:
         url = f"https://fund.eastmoney.com/{code}.html"
@@ -769,6 +768,13 @@ def _parse_purchase_limit(code: str) -> float | None:
         })
         with urllib.request.urlopen(req, timeout=get_timeout("purchase_limit", 4)) as r:
             html = r.read().decode("utf-8", errors="ignore")
+        # 顺带解析基金经理（搭详情页便车：不新增请求，供表格展示）
+        try:
+            _mm = re.search(r'基金经理：<a href="[^"]*">([^<]+)</a>', html)
+            if _mm:
+                _mgr = _mm.group(1).strip()
+        except Exception:
+            pass
         # 提取限购金额，支持"万元"和"元"两种单位
         m = re.search(r"单日累计购买上限\s*([\d.]+)\s*万元", html)
         if m:
@@ -785,8 +791,8 @@ def _parse_purchase_limit(code: str) -> float | None:
             result = 0.0  # 暂停申购
     except Exception:
         pass
-    _limit_cache[code] = (now, result)
-    _set_limit_cache(code, now, result)  # 落盘（失败静默，不影响本次）
+    _limit_cache[code] = (now, result, _mgr)
+    _set_limit_cache(code, now, result, _mgr)  # 落盘（失败静默，不影响本次）
     return result
 
 
@@ -813,14 +819,14 @@ def _load_limit_cache() -> dict:
     return {}
 
 
-def _set_limit_cache(code: str, ts: float, amount: float | None) -> None:
+def _set_limit_cache(code: str, ts: float, amount: float | None, mgr: str = "") -> None:
     """写入单条限购缓存到磁盘（合并式 + 跨进程锁，失败静默）"""
     global _LIMIT_DISK_MEM, _LIMIT_DISK_MTIME
     try:
         os.makedirs(os.path.dirname(_LIMIT_CACHE_PATH), exist_ok=True)
         with inter_process_lock(_LIMIT_CACHE_PATH):
             _disk = _load_limit_cache()
-            _disk[code] = {"ts": ts, "amount": amount}
+            _disk[code] = {"ts": ts, "amount": amount, "mgr": mgr}
             _tmp = _LIMIT_CACHE_PATH + ".tmp"
             with open(_tmp, "w", encoding="utf-8") as f:
                 json.dump(_disk, f, ensure_ascii=False)
@@ -829,6 +835,28 @@ def _set_limit_cache(code: str, ts: float, amount: float | None) -> None:
             _LIMIT_DISK_MTIME = os.path.getmtime(_LIMIT_CACHE_PATH)
     except Exception:
         pass
+
+
+def _get_fund_manager(code: str) -> str:
+    """获取基金经理名（搭限购详情页便车：详情页已抓取并缓存，不主动新增请求）
+    未抓取过/无经理返回空串。"""
+    now = time.time()
+    try:
+        if code in _limit_cache and now - _limit_cache[code][0] < 86400:
+            return str(_limit_cache[code][2] or "")
+    except Exception:
+        pass
+    try:
+        _disk = _load_limit_cache()
+        _le = _disk.get(code)
+        if _le and now - _le.get("ts", 0) < 86400:
+            _mgr = str(_le.get("mgr", "") or "")
+            if _mgr:
+                _limit_cache[code] = (_le["ts"], _le.get("amount"), _mgr)
+            return _mgr
+    except Exception:
+        pass
+    return ""
 
 
 # ── 历史快照 ──────────────────────────────────

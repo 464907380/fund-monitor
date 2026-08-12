@@ -823,7 +823,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None,
                td_map: dict | None = None) -> dict | None:
     """单只基金评分（td_map 为批量预取的当日涨跌映射，避免每只独立发多个网络请求）"""
     try:
-        from fund_watch import get_scoring_data as _get
+        from fund_watch import get_scoring_data as _get, _get_fund_manager
         d = _get(code)
         if not d.get("n"):
             return None
@@ -899,7 +899,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None,
             "td": d.get("td"),
             "_td_src": td_src,
             "_trend": (lambda _n: [[_n[0]["d"], 0.0]] + [[_n[i]["d"], round((_n[i]["v"] - _n[i-1]["v"]) / _n[i-1]["v"] * 100, 2)] for i in range(1, len(_n))] if len(_n) >= 2 else None)(d.get("nav", [])[-66:]),
-            "mgr": (d.get("mgr") or "")[:6],
+            "mgr": (d.get("mgr") or _get_fund_manager(code)),
             "day": day_str,
             **_win_fields,
         }
@@ -1503,6 +1503,11 @@ def main() -> None:
                 try:
                     amount = _parse_purchase_limit(c["code"])
                     c["_limit_amount"] = amount
+                    # 顺带回写经理（详情页已抓，搭便车补全结果文件 mgr）
+                    from fund_watch import _get_fund_manager
+                    _lmgr = _get_fund_manager(c["code"])
+                    if _lmgr and not c.get("mgr"):
+                        c["mgr"] = _lmgr
                     # 明确限购≤2万才筛掉；None(网络失败/无限购) 与异常都保留，避免误杀
                     if amount is not None and amount <= 2:
                         return None
