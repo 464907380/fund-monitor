@@ -79,21 +79,39 @@ HISTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ── 跨进程文件锁（server/recommend/monitor 共享磁盘缓存时，保证读-改-写互斥）──
-# Windows 用 msvcrt 独占锁，Linux 用 fcntl；进程内同文件用 threading 锁兜底防重入。
+# Windows 用 msvcrt 独占锁，Linux 用 fcntl；进程内同一 .lock 路径复用同一把
+# threading.Lock 真正互斥，并记录持有线程 id 支持同线程嵌套重入——
+# 修复 record_estimate→_save_est_error 嵌套取锁自锁 15 秒超时（每只基金慢 15s）。
+_PROC_PATH_LOCKS: dict[str, threading.Lock] = {}
+_PROC_PATH_LOCKS_GUARD = threading.Lock()
+_PROC_FILE_OWNER: dict[str, int] = {}
+_PROC_FILE_OWNER_GUARD = threading.Lock()
+
+
 class _InterProcessLock:
     """跨进程互斥锁：对指定文件加独占锁，避免多进程同时写共享缓存互相覆盖。
-    用法：with inter_process_lock(path): ...（内部自动加进程内防重入锁）"""
+    用法：with inter_process_lock(path): ...（进程内互斥；同线程嵌套重入安全）"""
 
     def __init__(self, path: str, timeout: float = 15.0):
         self._path = path + ".lock"
         self._timeout = timeout
         self._fh = None
-        self._proc_lock = threading.Lock()
+        # 同一 .lock 路径复用同一把进程内锁（同进程多线程写同一缓存真正互斥）
+        with _PROC_PATH_LOCKS_GUARD:
+            self._proc_lock = _PROC_PATH_LOCKS.setdefault(self._path, threading.Lock())
+        self._reentered = False
 
     def acquire(self) -> None:
         import time as _t
-        # 进程内防重入（同一进程内多线程写同一缓存）
+        # 同线程嵌套（重入）：本线程已持有该文件锁 → 直接返回，不重复加文件锁
+        with _PROC_FILE_OWNER_GUARD:
+            if _PROC_FILE_OWNER.get(self._path) == threading.get_ident():
+                self._reentered = True
+                return
+        # 进程内互斥：同进程其它线程写同一缓存时阻塞等待（不空转 msvcrt）
         self._proc_lock.acquire()
+        with _PROC_FILE_OWNER_GUARD:
+            _PROC_FILE_OWNER[self._path] = threading.get_ident()
         _deadline = _t.time() + self._timeout
         os.makedirs(os.path.dirname(self._path), exist_ok=True)
         while True:
@@ -120,6 +138,10 @@ class _InterProcessLock:
                 _t.sleep(0.05)
 
     def release(self) -> None:
+        if self._reentered:
+            # 重入：文件锁与进程内锁由外层统一释放，这里只复位标记
+            self._reentered = False
+            return
         if self._fh:
             try:
                 if os.name == "nt":
@@ -139,6 +161,8 @@ class _InterProcessLock:
             except Exception:
                 pass
             self._fh = None
+        with _PROC_FILE_OWNER_GUARD:
+            _PROC_FILE_OWNER[self._path] = 0
         self._proc_lock.release()
 
     def __enter__(self) -> "_InterProcessLock":
