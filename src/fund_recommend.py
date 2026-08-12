@@ -248,7 +248,7 @@ def _batch_fetch_estimates(codes: list[str], pct_base: int | None = None) -> dic
                             _all_sina.append(("sh" if _hh.get("m") == "sh" else "sz") + _hh["c"])
                     _done_h += 1
                     _pct_h = int(_done_h / _total_h * 100) if _total_h else 0
-                    if (_pct_h != _last_hb_h and _done_h % 50 == 0) or _done_h == _total_h:
+                    if (_pct_h != _last_hb_h and _done_h % 20 == 0) or _done_h == _total_h:
                         _last_hb_h = _pct_h
                         update_heartbeat("fund_recommend", progress=_done_h, total=_total_h,
                                          overall_pct=(pct_base if pct_base is not None else 15),
@@ -1274,12 +1274,15 @@ def main() -> None:
                             _rr = _f.result()
                             if _rr:
                                 _scored_new.append(_rr)
-                            if _i % 50 == 0 or _i == len(_new_cands):
+                            # 心跳每 20 只更新一次(冷启动时 50 只可能 30-80s, 前端会显得卡住)
+                            if _i % 20 == 0 or _i == len(_new_cands):
                                 _pp = int(_i / len(_new_cands) * 100)
-                                log.info("refilter 评分进度 %d/%d (%d%%) 成功%d", _i, len(_new_cands), _pp, len(_scored_new))
                                 update_heartbeat("fund_recommend", progress=_i, total=len(_new_cands),
                                                  overall_pct=30 + int(_pp * 0.6), phase="评分",
                                                  detail=f"评分新增 {_i}/{len(_new_cands)} ({_pp}%)", elapsed=_elapsed())
+                            # 日志每 50 只记一次(避免刷屏)
+                            if _i % 50 == 0 or _i == len(_new_cands):
+                                log.info("refilter 评分进度 %d/%d (%d%%) 成功%d", _i, len(_new_cands), _pp, len(_scored_new))
                     _log_score_stats("refilter 评分")
                     print(f"   ✅ 新增评分完成: {len(_scored_new)} 只 ({time.time()-_t3:.1f}s)")
                     log.info("refilter: 新增评分完成 %d 只 (%.1fs)", len(_scored_new), time.time() - _t3)
@@ -1515,7 +1518,7 @@ def main() -> None:
                         _kept.append(_r)
                     else:
                         _limit_dropped += 1
-                    if _j % 100 == 0 or _j == len(_top_pool):
+                    if _j % 20 == 0 or _j == len(_top_pool):
                         update_heartbeat("fund_recommend", progress=_j, total=len(_top_pool),
                                          overall_pct=97, phase="限购",
                                          detail=f"限购检查 TOP {_j}/{len(_top_pool)}",
