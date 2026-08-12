@@ -1185,6 +1185,14 @@ def main() -> None:
                 _cands = _filter_candidates(_rows)
                 print(f"   ✅ 排行初筛: {len(_cands)} 只 ({time.time()-_t2:.1f}s)")
                 _new_cands = [c for c in _cands if c["code"] not in _base_set]
+                # 放宽筛选时新增候选可能上千(如 m1>=5 → 1271 只), 逐只冷评分网络密集耗时数分钟。
+                # 只评分排行靠前的 N 只(_cands 按 rank_sort 排序, 默认近1年收益降序)大幅提速:
+                # 市场优选 TOP 按评分取前50, 排行靠后的基金挤进高分 TOP 概率极低, 影响可忽略。
+                # 阈值用 config.json recommend.max_new_score 调整(默认400)。
+                _max_new = get_config("recommend", "max_new_score", default=400)
+                if len(_new_cands) > _max_new:
+                    log.info("refilter: 新增候选 %d 只>上限 %d, 只评分排行前 %d 只", len(_new_cands), _max_new, _max_new)
+                    _new_cands = _new_cands[:_max_new]
                 print(f"   ➕ 新增需评分: {len(_new_cands)} 只 (复用已评分 {len(_base)} 只)")
                 log.info("refilter: 旧过滤%d只, 排行初筛%d只, 新增需评分%d只", len(_base), len(_cands), len(_new_cands))
                 _scored_new: list[dict] = []
@@ -1192,6 +1200,20 @@ def main() -> None:
                     _t3 = time.time()
                     update_heartbeat("fund_recommend", progress=0, total=len(_new_cands), overall_pct=30,
                                      phase="评分", detail=f"评分新增 {len(_new_cands)} 只", elapsed=_elapsed())
+                    # 冷启动预热: 后台线程下载名称索引+加载趋势缓存, 与批量预取并行,
+                    # 避免评分第一批阻塞在冷启动(名称索引下载~22s/趋势缓存加载)。
+                    try:
+                        import threading as _th
+                        def _warmup():
+                            try:
+                                from fund_utils import _load_fund_name_index, _load_fund_trend_cache
+                                _load_fund_name_index()
+                                _load_fund_trend_cache()
+                            except Exception:
+                                pass
+                        _th.Thread(target=_warmup, daemon=True).start()
+                    except Exception:
+                        pass
                     _td_prefetch = _batch_fetch_estimates([c["code"] for c in _new_cands], pct_base=30)
                     log.info("refilter: 批量预取新增涨跌完成 %d 只", len(_td_prefetch))
                     with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_scoring", default=50)) as _ex:
@@ -1340,6 +1362,20 @@ def main() -> None:
         # 避免 _score_one 每只独立发 3 个网络请求导致评分阶段被拖慢）
         _td_prefetch: dict[str, tuple[float, str]] = {}
         try:
+            # 冷启动预热: 后台线程下载名称索引+加载趋势缓存, 与批量预取并行,
+            # 避免评分第一批阻塞在冷启动(名称索引下载~22s/趋势缓存加载)。
+            try:
+                import threading as _th
+                def _warmup2():
+                    try:
+                        from fund_utils import _load_fund_name_index, _load_fund_trend_cache
+                        _load_fund_name_index()
+                        _load_fund_trend_cache()
+                    except Exception:
+                        pass
+                _th.Thread(target=_warmup2, daemon=True).start()
+            except Exception:
+                pass
             print(f"   ⚡ 批量预取 {total} 只当日涨跌...", flush=True)
             update_heartbeat("fund_recommend", progress=0, total=total,
                              overall_pct=15, phase="评分",
