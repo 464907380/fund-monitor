@@ -904,6 +904,52 @@ function _loadPrefs() {
   }).catch(function(){});
 }
 
+// ── 表格横向滚动冻结左侧标识列（自选: 代码+名称, 优选: #+基金）──
+function freezeLeftColumns() {
+  ['fundFullTable', 'recommendFullTable'].forEach(function(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var table = container.querySelector('table');
+    if (!table || table.dataset.frozen) return;
+    var headRow = table.querySelector('thead tr');
+    if (!headRow) return;
+    var headCells = headRow.querySelectorAll('th');
+    if (!headCells.length) return;
+    var n = 2;  // 冻结前 2 列
+    var widths = [];
+    for (var i = 0; i < n && i < headCells.length; i++) {
+      widths.push(headCells[i].getBoundingClientRect().width);
+    }
+    var rows = table.querySelectorAll('tr');
+    rows.forEach(function(tr) {
+      var cells = tr.querySelectorAll('th, td');
+      var acc = 0;
+      for (var i = 0; i < n && i < cells.length; i++) {
+        var cell = cells[i];
+        cell.style.position = 'sticky';
+        cell.style.left = acc + 'px';
+        cell.style.zIndex = tr.tagName === 'TH' ? '3' : '2';
+        cell.style.background = tr.tagName === 'TH' ? '#2a2a2a' : '#12121e';
+        cell.style.minWidth = widths[i] + 'px';
+        cell.style.boxShadow = '2px 0 3px rgba(0,0,0,0.25)';
+        acc += widths[i];
+      }
+    });
+    table.dataset.frozen = '1';
+  });
+}
+// 监听表格容器内容变化（覆盖所有 innerHTML 更新点），自动冻结首列
+(function initTableFreeze() {
+  ['fundFullTable', 'recommendFullTable'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    new MutationObserver(function() { freezeLeftColumns(); })
+      .observe(el, { childList: true, subtree: true });
+  });
+  setTimeout(freezeLeftColumns, 1200);
+  setTimeout(freezeLeftColumns, 4000);
+})();
+
 function setupDragSort() {
   var tbody = document.querySelector('#fundFullTable table tbody');
   if (!tbody) return;
