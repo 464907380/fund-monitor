@@ -744,7 +744,7 @@ def get_scoring_data(code: str) -> dict:
 _scoring_cache: dict[str, tuple[str, dict]] = {}  # code -> (today_date, data)
 
 # ── 限购信息缓存（复用网络缓存TTL）────────────────
-_limit_cache: dict[str, tuple[float, float | None, str]] = {}  # code -> (ts, amount_in_wan, mgr)
+_limit_cache: dict[str, tuple[float, float | None, str, float | None]] = {}  # code -> (ts, amount_in_wan, mgr, scale_billion)
 
 
 def _parse_purchase_limit(code: str) -> float | None:
@@ -752,13 +752,15 @@ def _parse_purchase_limit(code: str) -> float | None:
     import urllib.request
     now = time.time()
     _mgr = ""
+    _sc: float | None = None
     if code in _limit_cache and now - _limit_cache[code][0] < 86400:
         return _limit_cache[code][1]
     # 磁盘持久化缓存（24h 内复用）：避免每次推荐新进程都要重拉几千只详情页
     _limit_disk = _load_limit_cache()
     _le = _limit_disk.get(code)
     if _le and now - _le.get("ts", 0) < 86400:
-            _limit_cache[code] = (_le["ts"], _le.get("amount"), _le.get("mgr", ""))
+        _limit_cache[code] = (_le["ts"], _le.get("amount"), _le.get("mgr", ""), _le.get("sc"))
+        return _le.get("amount")
     result: float | None = None
     try:
         url = f"https://fund.eastmoney.com/{code}.html"
@@ -768,11 +770,18 @@ def _parse_purchase_limit(code: str) -> float | None:
         })
         with urllib.request.urlopen(req, timeout=get_timeout("purchase_limit", 4)) as r:
             html = r.read().decode("utf-8", errors="ignore")
-        # 顺带解析基金经理（搭详情页便车：不新增请求，供表格展示）
+        # 顺带解析基金经理 + 规模（搭详情页便车：不新增请求，供表格展示）
         try:
             _mm = re.search(r'基金经理：<a href="[^"]*">([^<]+)</a>', html)
             if _mm:
                 _mgr = _mm.group(1).strip()
+        except Exception:
+            pass
+        try:
+            # 详情页规模格式: <a ...>规模</a>：140.76亿元（2026-06-30）——中间可能隔着标签
+            _ms = re.search(r'规模[^：:]{0,30}?[：:]\s*([\d.]+)\s*亿元', html)
+            if _ms:
+                _sc = float(_ms.group(1))
         except Exception:
             pass
         # 提取限购金额，支持"万元"和"元"两种单位
@@ -791,8 +800,8 @@ def _parse_purchase_limit(code: str) -> float | None:
             result = 0.0  # 暂停申购
     except Exception:
         pass
-    _limit_cache[code] = (now, result, _mgr)
-    _set_limit_cache(code, now, result, _mgr)  # 落盘（失败静默，不影响本次）
+    _limit_cache[code] = (now, result, _mgr, _sc)
+    _set_limit_cache(code, now, result, _mgr, _sc)  # 落盘（失败静默，不影响本次）
     return result
 
 
@@ -819,14 +828,14 @@ def _load_limit_cache() -> dict:
     return {}
 
 
-def _set_limit_cache(code: str, ts: float, amount: float | None, mgr: str = "") -> None:
+def _set_limit_cache(code: str, ts: float, amount: float | None, mgr: str = "", sc: float | None = None) -> None:
     """写入单条限购缓存到磁盘（合并式 + 跨进程锁，失败静默）"""
     global _LIMIT_DISK_MEM, _LIMIT_DISK_MTIME
     try:
         os.makedirs(os.path.dirname(_LIMIT_CACHE_PATH), exist_ok=True)
         with inter_process_lock(_LIMIT_CACHE_PATH):
             _disk = _load_limit_cache()
-            _disk[code] = {"ts": ts, "amount": amount, "mgr": mgr}
+            _disk[code] = {"ts": ts, "amount": amount, "mgr": mgr, "sc": sc}
             _tmp = _LIMIT_CACHE_PATH + ".tmp"
             with open(_tmp, "w", encoding="utf-8") as f:
                 json.dump(_disk, f, ensure_ascii=False)
@@ -852,11 +861,32 @@ def _get_fund_manager(code: str) -> str:
         if _le and now - _le.get("ts", 0) < 86400:
             _mgr = str(_le.get("mgr", "") or "")
             if _mgr:
-                _limit_cache[code] = (_le["ts"], _le.get("amount"), _mgr)
+                _limit_cache[code] = (_le["ts"], _le.get("amount"), _mgr, _le.get("sc"))
             return _mgr
     except Exception:
         pass
     return ""
+
+
+def _get_fund_scale(code: str) -> float | None:
+    """获取基金规模（亿元）（搭限购详情页便车：详情页已抓取并缓存，不主动新增请求）"""
+    now = time.time()
+    try:
+        if code in _limit_cache and now - _limit_cache[code][0] < 86400:
+            return _limit_cache[code][3]
+    except Exception:
+        pass
+    try:
+        _disk = _load_limit_cache()
+        _le = _disk.get(code)
+        if _le and now - _le.get("ts", 0) < 86400:
+            _sc = _le.get("sc")
+            if _sc is not None:
+                _limit_cache[code] = (_le["ts"], _le.get("amount"), _le.get("mgr", ""), _sc)
+            return _sc
+    except Exception:
+        pass
+    return None
 
 
 # ── 历史快照 ──────────────────────────────────

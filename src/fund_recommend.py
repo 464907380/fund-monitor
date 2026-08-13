@@ -823,7 +823,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None,
                td_map: dict | None = None) -> dict | None:
     """单只基金评分（td_map 为批量预取的当日涨跌映射，避免每只独立发多个网络请求）"""
     try:
-        from fund_watch import get_scoring_data as _get, _get_fund_manager
+        from fund_watch import get_scoring_data as _get, _get_fund_manager, _get_fund_scale
         d = _get(code)
         if not d.get("n"):
             return None
@@ -890,7 +890,7 @@ def _score_one(code: str, name: str, limit_amount: float | None = None,
             "m1": d.get("m1"), "m3": d.get("m3"), "y1": d.get("y1"),
             "sharpe": d.get("sharpe"), "sortino": d.get("sortino"),
             "max_dd": d.get("max_dd"), "win_rate": d.get("win_rate"),
-            "inst": d.get("inst"), "sc": d.get("sc"), "rate": d.get("rate"),
+            "inst": d.get("inst"), "sc": d.get("sc") if d.get("sc") is not None else _get_fund_scale(code), "rate": d.get("rate"),
             "profit_ratio": d.get("profit_ratio"),
             "recovery": d.get("recovery"), "sy3": d.get("sy3"),
             "f5": f5_val, "sy2": d.get("sy2"),
@@ -1503,11 +1503,14 @@ def main() -> None:
                 try:
                     amount = _parse_purchase_limit(c["code"])
                     c["_limit_amount"] = amount
-                    # 顺带回写经理（详情页已抓，搭便车补全结果文件 mgr）
-                    from fund_watch import _get_fund_manager
+                    # 顺带回写经理+规模（详情页已抓，搭便车补全结果文件 mgr/sc）
+                    from fund_watch import _get_fund_manager, _get_fund_scale
                     _lmgr = _get_fund_manager(c["code"])
                     if _lmgr and not c.get("mgr"):
                         c["mgr"] = _lmgr
+                    _lsc = _get_fund_scale(c["code"])
+                    if _lsc is not None and c.get("sc") is None:
+                        c["sc"] = _lsc
                     # 明确限购≤2万才筛掉；None(网络失败/无限购) 与异常都保留，避免误杀
                     if amount is not None and amount <= 2:
                         return None
@@ -1538,6 +1541,21 @@ def main() -> None:
         # 先补充自选基金再保存，确保最终数量与评分阶段一致
         _supplement_self_selected(scored)
         _final_count = len(scored)
+        # 保存前补全缺失的规模/经理（搭限购详情页便车，24h 磁盘缓存，二次运行 0 请求）
+        try:
+            from fund_watch import _parse_purchase_limit, _get_fund_manager, _get_fund_scale
+            _miss_scmgr = [r for r in scored if not r.get("mgr") or r.get("sc") is None]
+            if _miss_scmgr:
+                with ThreadPoolExecutor(max_workers=get_config("network", "max_workers", "recommend_meta", default=20)) as _se:
+                    list(_se.map(lambda _r: _parse_purchase_limit(_r["code"]), _miss_scmgr))
+                for _r in scored:
+                    if not _r.get("mgr"):
+                        _r["mgr"] = _get_fund_manager(_r["code"])
+                    if _r.get("sc") is None:
+                        _r["sc"] = _get_fund_scale(_r["code"])
+                log.info("补全规模/经理: 尝试 %d 只", len(_miss_scmgr))
+        except Exception:
+            pass
         # 把评分时拉取的净值走势批量写入共享缓存，供前端折线图直接复用
         _flush_trend_cache()
         # 把当日涨跌(td)固定值落盘，供同一天跨进程（重复推荐/页面）复用

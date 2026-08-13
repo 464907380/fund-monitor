@@ -245,7 +245,9 @@ def _load_score_dims() -> list[tuple[str, Callable, float, str]]:
         weight = d.get("weight", 0)
         desc = d.get("desc", "")
         func = _SCORE_FUNCS.get(key)
-        data_key = key
+        # 数据键优先用 _SCORE_DEFS 定义的数据 key（如 scale→sc, institutional→inst）：
+        # 若用曲线 key(scale)，_DIM_DATA_KEYS 取值会落空 → 评分取中性50、表格显示缺失
+        data_key = _SCORE_DEFS.get(key, (key, False))[0]
         # 窗口维度：按配置 lookback 动态绑定对应窗口的数据键（如 max_dd_1y；all 用原 key 兼容已有缓存/推荐数据）
         lookback = d.get("lookback", "all")
         if key in _WINDOW_KEYS and func is not None:
