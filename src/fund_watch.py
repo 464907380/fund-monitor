@@ -753,12 +753,14 @@ def _parse_purchase_limit(code: str) -> float | None:
     now = time.time()
     _mgr = ""
     _sc: float | None = None
-    if code in _limit_cache and now - _limit_cache[code][0] < 86400:
+    # 缓存须含规模(sc)才命中：旧缓存(有金额/经理但无sc)直接重抓详情页补全规模
+    if (code in _limit_cache and now - _limit_cache[code][0] < 86400
+            and _limit_cache[code][3] is not None):
         return _limit_cache[code][1]
     # 磁盘持久化缓存（24h 内复用）：避免每次推荐新进程都要重拉几千只详情页
     _limit_disk = _load_limit_cache()
     _le = _limit_disk.get(code)
-    if _le and now - _le.get("ts", 0) < 86400:
+    if _le and now - _le.get("ts", 0) < 86400 and _le.get("sc") is not None:
         _limit_cache[code] = (_le["ts"], _le.get("amount"), _le.get("mgr", ""), _le.get("sc"))
         return _le.get("amount")
     result: float | None = None
