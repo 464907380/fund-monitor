@@ -94,7 +94,7 @@ def _web_rich_fund_table(rows: list[dict]) -> str:
         _fname_js = str(r.get("name_short", "")).replace("\\", "\\\\").replace("'", "\\'")
         _fname_html = _html.escape(str(r.get("name_short", "")))
         _fmgr = str(r.get("mgr", "") or "").strip()
-        _fmgr_html = ' <span style="color:#66bb6a;font-size:11px;">👤 ' + _html.escape(_fmgr) + '</span>' if _fmgr else ''
+        _fmgr_html = ' <span style="color:#666;font-size:11px;">👤 ' + _html.escape(_fmgr) + '</span>' if _fmgr else ''
         # 走势图SVG
         _trend_html = ""
         _trend_data = r.get("_trend")
@@ -268,7 +268,7 @@ def _web_rich_recommend_table(fresh: list[dict] | None = None) -> str:
         _fund_name = str(r.get("n", "")).replace("\\", "\\\\").replace("'", "\\'")
         _fund_code = r.get("code", "")
         _fund_mgr = str(r.get("mgr", "") or "").strip()
-        _mgr_html = f' <span style="color:#66bb6a;font-size:11px;">👤 {_html.escape(_fund_mgr)}</span>' if _fund_mgr else ''
+        _mgr_html = f' <span style="color:#666;font-size:11px;">👤 {_html.escape(_fund_mgr)}</span>' if _fund_mgr else ''
         parts.append(f'<td style="padding:3px 6px;border-bottom:1px solid #333;color:#e0e0e0;white-space:nowrap;"><span onclick="showHoldings(\'{_fund_code}\',\'{_fund_name}\')" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.15);" title="点击查看持仓">{_html.escape(str(r.get("n","")))}</span>{_mgr_html}{warn} <span style="color:#666;font-family:Consolas;font-size:12px;">{_fund_code}</span></td>')
         # 涨跌（当日实时涨跌幅）
         day_raw = r.get("day", "")
